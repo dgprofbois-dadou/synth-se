@@ -1,0 +1,1063 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Outils INRS - Disque & Éditeur de support</title>
+
+<style>
+    :root {
+        --bg: #f4f5f7;
+        --bar: #1f2733;
+        --bar-hover: #2c3848;
+        --accent: #e8521f;
+        --accent-2: #f0a000;
+        --side: #ffffff;
+        --line: #d9dde3;
+        --text: #1f2733;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        background: var(--bg);
+        overflow: hidden;
+        font-family: Arial, Helvetica, sans-serif;
+        color: var(--text);
+    }
+
+    /* ---------- Barre d'onglets ---------- */
+    #tabbar {
+        position: absolute;
+        top: 0; left: 0; right: 0;
+        height: 46px;
+        background: var(--bar);
+        display: flex;
+        align-items: stretch;
+        z-index: 100;
+        user-select: none;
+    }
+
+    #tabbar .brand {
+        display: flex;
+        align-items: center;
+        padding: 0 16px;
+        color: #fff;
+        font-weight: bold;
+        letter-spacing: .5px;
+        font-size: 14px;
+    }
+    #tabbar .brand span { color: var(--accent-2); }
+
+    #tabbar .tab {
+        appearance: none;
+        border: 0;
+        background: transparent;
+        color: #c7ccd4;
+        padding: 0 20px;
+        font-size: 14px;
+        cursor: pointer;
+        border-bottom: 3px solid transparent;
+    }
+    #tabbar .tab:hover { background: var(--bar-hover); color: #fff; }
+    #tabbar .tab.active {
+        color: #fff;
+        border-bottom-color: var(--accent);
+        background: var(--bar-hover);
+    }
+
+    /* ---------- Panneaux ---------- */
+    .panel {
+        position: absolute;
+        top: 46px; left: 0; right: 0; bottom: 0;
+        display: none;
+    }
+    .panel.active { display: block; }
+
+    /* ===================================================== */
+    /* ONGLET 1 : DISQUE INRS                                */
+    /* ===================================================== */
+    #viewport {
+        position: absolute;
+        inset: 0;
+        overflow: hidden;
+        background: #ffffff;
+        cursor: default;
+        touch-action: none;
+    }
+    #viewport.panning { cursor: grabbing; }
+
+    #outil {
+        position: absolute;
+        left: 0; top: 0;
+        width: 650px;
+        height: 1024px;
+        transform-origin: 0 0;
+        touch-action: none;
+        user-select: none;
+        cursor: grab;
+    }
+    #outil.rotating { cursor: grabbing; }
+
+    #disque {
+        position: absolute;
+        z-index: 1;
+        pointer-events: none;
+        will-change: transform;
+        backface-visibility: hidden;
+        transform: translate3d(0, 0, 0) rotate(0deg);
+    }
+
+    #contour {
+        position: absolute;
+        left: 0; top: 0;
+        width: 650px;
+        height: auto;
+        z-index: 2;
+        pointer-events: none;
+    }
+
+    #aide {
+        position: absolute;
+        left: 12px;
+        bottom: 12px;
+        z-index: 50;
+        background: rgba(0, 0, 0, 0.75);
+        color: white;
+        font-size: 13px;
+        line-height: 1.4;
+        padding: 10px 12px;
+        border-radius: 6px;
+        pointer-events: none;
+    }
+
+    /* ===================================================== */
+    /* ONGLET 2 : ÉDITEUR DE SUPPORT                         */
+    /* ===================================================== */
+    #panel-editeur { display: none; }
+    #panel-editeur.active { display: flex; flex-direction: column; }
+
+    .ed-toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 12px;
+        background: #fff;
+        border-bottom: 1px solid var(--line);
+    }
+    .ed-toolbar .group {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding-right: 10px;
+        margin-right: 4px;
+        border-right: 1px solid var(--line);
+    }
+    .ed-toolbar .group:last-child { border-right: 0; }
+    .ed-toolbar label.lbl { font-size: 12px; color: #5a6573; }
+
+    .btn {
+        appearance: none;
+        border: 1px solid var(--line);
+        background: #fff;
+        color: var(--text);
+        padding: 7px 12px;
+        font-size: 13px;
+        border-radius: 6px;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+    }
+    .btn:hover { background: #f0f2f5; }
+    .btn.primary {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: #fff;
+        font-weight: bold;
+    }
+    .btn.primary:hover { background: #cf4416; }
+    .btn.tool.active { background: #fde8df; border-color: var(--accent); }
+    .btn.danger { color: #b42318; border-color: #f0c2bc; }
+    .btn.danger:hover { background: #fdecea; }
+
+    .ed-main {
+        flex: 1;
+        display: flex;
+        min-height: 0;
+    }
+
+    .canvas-wrap {
+        flex: 1;
+        overflow: auto;
+        background: #e9ecf1;
+        background-image:
+            linear-gradient(45deg, #dfe3e9 25%, transparent 25%),
+            linear-gradient(-45deg, #dfe3e9 25%, transparent 25%),
+            linear-gradient(45deg, transparent 75%, #dfe3e9 75%),
+            linear-gradient(-45deg, transparent 75%, #dfe3e9 75%);
+        background-size: 24px 24px;
+        background-position: 0 0, 0 12px, 12px -12px, -12px 0;
+        padding: 24px;
+        position: relative;
+    }
+
+    #stage-wrap {
+        position: relative;
+        margin: 0 auto;
+        box-shadow: 0 6px 24px rgba(0,0,0,.18);
+        background: #fff;
+    }
+    #stage {
+        position: absolute;
+        top: 0; left: 0;
+        transform-origin: top left;
+        background: #fff no-repeat center / cover;
+        overflow: hidden;
+    }
+    #stage.empty::after {
+        content: "Importez un sous-cul (JPG A3 paysage) avec le bouton « Import fond »";
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #8a93a0;
+        font-size: 26px;
+        text-align: center;
+        padding: 40px;
+    }
+
+    /* éléments posés */
+    .el {
+        position: absolute;
+        box-sizing: border-box;
+        cursor: move;
+    }
+    .el.selected { outline: 2px solid var(--accent); outline-offset: 1px; }
+    .el .resize {
+        position: absolute;
+        right: -6px; bottom: -6px;
+        width: 14px; height: 14px;
+        background: var(--accent);
+        border: 2px solid #fff;
+        border-radius: 50%;
+        cursor: nwse-resize;
+        display: none;
+    }
+    .el.selected .resize { display: block; }
+
+    .el-texte {
+        padding: 6px 8px;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+    }
+    .el-hotspot {
+        background: rgba(232,82,31,.18);
+        border: 2px dashed var(--accent);
+        border-radius: 6px;
+    }
+    .el-hotspot .badge {
+        position: absolute;
+        top: -10px; left: -10px;
+        width: 24px; height: 24px;
+        background: var(--accent);
+        color: #fff;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 13px;
+        font-weight: bold;
+    }
+    .el-dnd {
+        background: #2c6ed5;
+        color: #fff;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        font-weight: bold;
+        padding: 6px;
+        box-shadow: 0 2px 6px rgba(0,0,0,.25);
+    }
+    .el-iframe {
+        background: #eef3fb;
+        border: 2px solid #2c6ed5;
+        border-radius: 6px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        color: #2c6ed5;
+        font-size: 12px;
+        text-align: center;
+        overflow: hidden;
+        padding: 6px;
+    }
+    .el-iframe .ic { font-size: 26px; }
+    .el-iframe .url { word-break: break-all; opacity: .8; }
+
+    /* panneau latéral */
+    .side {
+        width: 330px;
+        min-width: 330px;
+        background: var(--side);
+        border-left: 1px solid var(--line);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+    }
+    .side h3 {
+        margin: 0;
+        padding: 12px 14px;
+        font-size: 13px;
+        text-transform: uppercase;
+        letter-spacing: .5px;
+        color: #5a6573;
+        border-bottom: 1px solid var(--line);
+        background: #fafbfc;
+    }
+    .side .scroll { overflow: auto; flex: 1; }
+    .field {
+        padding: 10px 14px;
+        border-bottom: 1px solid #eef1f4;
+    }
+    .field label {
+        display: block;
+        font-size: 12px;
+        color: #5a6573;
+        margin-bottom: 4px;
+    }
+    .field input[type=text],
+    .field input[type=number],
+    .field input[type=url],
+    .field textarea,
+    .field select {
+        width: 100%;
+        padding: 7px 8px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        font-size: 13px;
+        font-family: inherit;
+    }
+    .field textarea { resize: vertical; min-height: 64px; }
+    .row2 { display: flex; gap: 8px; }
+    .row2 > div { flex: 1; }
+    .muted { color: #8a93a0; font-size: 12px; padding: 14px; }
+
+    .output { border-top: 1px solid var(--line); background: #fafbfc; }
+    .output textarea {
+        width: 100%;
+        height: 110px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        font-family: monospace;
+        font-size: 12px;
+        padding: 8px;
+    }
+    .inline { display: flex; align-items: center; gap: 8px; }
+    .inline input[type=checkbox] { width: auto; }
+    .hint {
+        font-size: 11px;
+        color: #8a93a0;
+        padding: 0 14px 12px;
+    }
+</style>
+</head>
+
+<body>
+
+<!-- ============ BARRE D'ONGLETS ============ -->
+<div id="tabbar">
+    <div class="brand">INRS <span>&nbsp;Outils</span></div>
+    <button class="tab active" data-tab="disque">Disque INRS</button>
+    <button class="tab" data-tab="editeur">Éditeur de support</button>
+</div>
+
+<!-- ============ ONGLET 1 : DISQUE ============ -->
+<div class="panel active" id="panel-disque">
+    <div id="viewport">
+        <div id="outil">
+            <img id="disque" src="disque INRS Toupie.png" alt="Disque tournant">
+            <img id="contour" src="Contours INRS Toupie.png" alt="Contours fixes">
+        </div>
+    </div>
+    <div id="aide">
+        Clic gauche glissé : tourner le disque<br>
+        Clic droit glissé : déplacer la page<br>
+        Molette : zoomer / dézoomer
+    </div>
+</div>
+
+<!-- ============ ONGLET 2 : ÉDITEUR ============ -->
+<div class="panel" id="panel-editeur">
+
+    <div class="ed-toolbar">
+        <div class="group">
+            <button class="btn" id="btn-import">📁 Import fond</button>
+            <input type="file" id="file-bg" accept="image/jpeg,image/png" hidden>
+        </div>
+        <div class="group">
+            <span class="lbl">Ajouter :</span>
+            <button class="btn tool" data-add="texte">📝 Texte</button>
+            <button class="btn tool" data-add="hotspot">🎯 Hotspot</button>
+            <button class="btn tool" data-add="dnd">🧩 DnD</button>
+            <button class="btn tool" data-add="iframe">🔲 Iframe</button>
+        </div>
+        <div class="group">
+            <span class="lbl">Module :</span>
+            <input type="text" id="module-name" value="module" style="width:120px;padding:6px 8px;border:1px solid var(--line);border-radius:6px;">
+        </div>
+        <div class="group">
+            <button class="btn primary" id="btn-generer">⚙️ Générer</button>
+            <button class="btn" id="btn-apercu">👁️ Aperçu</button>
+        </div>
+        <div class="group" style="border-right:0;">
+            <button class="btn" id="btn-save">💾 Enregistrer projet</button>
+            <input type="file" id="file-proj" accept="application/json" hidden>
+            <button class="btn" id="btn-load">📂 Ouvrir projet</button>
+            <button class="btn danger" id="btn-clear">🗑 Vider</button>
+        </div>
+    </div>
+
+    <div class="ed-main">
+        <div class="canvas-wrap" id="canvas-wrap">
+            <div id="stage-wrap">
+                <div id="stage" class="empty"></div>
+            </div>
+        </div>
+
+        <div class="side">
+            <h3>Propriétés</h3>
+            <div class="scroll" id="props">
+                <div class="muted">Sélectionnez un élément sur le support, ou ajoutez-en un depuis la barre d'outils.</div>
+            </div>
+            <div class="output">
+                <h3>Code d'intégration</h3>
+                <div class="field">
+                    <label>Code &lt;iframe&gt; (après « Générer »)</label>
+                    <textarea id="iframe-code" readonly placeholder="Cliquez sur « Générer » pour produire le module et obtenir le code à coller."></textarea>
+                    <div style="margin-top:8px;display:flex;gap:8px;">
+                        <button class="btn" id="btn-copy">📋 Copier</button>
+                        <label class="inline"><input type="checkbox" id="responsive-chk"> Responsive</label>
+                    </div>
+                </div>
+                <div class="hint">« Générer » télécharge le module HTML autonome. Placez-le à côté de votre page, puis collez le code &lt;iframe&gt; ci-dessus.</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+/* ===================================================== */
+/* ONGLET 1 : DISQUE INRS (logique d'origine adaptée)    */
+/* ===================================================== */
+(function () {
+    const viewport = document.getElementById("viewport");
+    const outil = document.getElementById("outil");
+    const disque = document.getElementById("disque");
+
+    let config = {
+        diskX: -6, diskY: 369, diskWidth: 655,
+        diskCenterOffsetX: 2, diskCenterOffsetY: -15,
+        angle: 1097.2
+    };
+    let view = { x: 0, y: 0, scale: 0.8 };
+    let isRotating = false, isPanning = false;
+    let lastMouseAngle = 0;
+    let panStartClientX = 0, panStartClientY = 0, panStartX = 0, panStartY = 0;
+    let animationFrameId = null;
+
+    function getDiskRealCenter() {
+        return {
+            x: config.diskX + (config.diskWidth / 2) + config.diskCenterOffsetX,
+            y: config.diskY + (config.diskWidth / 2) + config.diskCenterOffsetY
+        };
+    }
+    function appliquerVue() {
+        outil.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.scale})`;
+    }
+    function ajusterVueInitiale() {
+        const W = viewport.clientWidth || window.innerWidth;
+        const H = viewport.clientHeight || window.innerHeight;
+        const marge = 30;
+        const scaleX = (W - marge * 2) / 650;
+        const scaleY = (H - marge * 2) / 1024;
+        view.scale = Math.min(scaleX, scaleY, 1);
+        view.x = (W - 650 * view.scale) / 2;
+        view.y = (H - 1024 * view.scale) / 2;
+        appliquerVue();
+    }
+    window.__disqueFit = ajusterVueInitiale;
+
+    function getMousePositionInTool(e) {
+        const rect = viewport.getBoundingClientRect();
+        return {
+            x: (e.clientX - rect.left - view.x) / view.scale,
+            y: (e.clientY - rect.top - view.y) / view.scale
+        };
+    }
+    function angleDepuisCentre(pos) {
+        const c = getDiskRealCenter();
+        return Math.atan2(pos.y - c.y, pos.x - c.x) * 180 / Math.PI;
+    }
+    function normaliserDeltaAngle(d) {
+        if (d > 180) return d - 360;
+        if (d < -180) return d + 360;
+        return d;
+    }
+    function appliquerConfig() {
+        disque.style.left = config.diskX + "px";
+        disque.style.top = config.diskY + "px";
+        disque.style.width = config.diskWidth + "px";
+        const ox = (config.diskWidth / 2) + config.diskCenterOffsetX;
+        const oy = (config.diskWidth / 2) + config.diskCenterOffsetY;
+        disque.style.transformOrigin = ox + "px " + oy + "px";
+        disque.style.transform = `translate3d(0,0,0) rotate(${config.angle}deg)`;
+    }
+    function appliquerConfigFluide() {
+        if (animationFrameId !== null) return;
+        animationFrameId = requestAnimationFrame(function () {
+            appliquerConfig();
+            animationFrameId = null;
+        });
+    }
+
+    viewport.addEventListener("contextmenu", e => e.preventDefault());
+    viewport.addEventListener("pointerdown", function (e) {
+        e.preventDefault();
+        viewport.setPointerCapture(e.pointerId);
+        if (e.button === 2) {
+            isPanning = true;
+            viewport.classList.add("panning");
+            panStartClientX = e.clientX; panStartClientY = e.clientY;
+            panStartX = view.x; panStartY = view.y;
+            return;
+        }
+        if (e.button === 0) {
+            isRotating = true;
+            outil.classList.add("rotating");
+            lastMouseAngle = angleDepuisCentre(getMousePositionInTool(e));
+        }
+    });
+    viewport.addEventListener("pointermove", function (e) {
+        e.preventDefault();
+        if (isPanning) {
+            view.x = panStartX + (e.clientX - panStartClientX);
+            view.y = panStartY + (e.clientY - panStartClientY);
+            appliquerVue();
+            return;
+        }
+        if (isRotating) {
+            const cur = angleDepuisCentre(getMousePositionInTool(e));
+            config.angle += normaliserDeltaAngle(cur - lastMouseAngle);
+            lastMouseAngle = cur;
+            appliquerConfigFluide();
+        }
+    });
+    function stopActions() {
+        isRotating = false; isPanning = false;
+        outil.classList.remove("rotating");
+        viewport.classList.remove("panning");
+        appliquerConfig();
+    }
+    viewport.addEventListener("pointerup", stopActions);
+    viewport.addEventListener("pointercancel", stopActions);
+    viewport.addEventListener("wheel", function (e) {
+        e.preventDefault();
+        const rect = viewport.getBoundingClientRect();
+        const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+        const bx = (mx - view.x) / view.scale, by = (my - view.y) / view.scale;
+        const f = e.deltaY < 0 ? 1.1 : 0.9;
+        view.scale = Math.max(0.2, Math.min(view.scale * f, 4));
+        view.x = mx - bx * view.scale;
+        view.y = my - by * view.scale;
+        appliquerVue();
+    }, { passive: false });
+
+    window.addEventListener("resize", function () {
+        if (document.getElementById("panel-disque").classList.contains("active")) ajusterVueInitiale();
+    });
+
+    appliquerConfig();
+    ajusterVueInitiale();
+})();
+
+
+/* ===================================================== */
+/* GESTION DES ONGLETS                                   */
+/* ===================================================== */
+(function () {
+    const tabs = document.querySelectorAll("#tabbar .tab");
+    tabs.forEach(t => t.addEventListener("click", function () {
+        tabs.forEach(x => x.classList.remove("active"));
+        document.querySelectorAll(".panel").forEach(p => p.classList.remove("active"));
+        t.classList.add("active");
+        const panel = document.getElementById("panel-" + t.dataset.tab);
+        panel.classList.add("active");
+        if (t.dataset.tab === "disque" && window.__disqueFit) window.__disqueFit();
+        if (t.dataset.tab === "editeur" && window.__editeurFit) window.__editeurFit();
+    }));
+})();
+
+
+/* ===================================================== */
+/* ONGLET 2 : ÉDITEUR DE SUPPORT                         */
+/* ===================================================== */
+(function () {
+    const A3_W = 1587, A3_H = 1122; // A3 paysage ~96 dpi
+    const STORAGE_KEY = "inrs-editeur-support";
+
+    const stage = document.getElementById("stage");
+    const stageWrap = document.getElementById("stage-wrap");
+    const canvasWrap = document.getElementById("canvas-wrap");
+    const props = document.getElementById("props");
+
+    let support = { bg: null, w: A3_W, h: A3_H, elements: [] };
+    let scale = 1;
+    let selectedId = null;
+    let uid = 1;
+
+    /* ---------- modèle / défauts ---------- */
+    function makeElement(type) {
+        const base = { id: uid++, type, x: Math.round(support.w * 0.1), y: Math.round(support.h * 0.1) };
+        if (type === "texte")
+            return Object.assign(base, { w: 360, h: 90, text: "Votre texte ici",
+                fontSize: 28, color: "#1f2733", bg: "#ffffff", bgOn: false, bold: false, align: "left" });
+        if (type === "hotspot")
+            return Object.assign(base, { w: 160, h: 120, titre: "Titre du point", contenu: "Information affichée au clic." });
+        if (type === "dnd")
+            return Object.assign(base, { w: 200, h: 70, label: "Étiquette", color: "#2c6ed5" });
+        if (type === "iframe")
+            return Object.assign(base, { w: 480, h: 360, src: "", scroll: false });
+        return base;
+    }
+
+    /* ---------- rendu du support ---------- */
+    function computeScale() {
+        const avail = canvasWrap.clientWidth - 48; // padding
+        scale = Math.min(1, avail / support.w);
+        if (!isFinite(scale) || scale <= 0) scale = 1;
+    }
+    function renderStage() {
+        computeScale();
+        stage.style.width = support.w + "px";
+        stage.style.height = support.h + "px";
+        stage.style.transform = "scale(" + scale + ")";
+        stageWrap.style.width = (support.w * scale) + "px";
+        stageWrap.style.height = (support.h * scale) + "px";
+        if (support.bg) {
+            stage.style.backgroundImage = "url(" + support.bg + ")";
+            stage.classList.remove("empty");
+        } else {
+            stage.style.backgroundImage = "none";
+            stage.classList.add("empty");
+        }
+        renderElements();
+    }
+    window.__editeurFit = renderStage;
+
+    function renderElements() {
+        // retirer les anciens noeuds
+        stage.querySelectorAll(".el").forEach(n => n.remove());
+        support.elements.forEach(el => stage.appendChild(buildElementNode(el)));
+    }
+
+    function buildElementNode(el) {
+        const d = document.createElement("div");
+        d.className = "el el-" + el.type;
+        d.dataset.id = el.id;
+        d.style.left = el.x + "px";
+        d.style.top = el.y + "px";
+        d.style.width = el.w + "px";
+        d.style.height = el.h + "px";
+        if (el.id === selectedId) d.classList.add("selected");
+
+        if (el.type === "texte") {
+            d.style.fontSize = el.fontSize + "px";
+            d.style.color = el.color;
+            d.style.textAlign = el.align;
+            d.style.fontWeight = el.bold ? "bold" : "normal";
+            d.style.background = el.bgOn ? el.bg : "transparent";
+            d.textContent = el.text;
+        } else if (el.type === "hotspot") {
+            const b = document.createElement("div");
+            b.className = "badge";
+            b.textContent = support.elements.filter(e => e.type === "hotspot").indexOf(el) + 1;
+            d.appendChild(b);
+        } else if (el.type === "dnd") {
+            d.style.background = el.color;
+            d.style.fontSize = "16px";
+            d.appendChild(document.createTextNode(el.label));
+        } else if (el.type === "iframe") {
+            const ic = document.createElement("div"); ic.className = "ic"; ic.textContent = "🔲";
+            const t = document.createElement("div"); t.textContent = "Iframe";
+            const u = document.createElement("div"); u.className = "url"; u.textContent = el.src || "(URL non définie)";
+            d.appendChild(ic); d.appendChild(t); d.appendChild(u);
+        }
+
+        const rs = document.createElement("div");
+        rs.className = "resize";
+        d.appendChild(rs);
+
+        attachDrag(d, el, rs);
+        return d;
+    }
+
+    /* ---------- déplacement / redimension ---------- */
+    function attachDrag(node, el, handle) {
+        node.addEventListener("pointerdown", function (e) {
+            if (e.target === handle) return; // géré plus bas
+            e.stopPropagation();
+            select(el.id);
+            const sx = e.clientX, sy = e.clientY;
+            const ox = el.x, oy = el.y;
+            node.setPointerCapture(e.pointerId);
+            function move(ev) {
+                el.x = clamp(ox + (ev.clientX - sx) / scale, 0, support.w - 10);
+                el.y = clamp(oy + (ev.clientY - sy) / scale, 0, support.h - 10);
+                node.style.left = el.x + "px";
+                node.style.top = el.y + "px";
+                syncPosFields(el);
+            }
+            function up() {
+                node.removeEventListener("pointermove", move);
+                node.removeEventListener("pointerup", up);
+                saveLocal();
+            }
+            node.addEventListener("pointermove", move);
+            node.addEventListener("pointerup", up);
+        });
+
+        handle.addEventListener("pointerdown", function (e) {
+            e.stopPropagation();
+            select(el.id);
+            const sx = e.clientX, sy = e.clientY;
+            const ow = el.w, oh = el.h;
+            handle.setPointerCapture(e.pointerId);
+            function move(ev) {
+                el.w = Math.max(30, ow + (ev.clientX - sx) / scale);
+                el.h = Math.max(24, oh + (ev.clientY - sy) / scale);
+                node.style.width = el.w + "px";
+                node.style.height = el.h + "px";
+                syncPosFields(el);
+            }
+            function up() {
+                handle.removeEventListener("pointermove", move);
+                handle.removeEventListener("pointerup", up);
+                saveLocal();
+            }
+            handle.addEventListener("pointermove", move);
+            handle.addEventListener("pointerup", up);
+        });
+    }
+    function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+
+    stage.addEventListener("pointerdown", function (e) {
+        if (e.target === stage) select(null);
+    });
+
+    /* ---------- sélection + panneau propriétés ---------- */
+    function select(id) {
+        selectedId = id;
+        stage.querySelectorAll(".el").forEach(n =>
+            n.classList.toggle("selected", Number(n.dataset.id) === id));
+        renderProps();
+    }
+    function getSelected() { return support.elements.find(e => e.id === selectedId) || null; }
+
+    function field(label, inputHTML) {
+        return '<div class="field"><label>' + label + '</label>' + inputHTML + '</div>';
+    }
+    function renderProps() {
+        const el = getSelected();
+        if (!el) {
+            props.innerHTML = '<div class="muted">Sélectionnez un élément sur le support, ou ajoutez-en un depuis la barre d\'outils.</div>';
+            return;
+        }
+        let html = '<div class="field"><label>Type</label><b>' + typeLabel(el.type) + ' #' + el.id + '</b></div>';
+
+        if (el.type === "texte") {
+            html += field("Contenu", '<textarea data-k="text">' + escapeHtml(el.text) + '</textarea>');
+            html += field("Taille (px)", '<input type="number" data-k="fontSize" value="' + el.fontSize + '">');
+            html += '<div class="field"><div class="row2">' +
+                '<div><label>Couleur</label><input type="color" data-k="color" value="' + el.color + '" style="width:100%;height:34px;padding:2px;"></div>' +
+                '<div><label>Fond</label><input type="color" data-k="bg" value="' + el.bg + '" style="width:100%;height:34px;padding:2px;"></div></div></div>';
+            html += '<div class="field inline"><input type="checkbox" data-k="bgOn" ' + (el.bgOn ? "checked" : "") + '><label style="margin:0;">Afficher le fond</label></div>';
+            html += '<div class="field inline"><input type="checkbox" data-k="bold" ' + (el.bold ? "checked" : "") + '><label style="margin:0;">Gras</label></div>';
+            html += field("Alignement", '<select data-k="align"><option value="left"' + sel(el.align, "left") + '>Gauche</option><option value="center"' + sel(el.align, "center") + '>Centré</option><option value="right"' + sel(el.align, "right") + '>Droite</option></select>');
+        } else if (el.type === "hotspot") {
+            html += field("Titre", '<input type="text" data-k="titre" value="' + escapeHtml(el.titre) + '">');
+            html += field("Information (au clic)", '<textarea data-k="contenu">' + escapeHtml(el.contenu) + '</textarea>');
+        } else if (el.type === "dnd") {
+            html += field("Étiquette", '<input type="text" data-k="label" value="' + escapeHtml(el.label) + '">');
+            html += field("Couleur", '<input type="color" data-k="color" value="' + el.color + '" style="width:100%;height:34px;padding:2px;">');
+            html += '<div class="hint">Dans le module généré, l\'étiquette est librement déplaçable par l\'utilisateur.</div>';
+        } else if (el.type === "iframe") {
+            html += field("URL / fichier source", '<input type="url" data-k="src" value="' + escapeHtml(el.src) + '" placeholder="ex. disque.html ou https://...">');
+            html += '<div class="field inline"><input type="checkbox" data-k="scroll" ' + (el.scroll ? "checked" : "") + '><label style="margin:0;">Autoriser le défilement</label></div>';
+        }
+
+        html += '<div class="field"><div class="row2">' +
+            '<div><label>X</label><input type="number" data-k="x" value="' + Math.round(el.x) + '"></div>' +
+            '<div><label>Y</label><input type="number" data-k="y" value="' + Math.round(el.y) + '"></div></div></div>';
+        html += '<div class="field"><div class="row2">' +
+            '<div><label>Largeur</label><input type="number" data-k="w" value="' + Math.round(el.w) + '"></div>' +
+            '<div><label>Hauteur</label><input type="number" data-k="h" value="' + Math.round(el.h) + '"></div></div></div>';
+        html += '<div class="field"><button class="btn danger" id="btn-del" style="width:100%;">🗑 Supprimer cet élément</button></div>';
+
+        props.innerHTML = html;
+        bindPropInputs(el);
+    }
+    function sel(a, b) { return a === b ? " selected" : ""; }
+    function typeLabel(t) { return { texte: "Texte", hotspot: "Hotspot", dnd: "DnD", iframe: "Iframe" }[t] || t; }
+
+    function bindPropInputs(el) {
+        props.querySelectorAll("[data-k]").forEach(inp => {
+            const k = inp.dataset.k;
+            const ev = (inp.type === "checkbox" || inp.tagName === "SELECT") ? "change" : "input";
+            inp.addEventListener(ev, function () {
+                let v;
+                if (inp.type === "checkbox") v = inp.checked;
+                else if (inp.type === "number") v = parseFloat(inp.value) || 0;
+                else v = inp.value;
+                el[k] = v;
+                renderElements();
+                select(el.id);
+                saveLocal();
+            });
+        });
+        const del = document.getElementById("btn-del");
+        if (del) del.addEventListener("click", function () {
+            support.elements = support.elements.filter(e => e.id !== el.id);
+            selectedId = null;
+            renderElements();
+            renderProps();
+            saveLocal();
+        });
+    }
+    function syncPosFields(el) {
+        const x = props.querySelector('[data-k="x"]'); if (x) x.value = Math.round(el.x);
+        const y = props.querySelector('[data-k="y"]'); if (y) y.value = Math.round(el.y);
+        const w = props.querySelector('[data-k="w"]'); if (w) w.value = Math.round(el.w);
+        const h = props.querySelector('[data-k="h"]'); if (h) h.value = Math.round(el.h);
+    }
+
+    /* ---------- barre d'outils ---------- */
+    document.querySelectorAll("[data-add]").forEach(b =>
+        b.addEventListener("click", function () {
+            const el = makeElement(b.dataset.add);
+            support.elements.push(el);
+            renderElements();
+            select(el.id);
+            saveLocal();
+        }));
+
+    const fileBg = document.getElementById("file-bg");
+    document.getElementById("btn-import").addEventListener("click", () => fileBg.click());
+    fileBg.addEventListener("change", function () {
+        const f = fileBg.files[0];
+        if (!f) return;
+        const r = new FileReader();
+        r.onload = function () {
+            const img = new Image();
+            img.onload = function () {
+                support.bg = r.result;
+                support.w = img.naturalWidth;
+                support.h = img.naturalHeight;
+                renderStage();
+                saveLocal();
+            };
+            img.src = r.result;
+        };
+        r.readAsDataURL(f);
+        fileBg.value = "";
+    });
+
+    /* ---------- supprimer via clavier ---------- */
+    document.addEventListener("keydown", function (e) {
+        if (!document.getElementById("panel-editeur").classList.contains("active")) return;
+        if ((e.key === "Delete" || e.key === "Backspace") && selectedId &&
+            document.activeElement.tagName !== "INPUT" && document.activeElement.tagName !== "TEXTAREA") {
+            support.elements = support.elements.filter(el => el.id !== selectedId);
+            selectedId = null;
+            renderElements();
+            renderProps();
+            saveLocal();
+        }
+    });
+
+    /* ---------- persistance locale + projet ---------- */
+    function saveLocal() {
+        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(support)); } catch (e) {}
+    }
+    function loadLocal() {
+        try {
+            const s = localStorage.getItem(STORAGE_KEY);
+            if (s) {
+                support = JSON.parse(s);
+                uid = support.elements.reduce((m, e) => Math.max(m, e.id), 0) + 1;
+            }
+        } catch (e) {}
+    }
+
+    document.getElementById("btn-save").addEventListener("click", function () {
+        downloadBlob(JSON.stringify(support, null, 2),
+            (moduleName() || "projet") + ".json", "application/json");
+    });
+    const fileProj = document.getElementById("file-proj");
+    document.getElementById("btn-load").addEventListener("click", () => fileProj.click());
+    fileProj.addEventListener("change", function () {
+        const f = fileProj.files[0]; if (!f) return;
+        const r = new FileReader();
+        r.onload = function () {
+            try {
+                support = JSON.parse(r.result);
+                uid = support.elements.reduce((m, e) => Math.max(m, e.id), 0) + 1;
+                selectedId = null;
+                renderStage(); renderProps(); saveLocal();
+            } catch (e) { alert("Fichier projet invalide."); }
+        };
+        r.readAsText(f);
+        fileProj.value = "";
+    });
+    document.getElementById("btn-clear").addEventListener("click", function () {
+        if (!confirm("Vider le support (fond + éléments) ?")) return;
+        support = { bg: null, w: A3_W, h: A3_H, elements: [] };
+        uid = 1; selectedId = null;
+        renderStage(); renderProps(); saveLocal();
+    });
+
+    /* ---------- génération du module autonome ---------- */
+    function moduleName() {
+        return (document.getElementById("module-name").value || "module").trim().replace(/[^\w\-]/g, "_");
+    }
+
+    function buildModuleHTML() {
+        const data = {
+            w: support.w, h: support.h, bg: support.bg,
+            elements: support.elements
+        };
+        const json = JSON.stringify(data);
+        return MODULE_TEMPLATE.replace("/*__DATA__*/", function () { return json; });
+    }
+
+    function iframeCode(fileName) {
+        const responsive = document.getElementById("responsive-chk").checked;
+        if (responsive) {
+            const pct = (support.h / support.w * 100).toFixed(3);
+            return '<div style="position:relative;width:100%;max-width:' + support.w + 'px;">\n' +
+                '  <div style="position:relative;padding-top:' + pct + '%;">\n' +
+                '    <iframe src="' + fileName + '" style="position:absolute;inset:0;width:100%;height:100%;border:0;" allowfullscreen></iframe>\n' +
+                '  </div>\n</div>';
+        }
+        const w = 900, h = Math.round(900 * support.h / support.w);
+        return '<iframe src="' + fileName + '" width="' + w + '" height="' + h + '" style="border:0;" allowfullscreen></iframe>';
+    }
+
+    document.getElementById("btn-generer").addEventListener("click", function () {
+        if (!support.bg) { alert("Importez d'abord un sous-cul (image de fond)."); return; }
+        const file = moduleName() + ".html";
+        downloadBlob(buildModuleHTML(), file, "text/html");
+        document.getElementById("iframe-code").value = iframeCode(file);
+    });
+    document.getElementById("responsive-chk").addEventListener("change", function () {
+        const ta = document.getElementById("iframe-code");
+        if (ta.value) ta.value = iframeCode(moduleName() + ".html");
+    });
+    document.getElementById("btn-copy").addEventListener("click", function () {
+        const ta = document.getElementById("iframe-code");
+        if (!ta.value) return;
+        ta.select();
+        navigator.clipboard ? navigator.clipboard.writeText(ta.value) : document.execCommand("copy");
+    });
+    document.getElementById("btn-apercu").addEventListener("click", function () {
+        if (!support.bg) { alert("Importez d'abord un sous-cul (image de fond)."); return; }
+        const w = window.open("", "_blank");
+        w.document.open(); w.document.write(buildModuleHTML()); w.document.close();
+    });
+
+    /* ---------- utilitaires ---------- */
+    function downloadBlob(content, name, mime) {
+        const blob = new Blob([content], { type: mime });
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = name;
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    }
+    function escapeHtml(s) {
+        return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    }
+
+    window.addEventListener("resize", function () {
+        if (document.getElementById("panel-editeur").classList.contains("active")) renderStage();
+    });
+
+    /* ---------- init ---------- */
+    loadLocal();
+    renderStage();
+    renderProps();
+
+
+    /* ===== Gabarit du module autonome exporté ===== */
+    const MODULE_TEMPLATE = [
+'<!DOCTYPE html>',
+'<html lang="fr"><head><meta charset="UTF-8">',
+'<meta name="viewport" content="width=device-width, initial-scale=1">',
+'<title>Module INRS</title>',
+'<style>',
+'  html,body{margin:0;padding:0;height:100%;font-family:Arial,sans-serif;background:#fff;}',
+'  #m-wrap{position:relative;width:100%;height:100%;overflow:hidden;}',
+'  #m-stage{position:absolute;top:0;left:0;transform-origin:top left;background:#fff no-repeat center/cover;}',
+'  .m-el{position:absolute;box-sizing:border-box;}',
+'  .m-texte{padding:6px 8px;display:flex;flex-direction:column;justify-content:center;overflow:hidden;}',
+'  .m-hotspot{cursor:pointer;border:2px solid transparent;border-radius:6px;transition:background .15s;}',
+'  .m-hotspot:hover{background:rgba(232,82,31,.18);border-color:#e8521f;}',
+'  .m-hotspot .m-badge{position:absolute;top:-10px;left:-10px;width:24px;height:24px;background:#e8521f;color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:bold;box-shadow:0 1px 3px rgba(0,0,0,.3);}',
+'  .m-dnd{border-radius:8px;color:#fff;display:flex;align-items:center;justify-content:center;text-align:center;font-weight:bold;padding:6px;cursor:grab;box-shadow:0 2px 6px rgba(0,0,0,.25);touch-action:none;user-select:none;}',
+'  .m-dnd:active{cursor:grabbing;}',
+'  .m-iframe{border:0;}',
+'  #m-modal{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;align-items:center;justify-content:center;z-index:1000;}',
+'  #m-modal .box{background:#fff;max-width:440px;width:90%;border-radius:10px;padding:22px;box-shadow:0 10px 40px rgba(0,0,0,.3);}',
+'  #m-modal h2{margin:0 0 10px;color:#e8521f;font-size:20px;}',
+'  #m-modal p{margin:0 0 16px;line-height:1.5;white-space:pre-wrap;}',
+'  #m-modal button{appearance:none;border:0;background:#e8521f;color:#fff;padding:9px 18px;border-radius:6px;cursor:pointer;font-size:14px;}',
+'</style></head><body>',
+'<div id="m-wrap"><div id="m-stage"></div></div>',
+'<div id="m-modal"><div class="box"><h2 id="m-title"></h2><p id="m-text"></p><button onclick="document.getElementById(\'m-modal\').style.display=\'none\'">Fermer</button></div></div>',
+'<script>',
+'var DATA = /*__DATA__*/;',
+'var wrap=document.getElementById("m-wrap"),stg=document.getElementById("m-stage");',
+'function esc(s){return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}',
+'function fit(){var s=Math.min(wrap.clientWidth/DATA.w,wrap.clientHeight/DATA.h);stg.style.transform="scale("+s+")";stg.style.width=DATA.w+"px";stg.style.height=DATA.h+"px";stg.style.left=((wrap.clientWidth-DATA.w*s)/2)+"px";stg.style.top=((wrap.clientHeight-DATA.h*s)/2)+"px";}',
+'if(DATA.bg)stg.style.backgroundImage="url("+DATA.bg+")";',
+'var hi=0;',
+'DATA.elements.forEach(function(el){',
+'  var d=document.createElement("div");d.className="m-el m-"+el.type;',
+'  d.style.left=el.x+"px";d.style.top=el.y+"px";d.style.width=el.w+"px";d.style.height=el.h+"px";',
+'  if(el.type==="texte"){d.style.fontSize=el.fontSize+"px";d.style.color=el.color;d.style.textAlign=el.align;d.style.fontWeight=el.bold?"bold":"normal";d.style.background=el.bgOn?el.bg:"transparent";d.textContent=el.text;}',
+'  else if(el.type==="hotspot"){hi++;var b=document.createElement("div");b.className="m-badge";b.textContent=hi;d.appendChild(b);d.addEventListener("click",function(){document.getElementById("m-title").textContent=el.titre;document.getElementById("m-text").textContent=el.contenu;document.getElementById("m-modal").style.display="flex";});}',
+'  else if(el.type==="dnd"){d.style.background=el.color;d.style.fontSize="16px";d.appendChild(document.createTextNode(el.label));dndDrag(d);}',
+'  else if(el.type==="iframe"){var f=document.createElement("iframe");f.className="m-iframe";f.src=el.src;f.style.width="100%";f.style.height="100%";f.scrolling=el.scroll?"yes":"no";f.setAttribute("allowfullscreen","");d.appendChild(f);}',
+'  stg.appendChild(d);',
+'});',
+'function dndDrag(node){node.addEventListener("pointerdown",function(e){e.preventDefault();var s=Math.min(wrap.clientWidth/DATA.w,wrap.clientHeight/DATA.h);var sx=e.clientX,sy=e.clientY,ox=parseFloat(node.style.left),oy=parseFloat(node.style.top);node.setPointerCapture(e.pointerId);function mv(ev){node.style.left=(ox+(ev.clientX-sx)/s)+"px";node.style.top=(oy+(ev.clientY-sy)/s)+"px";}function up(){node.removeEventListener("pointermove",mv);node.removeEventListener("pointerup",up);}node.addEventListener("pointermove",mv);node.addEventListener("pointerup",up);});}',
+'window.addEventListener("resize",fit);fit();',
+'<\/script></body></html>'
+    ].join("\n");
+})();
+</script>
+
+</body>
+</html>
