@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Disque interactif INRS - Toupie</title>
+
+<style>
+    html, body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        background: #ffffff;
+        overflow: hidden;
+        user-select: none;
+    }
+
+    body {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    #viewport {
+        position: fixed;
+        inset: 0;
+        overflow: hidden;
+        background: #ffffff;
+        cursor: default;
+        touch-action: none;
+    }
+
+    #viewport.panning {
+        cursor: grabbing;
+    }
+
+    #outil {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 650px;
+        height: 1024px;
+        transform-origin: 0 0;
+        touch-action: none;
+        user-select: none;
+        cursor: grab;
+    }
+
+    #outil.rotating {
+        cursor: grabbing;
+    }
+
+    #disque {
+        position: absolute;
+        z-index: 1;
+        pointer-events: none;
+        will-change: transform;
+        backface-visibility: hidden;
+        transform: translate3d(0, 0, 0) rotate(0deg);
+    }
+
+    #contour {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 650px;
+        height: auto;
+        z-index: 2;
+        pointer-events: none;
+    }
+
+    #aide {
+        position: fixed;
+        left: 12px;
+        bottom: 12px;
+        z-index: 50;
+        background: rgba(0, 0, 0, 0.75);
+        color: white;
+        font-family: Arial, sans-serif;
+        font-size: 13px;
+        line-height: 1.4;
+        padding: 10px 12px;
+        border-radius: 6px;
+        pointer-events: none;
+    }
+</style>
+</head>
+
+<body>
+
+<div id="viewport">
+    <div id="outil">
+        <img id="disque" src="disque INRS Toupie.png" alt="Disque tournant">
+        <img id="contour" src="Contours INRS Toupie.png" alt="Contours fixes">
+    </div>
+</div>
+
+<div id="aide">
+    Clic gauche glissé : tourner le disque<br>
+    Clic droit glissé : déplacer la page<br>
+    Molette : zoomer / dézoomer
+</div>
+
+<script>
+const viewport = document.getElementById("viewport");
+const outil = document.getElementById("outil");
+const disque = document.getElementById("disque");
+
+let config = {
+    centerX: 323,
+    centerY: 673,
+    diskX: -6,
+    diskY: 369,
+    diskWidth: 655,
+    diskCenterOffsetX: 2,
+    diskCenterOffsetY: -15,
+    angle: 1097.2
+};
+
+let view = {
+    x: 0,
+    y: 0,
+    scale: 0.8
+};
+
+let isRotating = false;
+let isPanning = false;
+
+let lastMouseAngle = 0;
+
+let panStartClientX = 0;
+let panStartClientY = 0;
+let panStartX = 0;
+let panStartY = 0;
+
+let animationFrameId = null;
+
+function getDiskRealCenter() {
+    return {
+        x: config.diskX + (config.diskWidth / 2) + config.diskCenterOffsetX,
+        y: config.diskY + (config.diskWidth / 2) + config.diskCenterOffsetY
+    };
+}
+
+function appliquerVue() {
+    outil.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.scale})`;
+}
+
+function ajusterVueInitiale() {
+    const marge = 30;
+
+    const scaleX = (window.innerWidth - marge * 2) / 650;
+    const scaleY = (window.innerHeight - marge * 2) / 1024;
+
+    view.scale = Math.min(scaleX, scaleY, 1);
+
+    view.x = (window.innerWidth - 650 * view.scale) / 2;
+    view.y = (window.innerHeight - 1024 * view.scale) / 2;
+
+    appliquerVue();
+}
+
+function getMousePositionInTool(e) {
+    const rect = viewport.getBoundingClientRect();
+
+    return {
+        x: (e.clientX - rect.left - view.x) / view.scale,
+        y: (e.clientY - rect.top - view.y) / view.scale
+    };
+}
+
+function angleDepuisCentre(pos) {
+    const centre = getDiskRealCenter();
+
+    const dx = pos.x - centre.x;
+    const dy = pos.y - centre.y;
+
+    return Math.atan2(dy, dx) * 180 / Math.PI;
+}
+
+function normaliserDeltaAngle(delta) {
+    if (delta > 180) return delta - 360;
+    if (delta < -180) return delta + 360;
+    return delta;
+}
+
+function appliquerConfig() {
+    disque.style.left = config.diskX + "px";
+    disque.style.top = config.diskY + "px";
+    disque.style.width = config.diskWidth + "px";
+
+    const originX = (config.diskWidth / 2) + config.diskCenterOffsetX;
+    const originY = (config.diskWidth / 2) + config.diskCenterOffsetY;
+
+    disque.style.transformOrigin = originX + "px " + originY + "px";
+    disque.style.transform = `translate3d(0, 0, 0) rotate(${config.angle}deg)`;
+}
+
+function appliquerConfigFluide() {
+    if (animationFrameId !== null) return;
+
+    animationFrameId = requestAnimationFrame(function() {
+        appliquerConfig();
+        animationFrameId = null;
+    });
+}
+
+viewport.addEventListener("contextmenu", function(e) {
+    e.preventDefault();
+});
+
+viewport.addEventListener("pointerdown", function(e) {
+    e.preventDefault();
+
+    viewport.setPointerCapture(e.pointerId);
+
+    if (e.button === 2) {
+        isPanning = true;
+
+        viewport.classList.add("panning");
+
+        panStartClientX = e.clientX;
+        panStartClientY = e.clientY;
+
+        panStartX = view.x;
+        panStartY = view.y;
+
+        return;
+    }
+
+    if (e.button === 0) {
+        isRotating = true;
+
+        outil.classList.add("rotating");
+
+        const pos = getMousePositionInTool(e);
+        lastMouseAngle = angleDepuisCentre(pos);
+    }
+});
+
+viewport.addEventListener("pointermove", function(e) {
+    e.preventDefault();
+
+    if (isPanning) {
+        const dx = e.clientX - panStartClientX;
+        const dy = e.clientY - panStartClientY;
+
+        view.x = panStartX + dx;
+        view.y = panStartY + dy;
+
+        appliquerVue();
+        return;
+    }
+
+    if (isRotating) {
+        const pos = getMousePositionInTool(e);
+        const currentMouseAngle = angleDepuisCentre(pos);
+
+        let delta = currentMouseAngle - lastMouseAngle;
+        delta = normaliserDeltaAngle(delta);
+
+        config.angle += delta;
+        lastMouseAngle = currentMouseAngle;
+
+        appliquerConfigFluide();
+    }
+});
+
+function stopActions() {
+    isRotating = false;
+    isPanning = false;
+
+    outil.classList.remove("rotating");
+    viewport.classList.remove("panning");
+
+    appliquerConfig();
+}
+
+viewport.addEventListener("pointerup", stopActions);
+viewport.addEventListener("pointercancel", stopActions);
+
+viewport.addEventListener("wheel", function(e) {
+    e.preventDefault();
+
+    const rect = viewport.getBoundingClientRect();
+
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+
+    const toolXBeforeZoom = (mouseX - view.x) / view.scale;
+    const toolYBeforeZoom = (mouseY - view.y) / view.scale;
+
+    const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
+
+    let newScale = view.scale * zoomFactor;
+
+    newScale = Math.max(0.2, Math.min(newScale, 4));
+
+    view.scale = newScale;
+
+    view.x = mouseX - toolXBeforeZoom * view.scale;
+    view.y = mouseY - toolYBeforeZoom * view.scale;
+
+    appliquerVue();
+}, { passive: false });
+
+window.addEventListener("resize", function() {
+    ajusterVueInitiale();
+});
+
+appliquerConfig();
+ajusterVueInitiale();
+</script>
+
+</body>
+</html>
