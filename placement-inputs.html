@@ -1704,6 +1704,22 @@
                 </select>
             </div>
 
+            <div class="row">
+                <label>Sous-cul Page 1</label>
+                <button id="btnImportBg1" type="button" style="flex:1;">📁 Importer une image</button>
+            </div>
+            <div class="mini" id="bg1Name" style="margin:-8px 0 8px; color:#1b5e20;"></div>
+            <div class="row">
+                <label>Sous-cul Page 2</label>
+                <button id="btnImportBg2" type="button" style="flex:1;">📁 Importer une image</button>
+            </div>
+            <div class="mini" id="bg2Name" style="margin:-8px 0 8px; color:#1b5e20;"></div>
+            <input id="impBg1" type="file" accept="image/*" hidden>
+            <input id="impBg2" type="file" accept="image/*" hidden>
+            <div class="mini" style="color:#666;">
+                Importez vos sous-cul (A3 paysage). Ils s'affichent aussitôt dans l'éditeur et sont intégrés au HTML généré (pas besoin de les déposer dans le dépôt).
+            </div>
+
             <h3>Champ sélectionné</h3>
             <div class="mini" id="selInfo">Aucun champ sélectionné.</div>
             <div style="display:flex; gap:5px; margin-bottom:15px; margin-top:5px;">
@@ -3058,6 +3074,33 @@
                     });
                 });
             });
+
+            // === Import des sous-cul (onglet Page) ===
+            (function setupBgImport() {
+                function wire(btnId, fileId, confId, nameId) {
+                    const btn = $(btnId), file = $(fileId);
+                    if (!btn || !file) return;
+                    btn.addEventListener('click', () => file.click());
+                    file.addEventListener('change', () => {
+                        const f = file.files && file.files[0];
+                        if (!f) return;
+                        const r = new FileReader();
+                        r.onload = () => {
+                            const conf = $(confId);
+                            if (conf) {
+                                conf.value = r.result;
+                                conf.dispatchEvent(new Event('change', { bubbles: true }));
+                            }
+                            const nm = $(nameId);
+                            if (nm) nm.textContent = '✔ ' + f.name;
+                        };
+                        r.readAsDataURL(f);
+                        file.value = '';
+                    });
+                }
+                wire('btnImportBg1', 'impBg1', 'confImg1', 'bg1Name');
+                wire('btnImportBg2', 'impBg2', 'confImg2', 'bg2Name');
+            })();
 
             zoomSlider.addEventListener('input', (e) => {
                 const val = parseFloat(e.target.value);
@@ -8434,7 +8477,7 @@
             function mqTabForH3(text) {
                 const t = (text || '').trim();
                 const map = {
-                    'Configuration de la page': 'text',
+                    'Configuration de la page': 'page',
                     'Champ sélectionné': 'text',
                     'Contenu (validation)': 'text',
                     'Info-bulle (survol)': 'text',
@@ -8614,6 +8657,7 @@
                 const tabs = document.createElement('div');
                 tabs.className = 'mq-tabs';
                 const tabIds = [
+                    { id: 'page', label: 'Page' },
                     { id: 'text', label: 'Text' },
                     { id: 'hotspot', label: 'Hotspot' },
                     { id: 'iframe', label: 'Iframe' },
