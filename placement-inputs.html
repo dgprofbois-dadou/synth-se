@@ -1706,29 +1706,6 @@
 
             <h3>Champ sélectionné</h3>
             <div class="mini" id="selInfo">Aucun champ sélectionné.</div>
-
-            <div id="iframeProps" style="display:none; border:2px solid #2c6ed5; border-radius:8px; padding:10px; margin:6px 0 14px;">
-                <h3 style="margin:0 0 8px; color:#2c6ed5;">🔲 Iframe sélectionnée</h3>
-                <div class="row">
-                    <label style="font-weight:bold;">URL / fichier</label>
-                    <input id="pIframeSrc" type="text" placeholder="ex: disque-inrs.html ou https://...">
-                </div>
-                <div class="row">
-                    <label>Défilement</label>
-                    <input id="pIframeScroll" type="checkbox">
-                </div>
-                <div class="row">
-                    <label>Fond éditeur</label>
-                    <input id="pIframeShield" type="checkbox" checked title="Bloquer l'interaction en mode Admin pour pouvoir déplacer l'iframe">
-                </div>
-                <div style="display:flex; gap:5px; margin-top:6px; flex-wrap:wrap;">
-                    <button id="btnIframeDisque" type="button" style="flex:1; font-size:12px;">↪ Page Disque INRS</button>
-                    <button id="btnIframeReload" type="button" style="flex:1; font-size:12px;">⟳ Recharger</button>
-                </div>
-                <div class="mini" style="margin-top:6px; color:#666;">
-                    L'iframe est déplaçable/redimensionnable comme un champ. En mode Élève, elle devient interactive.
-                </div>
-            </div>
             <div style="display:flex; gap:5px; margin-bottom:15px; margin-top:5px;">
                 <button id="btnCopyBoxStyle" type="button"
                     style="flex:1; background:#e3f2fd; border-color:#2196f3; color:#0d47a1;"
@@ -1901,6 +1878,30 @@
             <div class="row">
                 <label>Fond – validé</label>
                 <input id="pFillOk" type="color" value="#c8e6c9">
+            </div>
+
+            <h3 id="iframeTabHead">🔲 Iframe</h3>
+            <div class="mini" id="iframeEmpty">Aucune iframe sélectionnée. Cliquez « + Iframe » puis sélectionnez le cadre.</div>
+            <div id="iframeProps" style="display:none;">
+                <div class="row">
+                    <label style="font-weight:bold;">URL / fichier</label>
+                    <input id="pIframeSrc" type="text" placeholder="ex: disque-inrs.html ou https://...">
+                </div>
+                <div class="row">
+                    <label>Défilement</label>
+                    <input id="pIframeScroll" type="checkbox">
+                </div>
+                <div class="row">
+                    <label>Voile (mode Admin)</label>
+                    <input id="pIframeShield" type="checkbox" checked title="Bloquer l'interaction en mode Admin pour pouvoir déplacer l'iframe">
+                </div>
+                <div style="display:flex; gap:5px; margin-top:6px; flex-wrap:wrap;">
+                    <button id="btnIframeDisque" type="button" style="flex:1; font-size:12px;">↪ Page Disque INRS</button>
+                    <button id="btnIframeReload" type="button" style="flex:1; font-size:12px;">⟳ Recharger</button>
+                </div>
+                <div class="mini" style="margin-top:6px; color:#666;">
+                    L'iframe se déplace / se redimensionne comme un champ. En mode Élève elle devient interactive.
+                </div>
             </div>
 
             <h3>Hotspot sélectionné</h3>
@@ -3655,14 +3656,18 @@
                     selInfo.textContent = 'Aucun champ sélectionné.';
                     var _ipNone = document.getElementById('iframeProps');
                     if (_ipNone) _ipNone.style.display = 'none';
+                    var _ieNone = document.getElementById('iframeEmpty');
+                    if (_ieNone) _ieNone.style.display = 'block';
                     return;
                 }
                 selInfo.textContent = `ID: ${b.id.slice(0, 8)}… | z-index: ${b.z || 0}`;
 
-                // --- Cas spécial : iframe ---
+                // --- Cas spécial : iframe (onglet dédié) ---
                 const _ip = document.getElementById('iframeProps');
+                const _ie = document.getElementById('iframeEmpty');
                 if (b.kind === 'iframe') {
                     if (_ip) _ip.style.display = 'block';
+                    if (_ie) _ie.style.display = 'none';
                     const s = document.getElementById('pIframeSrc'); if (s && document.activeElement !== s) s.value = b.src || '';
                     const sc = document.getElementById('pIframeScroll'); if (sc) sc.checked = !!b.iframeScroll;
                     const sh = document.getElementById('pIframeShield'); if (sh) sh.checked = b.adminShield !== false;
@@ -3670,9 +3675,13 @@
                     const _pY = document.getElementById('pY'); if (_pY) _pY.value = b.y || 0;
                     const _pW = document.getElementById('pW'); if (_pW) _pW.value = b.w || 0;
                     const _pH = document.getElementById('pH'); if (_pH) _pH.value = b.h || 0;
+                    // Bascule automatiquement sur l'onglet Iframe
+                    const _tab = document.querySelector('#left .mq-tab[data-tab="iframe"]');
+                    if (_tab && !_tab.classList.contains('is-active')) _tab.click();
                     return;
                 }
                 if (_ip) _ip.style.display = 'none';
+                if (_ie) _ie.style.display = 'block';
 
                 pGroup.value = b.group || '';
                 if (pCopyToHsTip) pCopyToHsTip.checked = !!b.copyToHotspotTip;
@@ -8433,6 +8442,7 @@
                     'Style': 'text',
                     'Format du champ': 'text',
                     'Couleurs (mode élève)': 'text',
+                    '🔲 Iframe': 'iframe',
                     'Hotspot sélectionné': 'hotspot',
                     'Infobulle (hotspot)': 'hotspot',
                     '🎮 Jeux Drag & Drop': 'dnd',
@@ -8606,6 +8616,7 @@
                 const tabIds = [
                     { id: 'text', label: 'Text' },
                     { id: 'hotspot', label: 'Hotspot' },
+                    { id: 'iframe', label: 'Iframe' },
                     { id: 'dnd', label: 'DnD' },
                     { id: 'io', label: 'Import' }
                 ];
