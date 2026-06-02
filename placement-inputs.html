@@ -5658,8 +5658,8 @@
 
                 // Restauration de la configuration Export HTML (AJOUT)
                 if (obj.exportConfig) {
-                    if ($('confImg1')) $('confImg1').value = mqNormalizeBgPath(obj.exportConfig.img1 || '', 0);
-                    if ($('confImg2')) $('confImg2').value = mqNormalizeBgPath(obj.exportConfig.img2 || '', 1);
+                    resolveBgInto('confImg1', obj.exportConfig.img1 || '', 0);
+                    resolveBgInto('confImg2', obj.exportConfig.img2 || '', 1);
                     if ($('confPrefix')) $('confPrefix').value = obj.exportConfig.prefix || '';
                 }
 
@@ -5717,15 +5717,79 @@
                 _saveLocalTimer = setTimeout(() => saveLocal(), 350);
             }
 
+            // === Stockage des sous-cul (images lourdes) dans IndexedDB ===
+            // localStorage (~5 Mo) ne suffit pas pour un A3 en data-URL : on déporte les fonds ici.
+            function idbOpenAssets() {
+                return new Promise((resolve, reject) => {
+                    const req = indexedDB.open('mq-assets', 1);
+                    req.onupgradeneeded = () => { req.result.createObjectStore('kv'); };
+                    req.onsuccess = () => resolve(req.result);
+                    req.onerror = () => reject(req.error);
+                });
+            }
+            function idbPut(key, value) {
+                return idbOpenAssets().then(db => new Promise((resolve, reject) => {
+                    const tx = db.transaction('kv', 'readwrite');
+                    tx.objectStore('kv').put(value, key);
+                    tx.oncomplete = () => resolve();
+                    tx.onerror = () => reject(tx.error);
+                }));
+            }
+            function idbGet(key) {
+                return idbOpenAssets().then(db => new Promise((resolve, reject) => {
+                    const tx = db.transaction('kv', 'readonly');
+                    const rq = tx.objectStore('kv').get(key);
+                    rq.onsuccess = () => resolve(rq.result);
+                    rq.onerror = () => reject(rq.error);
+                }));
+            }
+            const _lastIdbBg = { bg1: null, bg2: null };
+            function idbSetBg(key, dataUrl) {
+                if (_lastIdbBg[key] === dataUrl) return; // évite de réécrire la même image à chaque save
+                _lastIdbBg[key] = dataUrl;
+                idbPut(key, dataUrl).catch(e => console.warn('idbSetBg', e));
+            }
+            // Restaure une image de fond dans son champ : data-URL/chemin direct, ou marqueur 'idb:bgX'
+            function resolveBgInto(confId, value, pageIndex) {
+                const conf = $(confId);
+                if (!conf) return;
+                if (typeof value === 'string' && value.indexOf('idb:') === 0) {
+                    const key = value.slice(4);
+                    idbGet(key).then(dataUrl => {
+                        if (dataUrl) {
+                            _lastIdbBg[key] = dataUrl;
+                            conf.value = dataUrl;
+                            conf.dispatchEvent(new Event('change', { bubbles: true }));
+                            const nm = $(confId === 'confImg1' ? 'bg1Name' : 'bg2Name');
+                            if (nm) nm.textContent = '✔ image enregistrée';
+                        }
+                    }).catch(e => console.warn('resolveBgInto', e));
+                } else {
+                    conf.value = mqNormalizeBgPath(value || '', pageIndex);
+                }
+            }
+
             function saveLocal() {
                 if (_saveCycle > 0) return { ok: false, skipped: true };
                 _saveCycle++;
                 try {
                     flushProjectStateBeforeSave();
                     const data = buildExportObject();
-                    const json = JSON.stringify(data);
+                    if (io) io.value = JSON.stringify(data, null, 2); // version complète (avec images) pour l'onglet Import/Export
+
+                    // Version « allégée » pour localStorage : les sous-cul partent dans IndexedDB
+                    const lite = JSON.parse(JSON.stringify(data));
+                    if (lite.exportConfig) {
+                        [['img1', 'bg1'], ['img2', 'bg2']].forEach(([field, key]) => {
+                            const v = lite.exportConfig[field];
+                            if (typeof v === 'string' && v.indexOf('data:') === 0) {
+                                idbSetBg(key, v);
+                                lite.exportConfig[field] = 'idb:' + key;
+                            }
+                        });
+                    }
+                    const json = JSON.stringify(lite);
                     localStorage.setItem(PROJECT_STORAGE_KEY, json);
-                    if (io) io.value = JSON.stringify(data, null, 2);
                     console.log('Saved to local storage (' + Math.round(json.length / 1024) + ' Ko)');
                     return { ok: true, bytes: json.length };
                 } catch (e) {
