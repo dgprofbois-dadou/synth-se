@@ -5696,6 +5696,7 @@
 
                 // Jeux DnD : fusion avec modèle complet (évite champs manquants au rechargement)
                 state.dndGames = normalizeDndGames(obj.dndGames || state.dndGames);
+                hydrateDndImages();
                 loadDndGamesUI();
 
                 refreshStageLayout(() => {
@@ -5749,6 +5750,40 @@
                 _lastIdbBg[key] = dataUrl;
                 idbPut(key, dataUrl).catch(e => console.warn('idbSetBg', e));
             }
+            // Cache générique pour les autres images lourdes (DnD)
+            const _idbSaved = Object.create(null);
+            function idbStore(key, val) {
+                if (_idbSaved[key] === val) return;
+                _idbSaved[key] = val;
+                idbPut(key, val).catch(e => console.warn('idbStore', e));
+            }
+            // Restaure les images des jeux DnD déportées en IndexedDB ('idb:dnd_...')
+            function hydrateDndImages() {
+                let pending = 0, changed = false;
+                ['game1', 'game2'].forEach(gid => {
+                    const g = state.dndGames && state.dndGames[gid];
+                    if (!g || !Array.isArray(g.draggables)) return;
+                    g.draggables.forEach(d => {
+                        if (d && typeof d.src === 'string' && d.src.indexOf('idb:') === 0) {
+                            const key = d.src.slice(4);
+                            pending++;
+                            idbGet(key).then(url => {
+                                if (url) { d.src = url; _idbSaved[key] = url; changed = true; }
+                            }).catch(e => console.warn('hydrateDnd', e)).finally(() => {
+                                pending--;
+                                if (pending === 0 && changed) {
+                                    try {
+                                        render();
+                                        renderDraggablesList('game1');
+                                        renderDraggablesList('game2');
+                                        renderDndGamesPreview();
+                                    } catch (e) { /* ignore */ }
+                                }
+                            });
+                        }
+                    });
+                });
+            }
             // Restaure une image de fond dans son champ : data-URL/chemin direct, ou marqueur 'idb:bgX'
             function resolveBgInto(confId, value, pageIndex) {
                 const conf = $(confId);
@@ -5785,6 +5820,21 @@
                             if (typeof v === 'string' && v.indexOf('data:') === 0) {
                                 idbSetBg(key, v);
                                 lite.exportConfig[field] = 'idb:' + key;
+                            }
+                        });
+                    }
+                    // Déporter aussi les images des jeux DnD
+                    if (lite.dndGames) {
+                        ['game1', 'game2'].forEach(gid => {
+                            const g = lite.dndGames[gid];
+                            if (g && Array.isArray(g.draggables)) {
+                                g.draggables.forEach(d => {
+                                    if (d && typeof d.src === 'string' && d.src.indexOf('data:') === 0) {
+                                        const key = 'dnd_' + gid + '_' + d.id;
+                                        idbStore(key, d.src);
+                                        d.src = 'idb:' + key;
+                                    }
+                                });
                             }
                         });
                     }
