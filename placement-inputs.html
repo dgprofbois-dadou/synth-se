@@ -540,6 +540,20 @@
             border-color: #e8521f !important;
             box-shadow: 0 0 0 2px rgba(232,82,31,.45);
         }
+        /* Steppers +/- pour dim/pos des zones DnD */
+        .mq-step { display:flex; align-items:center; gap:5px; }
+        .mq-step button {
+            flex:0 0 auto; width:28px; height:28px; border:1px solid #cfd6df;
+            background:#fff; border-radius:7px; font-size:18px; line-height:1;
+            cursor:pointer; color:#2c3848; padding:0;
+        }
+        .mq-step button:hover { background:#eef2f7; border-color:#9fb0c3; }
+        .mq-step button:active { background:#e2e8f0; }
+        .mq-step input {
+            flex:1 1 auto; min-width:0; width:100%; height:28px; padding:2px 6px;
+            font-size:14px; border:1px solid #cfd6df; border-radius:7px; text-align:center;
+        }
+        .mq-field-label { display:block; font-size:12px; color:#5a6573; margin-bottom:3px; font-weight:bold; }
 
         .dnd-element:hover {
             border-color: #4a90e2;
@@ -5327,6 +5341,8 @@
             let mqBoxPipetteTarget = null;// pipette champ : id du champ qui RECEVRA le style prélevé
             let mqDndSel = null;          // zone DnD actuellement sélectionnée (clic droit)
             let mqDndAlignTarget = null;  // alignement DnD : zone à aligner sur la référence cliquée
+            let mqDndSizeBrush = null;    // pinceau de taille DnD : {width,height} à appliquer
+            let mqDndSizePipetteTarget = null; // pipette de taille DnD : zone qui RECEVRA la taille
 
             const MQ_BOX_STYLE_KEYS = ['font', 'fontSize', 'weight', 'pad', 'bgColor', 'bgAlpha', 'borderColor', 'borderW', 'radius', 'phColor', 'phOpacity', 'phSize', 'phFont', 'phWeight', 'phStyle', 'fillTyping', 'fillWrong', 'fillOk', 'hintRender', 'hintFontSize', 'hintFont', 'hintPad', 'hintMs'];
             function extractBoxStyle(b) { const o = {}; MQ_BOX_STYLE_KEYS.forEach(k => o[k] = b[k]); return o; }
@@ -5366,6 +5382,8 @@
                 mqBoxBrushStyle = null;
                 mqBoxPipetteTarget = null;
                 mqDndAlignTarget = null;
+                mqDndSizeBrush = null;
+                mqDndSizePipetteTarget = null;
                 mqHsBanner('');
                 document.body.style.cursor = '';
             }
@@ -5426,6 +5444,40 @@
                 mqHsBanner('✅ Aligné ' + (alignX ? '(même X — vertical)' : '(même Y — horizontal)'));
                 setTimeout(() => { if (!mqDndAlignTarget) mqHsBanner(''); }, 1400);
             }
+
+            // ----- Taille des zones DnD : saisie, pinceau, pipette -----
+            window.mqDndEditSize = function () {
+                const z = mqDndZone(mqDndSel);
+                if (!z) { alert('Faites d\'abord un clic droit sur la zone.'); return; }
+                const v = prompt('Taille (largeur × hauteur) en px :', (z.obj.width || 0) + ' x ' + (z.obj.height || 0));
+                if (v === null) return;
+                const m = v.split(/[x×,;\s]+/).map(s => parseInt(s, 10)).filter(n => !isNaN(n));
+                if (m.length >= 1) z.obj.width = Math.max(10, m[0]);
+                if (m.length >= 2) z.obj.height = Math.max(10, m[1]);
+                renderDndGamesPreview();
+                mqRefreshDndLists();
+                scheduleSaveLocal();
+            };
+            window.mqStartDndSizeBrush = function () {
+                const z = mqDndZone(mqDndSel);
+                if (!z) { alert('Faites d\'abord un clic droit sur la zone source.'); return; }
+                const keep = mqDndSel;
+                mqCancelTools();
+                mqDndSel = keep;
+                mqDndSizeBrush = { width: z.obj.width, height: z.obj.height };
+                mqHsBanner('🖌️ Pinceau de taille : cliquez les zones à dimensionner — Échap pour terminer');
+                document.body.style.cursor = 'copy';
+            };
+            window.mqStartDndSizePipette = function () {
+                const z = mqDndZone(mqDndSel);
+                if (!z) { alert('Faites d\'abord un clic droit sur la zone à modifier.'); return; }
+                const keep = mqDndSel;
+                mqCancelTools();
+                mqDndSel = keep;
+                mqDndSizePipetteTarget = keep;
+                mqHsBanner('🧪 Pipette de taille : cliquez la zone dont COPIER la taille — Échap pour annuler');
+                document.body.style.cursor = 'crosshair';
+            };
 
             // Affiche un message de réussite puis restaure l'instruction du lien (mode multi-cibles)
             function mqLinkFeedback(msg) {
@@ -5523,7 +5575,42 @@
             // Interception des clics quand un outil est actif (phase capture)
             viewport.addEventListener('pointerdown', function (e) {
                 if (state.mode !== 'admin') return;
-                if (!mqHsBrushStyle && !mqHsLinkGroup && !mqHsPipetteTarget && !mqBoxBrushStyle && !mqBoxPipetteTarget && !mqDndAlignTarget) return;
+                if (!mqHsBrushStyle && !mqHsLinkGroup && !mqHsPipetteTarget && !mqBoxBrushStyle && !mqBoxPipetteTarget && !mqDndAlignTarget && !mqDndSizeBrush && !mqDndSizePipetteTarget) return;
+
+                // --- Pinceau de taille DnD : appliquer la taille capturée aux zones cliquées ---
+                if (mqDndSizeBrush) {
+                    const el = e.target.closest && e.target.closest('.dnd-element');
+                    if (el) {
+                        e.preventDefault(); e.stopPropagation();
+                        const z = mqDndZone({ gameId: el.dataset.game, type: el.dataset.type, index: el.dataset.index });
+                        if (z) {
+                            z.obj.width = mqDndSizeBrush.width; z.obj.height = mqDndSizeBrush.height;
+                            renderDndGamesPreview(); mqRefreshDndLists(); scheduleSaveLocal();
+                            const t = document.querySelector(mqDndSelector({ gameId: el.dataset.game, type: el.dataset.type, index: el.dataset.index }));
+                            if (t) mqFlashEl(t);
+                        }
+                    }
+                    return;
+                }
+
+                // --- Pipette de taille DnD : la zone cible prend la taille de la zone cliquée ---
+                if (mqDndSizePipetteTarget) {
+                    const el = e.target.closest && e.target.closest('.dnd-element');
+                    if (el) {
+                        e.preventDefault(); e.stopPropagation();
+                        const src = mqDndZone({ gameId: el.dataset.game, type: el.dataset.type, index: el.dataset.index });
+                        const tgt = mqDndZone(mqDndSizePipetteTarget);
+                        mqDndSizePipetteTarget = null;
+                        document.body.style.cursor = '';
+                        if (src && tgt) {
+                            tgt.obj.width = src.obj.width; tgt.obj.height = src.obj.height;
+                            renderDndGamesPreview(); mqRefreshDndLists(); scheduleSaveLocal();
+                        }
+                        mqHsBanner('✅ Taille copiée');
+                        setTimeout(() => { if (!mqDndSizePipetteTarget) mqHsBanner(''); }, 1200);
+                    }
+                    return;
+                }
 
                 // --- Alignement DnD : aligner la zone cible sur la zone de référence cliquée ---
                 if (mqDndAlignTarget) {
@@ -5639,7 +5726,7 @@
             }, true);
 
             document.addEventListener('keydown', function (e) {
-                if (e.key === 'Escape' && (mqHsBrushStyle || mqHsLinkGroup || mqHsPipetteTarget || mqBoxBrushStyle || mqBoxPipetteTarget || mqDndAlignTarget)) mqCancelTools();
+                if (e.key === 'Escape' && (mqHsBrushStyle || mqHsLinkGroup || mqHsPipetteTarget || mqBoxBrushStyle || mqBoxPipetteTarget || mqDndAlignTarget || mqDndSizeBrush || mqDndSizePipetteTarget)) mqCancelTools();
             }, true);
 
             // 4) Épaisseur rapide du contour
@@ -6524,6 +6611,28 @@
             // =========================================================
 
             // Afficher la liste des images draggables
+            // Champ dim/pos avec boutons +/- (UX)
+            window.mqNudgeInput = function (btn, delta) {
+                const inp = btn.parentElement.querySelector('input');
+                if (!inp) return;
+                inp.value = (parseFloat(inp.value) || 0) + delta;
+                inp.dispatchEvent(new Event('change', { bubbles: true }));
+            };
+            function mqDimPosField(label, value, fn, gameId, index, field, step) {
+                return `<div style="display:flex; flex-direction:column;">
+                    <label class="mq-field-label">${label}</label>
+                    <div class="mq-step">
+                        <button type="button" tabindex="-1" onclick="window.mqNudgeInput(this, ${-step})">−</button>
+                        <input type="number" step="${step}" value="${value}" onchange="window.${fn}('${gameId}', ${index}, '${field}', this.value)">
+                        <button type="button" tabindex="-1" onclick="window.mqNudgeInput(this, ${step})">+</button>
+                    </div>
+                </div>`;
+            }
+            function mqRefreshDndLists() {
+                try { renderDraggablesList('game1'); renderDraggablesList('game2'); } catch (e) { }
+                try { renderDropzonesList('game1'); renderDropzonesList('game2'); } catch (e) { }
+            }
+
             function renderDraggablesList(gameId) {
                 const list = gameId === 'game1' ? dndGame1DraggablesList : dndGame2DraggablesList;
                 const draggables = state.dndGames[gameId].draggables;
@@ -6541,23 +6650,11 @@
                             <button type="button" onclick="window.editDraggableTitle('${gameId}', ${index})" style="padding:2px 6px; font-size:10px; background:#4a90e2; color:white; border:none; border-radius:3px; cursor:pointer;" title="Modifier la description">✏️</button>
                             <button type="button" onclick="window.removeDraggable('${gameId}', ${index})" style="padding:2px 6px; font-size:10px; background:#ff4444; color:white; border:none; border-radius:3px; cursor:pointer;" title="Supprimer">✕</button>
                         </div>
-                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:4px; font-size:10px;">
-                            <div>
-                                <label style="display:block; color:#666;">X:</label>
-                                <input type="number" value="${d.x || 0}" onchange="window.updateDraggablePosition('${gameId}', ${index}, 'x', this.value)" style="width:100%; padding:2px; font-size:10px;">
-                            </div>
-                            <div>
-                                <label style="display:block; color:#666;">Y:</label>
-                                <input type="number" value="${d.y || 0}" onchange="window.updateDraggablePosition('${gameId}', ${index}, 'y', this.value)" style="width:100%; padding:2px; font-size:10px;">
-                            </div>
-                            <div>
-                                <label style="display:block; color:#666;">Largeur:</label>
-                                <input type="number" value="${d.width || 250}" onchange="window.updateDraggablePosition('${gameId}', ${index}, 'width', this.value)" style="width:100%; padding:2px; font-size:10px;">
-                            </div>
-                            <div>
-                                <label style="display:block; color:#666;">Hauteur:</label>
-                                <input type="number" value="${d.height || 250}" onchange="window.updateDraggablePosition('${gameId}', ${index}, 'height', this.value)" style="width:100%; padding:2px; font-size:10px;">
-                            </div>
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+                            ${mqDimPosField('X', d.x || 0, 'updateDraggablePosition', gameId, index, 'x', 5)}
+                            ${mqDimPosField('Y', d.y || 0, 'updateDraggablePosition', gameId, index, 'y', 5)}
+                            ${mqDimPosField('Largeur', d.width || 250, 'updateDraggablePosition', gameId, index, 'width', 10)}
+                            ${mqDimPosField('Hauteur', d.height || 250, 'updateDraggablePosition', gameId, index, 'height', 10)}
                         </div>
                     </div>
                 `).join('');
@@ -6581,23 +6678,11 @@
                         <div style="display:flex; align-items:center; gap:5px; margin-bottom:5px;">
                             <span style="font-weight:bold; font-size:11px; color:#666;">Zone ${dz.id}</span>
                         </div>
-                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:4px; font-size:10px;">
-                            <div>
-                                <label style="display:block; color:#666;">X:</label>
-                                <input type="number" value="${dz.x || 0}" onchange="window.updateDropzonePosition('${gameId}', ${index}, 'x', this.value)" style="width:100%; padding:2px; font-size:10px;">
-                            </div>
-                            <div>
-                                <label style="display:block; color:#666;">Y:</label>
-                                <input type="number" value="${dz.y || 0}" onchange="window.updateDropzonePosition('${gameId}', ${index}, 'y', this.value)" style="width:100%; padding:2px; font-size:10px;">
-                            </div>
-                            <div>
-                                <label style="display:block; color:#666;">Largeur:</label>
-                                <input type="number" value="${dz.width || 80}" onchange="window.updateDropzonePosition('${gameId}', ${index}, 'width', this.value)" style="width:100%; padding:2px; font-size:10px;">
-                            </div>
-                            <div>
-                                <label style="display:block; color:#666;">Hauteur:</label>
-                                <input type="number" value="${dz.height || 80}" onchange="window.updateDropzonePosition('${gameId}', ${index}, 'height', this.value)" style="width:100%; padding:2px; font-size:10px;">
-                            </div>
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+                            ${mqDimPosField('X', dz.x || 0, 'updateDropzonePosition', gameId, index, 'x', 5)}
+                            ${mqDimPosField('Y', dz.y || 0, 'updateDropzonePosition', gameId, index, 'y', 5)}
+                            ${mqDimPosField('Largeur', dz.width || 80, 'updateDropzonePosition', gameId, index, 'width', 10)}
+                            ${mqDimPosField('Hauteur', dz.height || 80, 'updateDropzonePosition', gameId, index, 'height', 10)}
                         </div>
                     </div>
                 `).join('');
@@ -7104,6 +7189,14 @@
                         if (type === 'title') {
                             state.dndGames[gameId].titleBox.width = newWidth;
                             state.dndGames[gameId].titleBox.height = newHeight;
+                            // Synchroniser le bandeau (header) + les champs du panneau de gauche
+                            if (!state.dndGames[gameId].header) state.dndGames[gameId].header = {};
+                            state.dndGames[gameId].header.width = newWidth;
+                            state.dndGames[gameId].header.height = newHeight;
+                            const wEl = document.getElementById(gameId === 'game1' ? 'dndGame1HeaderWidth' : 'dndGame2HeaderWidth');
+                            const hEl = document.getElementById(gameId === 'game1' ? 'dndGame1HeaderHeight' : 'dndGame2HeaderHeight');
+                            if (wEl) wEl.value = newWidth;
+                            if (hEl) hEl.value = newHeight;
                         } else if (type === 'draggable') {
                             const idx = parseInt(index);
                             if (!state.dndGames[gameId].draggables[idx].width) state.dndGames[gameId].draggables[idx].width = 60;
@@ -10000,7 +10093,10 @@
                     title.textContent = 'Zone DnD';
                     ctxMenu.appendChild(title);
                     mqAddMenuItem('🎯 Aligner sur une référence', () => window.mqStartDndAlign && window.mqStartDndAlign());
-                    mqAddMenuItem('ℹ️ Déplacer : glisser la zone', () => {});
+                    mqAddMenuSep();
+                    mqAddMenuItem('📐 Taille…', () => window.mqDndEditSize && window.mqDndEditSize());
+                    mqAddMenuItem('🖌️ Pinceau de taille', () => window.mqStartDndSizeBrush && window.mqStartDndSizeBrush());
+                    mqAddMenuItem('🧪 Pipette de taille', () => window.mqStartDndSizePipette && window.mqStartDndSizePipette());
                 } else {
                     title.textContent = 'Canvas';
                     ctxMenu.appendChild(title);
