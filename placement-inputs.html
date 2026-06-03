@@ -5362,6 +5362,14 @@
             }
             const mqCancelHsTools = mqCancelTools; // alias
 
+            // Affiche un message de réussite puis restaure l'instruction du lien (mode multi-cibles)
+            function mqLinkFeedback(msg) {
+                mqHsBanner(msg);
+                setTimeout(() => {
+                    if (mqHsLinkGroup) mqHsBanner('🔗 Lien « ' + mqHsLinkGroup + ' » : cliquez un champ ou un hotspot à lier — Échap pour terminer');
+                }, 1000);
+            }
+
             // 1) Infobulle : éditer le texte à afficher
             window.mqHotspotEditTip = function () {
                 const h = getSelectedHotspot();
@@ -5410,7 +5418,7 @@
                 }
                 mqCancelTools();
                 mqHsLinkGroup = grp;
-                mqHsBanner('🔗 Lien « ' + grp + ' » : cliquez le champ texte à lier — Échap pour annuler');
+                mqHsBanner('🔗 Lien « ' + grp + ' » : cliquez un champ ou un hotspot à lier — Échap pour terminer');
                 document.body.style.cursor = 'crosshair';
             };
 
@@ -5489,8 +5497,20 @@
                     return;
                 }
 
-                // --- Lien hotspot -> champ ---
+                // --- Lien : hotspot -> champ OU -> autre hotspot (même groupe) ---
                 if (mqHsLinkGroup) {
+                    const hsEl = e.target.closest && e.target.closest('.hotspot-group');
+                    if (hsEl) {
+                        e.preventDefault(); e.stopPropagation();
+                        const h = state.hotspots.find(x => x.id === hsEl.dataset.hsid);
+                        if (h) {
+                            h.group = mqHsLinkGroup;
+                            if (state.selectedHotspotId === h.id) syncHotspotUI();
+                            render(); mqFlashHotspot(h.id); scheduleSaveLocal();
+                            mqLinkFeedback('✅ Hotspot lié à « ' + mqHsLinkGroup + ' »');
+                        }
+                        return;
+                    }
                     const boxEl = e.target.closest && e.target.closest('.box');
                     if (boxEl) {
                         e.preventDefault(); e.stopPropagation();
@@ -5499,8 +5519,7 @@
                             b.group = mqHsLinkGroup;
                             if (state.selectedId === b.id && typeof pGroup !== 'undefined' && pGroup) pGroup.value = b.group;
                             render(); mqFlashBox(b.id); scheduleSaveLocal();
-                            mqHsBanner('✅ Champ lié à « ' + mqHsLinkGroup + ' »');
-                            setTimeout(mqCancelTools, 900);
+                            mqLinkFeedback('✅ Champ lié à « ' + mqHsLinkGroup + ' »');
                         }
                     }
                     return;
@@ -9898,7 +9917,7 @@
                     mqAddMenuItem('💬 Infobulle…', () => window.mqHotspotEditTip && window.mqHotspotEditTip());
                     mqAddMenuItem('🖌️ Pinceau de style', () => window.mqStartHotspotBrush && window.mqStartHotspotBrush());
                     mqAddMenuItem('🧪 Pipette de style', () => window.mqStartHotspotPipette && window.mqStartHotspotPipette());
-                    mqAddMenuItem('🔗 Lier à un champ', () => window.mqStartHotspotLink && window.mqStartHotspotLink());
+                    mqAddMenuItem('🔗 Lier (champ ou hotspot)', () => window.mqStartHotspotLink && window.mqStartHotspotLink());
                     mqAddMenuSep();
                     mqAddMenuItem('📋 Dupliquer', () => mqProxyClick('btnDup'), { kbd: '⌘D' });
                     mqAddMenuItem('🎨 Copier le style', () => mqProxyClick('btnCopyStyle'));
