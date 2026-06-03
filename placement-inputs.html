@@ -5489,21 +5489,19 @@
                     '<input class="mq-hue" type="range" min="0" max="360" step="1" style="width:200px;margin:10px 0 6px;height:14px;">' +
                     '<div style="display:flex;align-items:center;gap:6px;"><span>#</span>' +
                     '<input class="mq-hex" type="text" maxlength="7" style="flex:1;padding:4px;border:1px solid #ccc;border-radius:4px;font:12px monospace;"></div>' +
+                    '<div class="mq-op-row" style="display:none;align-items:center;gap:6px;margin-top:8px;">' +
+                    '<span style="white-space:nowrap;">Opacité</span>' +
+                    '<input class="mq-op" type="range" min="0" max="1" step="0.05" style="flex:1;">' +
+                    '<span class="mq-op-val" style="width:36px;text-align:right;">100%</span></div>' +
                     '<div class="mq-sw" style="display:flex;flex-wrap:wrap;gap:4px;margin-top:8px;"></div>';
                 document.body.appendChild(el);
                 const sv = el.querySelector('.mq-sv'), svCur = el.querySelector('.mq-sv-cur'),
-                    hue = el.querySelector('.mq-hue'), hex = el.querySelector('.mq-hex'), sw = el.querySelector('.mq-sw');
-                mqCp = { el, sv, svCur, hue, hex, input: null, h: 0, s: 0, v: 0 };
-                ['#ffcc00', '#ff9900', '#ff0000', '#e8521f', '#4caf50', '#2196f3', '#9c27b0', '#000000', '#ffffff'].forEach(c => {
-                    const b = document.createElement('button');
-                    b.type = 'button';
-                    b.style.cssText = 'width:20px;height:20px;border:1px solid #ccc;border-radius:4px;cursor:pointer;background:' + c + ';';
-                    b.addEventListener('click', () => {
-                        const [r, g, bl] = mqHexToRgb(c);
-                        const [h, s, v] = mqRgbToHsv(r, g, bl);
-                        mqCp.h = h; mqCp.s = s; mqCp.v = v; mqCpRefresh(true);
-                    });
-                    sw.appendChild(b);
+                    hue = el.querySelector('.mq-hue'), hex = el.querySelector('.mq-hex'), sw = el.querySelector('.mq-sw'),
+                    op = el.querySelector('.mq-op'), opRow = el.querySelector('.mq-op-row'), opVal = el.querySelector('.mq-op-val');
+                mqCp = { el, sv, svCur, hue, hex, sw, op, opRow, opVal, input: null, opTarget: null, h: 0, s: 0, v: 0 };
+                op.addEventListener('input', () => {
+                    if (mqCp.opTarget) { mqCp.opTarget.value = op.value; mqCp.opTarget.dispatchEvent(new Event('input', { bubbles: true })); }
+                    opVal.textContent = Math.round(Number(op.value) * 100) + '%';
                 });
                 function svPick(e) {
                     const r = sv.getBoundingClientRect();
@@ -5530,12 +5528,56 @@
                     }
                 });
             }
+            // Couleurs les plus utilisées sur le canvas (hotspots + champs), par fréquence
+            function mqCanvasColors() {
+                const counts = Object.create(null);
+                const add = c => {
+                    if (typeof c === 'string' && /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(c)) {
+                        const k = c.toLowerCase();
+                        counts[k] = (counts[k] || 0) + 1;
+                    }
+                };
+                (state.hotspots || []).forEach(h => { add(h.fill); add(h.stroke); add(h.shadowColor); });
+                (state.boxes || []).forEach(b => { if (b.kind === 'iframe') return; add(b.bgColor); add(b.borderColor); add(b.color); });
+                let arr = Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
+                ['#ffcc00', '#ff9900', '#e8521f', '#ff0000', '#4caf50', '#2196f3', '#9c27b0', '#000000', '#ffffff']
+                    .forEach(c => { if (arr.indexOf(c) < 0) arr.push(c); });
+                return arr.slice(0, 9);
+            }
+            function mqCpRenderSwatches() {
+                const sw = mqCp.sw;
+                sw.innerHTML = '';
+                mqCanvasColors().forEach(c => {
+                    const b = document.createElement('button');
+                    b.type = 'button';
+                    b.title = c;
+                    b.style.cssText = 'width:20px;height:20px;border:1px solid #ccc;border-radius:4px;cursor:pointer;background:' + c + ';';
+                    b.addEventListener('click', () => {
+                        const [r, g, bl] = mqHexToRgb(c);
+                        const [h, s, v] = mqRgbToHsv(r, g, bl);
+                        mqCp.h = h; mqCp.s = s; mqCp.v = v; mqCpRefresh(true);
+                    });
+                    sw.appendChild(b);
+                });
+            }
             function mqOpenColorPicker(inputEl) {
                 if (!mqCp) mqBuildColorPop();
                 mqCp.input = inputEl;
                 const [r, g, b] = mqHexToRgb(inputEl.value || '#ffcc00');
                 const [h, s, v] = mqRgbToHsv(r, g, b);
                 mqCp.h = h; mqCp.s = s; mqCp.v = v;
+                // Opacité liée selon la couleur éditée (fond -> opacité au repos)
+                const opMap = { hsFill: 'hsAlphaIdle' };
+                const tgt = opMap[inputEl.id] ? $(opMap[inputEl.id]) : null;
+                mqCp.opTarget = tgt;
+                if (tgt) {
+                    mqCp.opRow.style.display = 'flex';
+                    mqCp.op.value = (tgt.value !== '' ? tgt.value : '1');
+                    mqCp.opVal.textContent = Math.round(Number(mqCp.op.value) * 100) + '%';
+                } else {
+                    mqCp.opRow.style.display = 'none';
+                }
+                mqCpRenderSwatches();
                 mqCp.el.style.display = 'block';
                 const rc = inputEl.getBoundingClientRect();
                 const pw = 224, ph = 264;
