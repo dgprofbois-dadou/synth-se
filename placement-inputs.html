@@ -7018,13 +7018,14 @@
                         const type = el.dataset.type;
                         const index = el.dataset.index;
 
-                        draggedElement = { el, gameId, type, index };
-                        const rect = el.getBoundingClientRect();
-                        const containerRect = el.parentElement.getBoundingClientRect();
+                        const idx0 = parseInt(index);
+                        const g0 = state.dndGames[gameId];
+                        let ox = 0, oy = 0;
+                        if (type === 'title') { ox = g0.titleBox.x || 0; oy = g0.titleBox.y || 0; }
+                        else if (type === 'draggable') { ox = (g0.draggables[idx0].x) || 0; oy = (g0.draggables[idx0].y) || 0; }
+                        else if (type === 'dropzone') { ox = (g0.dropzones[idx0].x) || 0; oy = (g0.dropzones[idx0].y) || 0; }
 
-                        // Calcul correct du décalage : position de la souris DANS l'élément
-                        dragOffsetX = e.clientX - rect.left;
-                        dragOffsetY = e.clientY - rect.top;
+                        draggedElement = { el, gameId, type, index, startX: e.clientX, startY: e.clientY, origX: ox, origY: oy };
 
                         if (viewport) viewport.style.pointerEvents = 'none';
                         document.body.style.userSelect = 'none';
@@ -7062,11 +7063,10 @@
                 document.addEventListener('mousemove', (e) => {
                     if (draggedElement) {
                         const { el, gameId, type, index } = draggedElement;
-                        const containerRect = el.parentElement.getBoundingClientRect();
-
-                        // Calcul simplifié : position relative au conteneur parent
-                        const newX = Math.round(e.clientX - containerRect.left - dragOffsetX);
-                        const newY = Math.round(e.clientY - containerRect.top - dragOffsetY);
+                        const sc = state.scale || 1;
+                        // Déplacement = position d'origine + (delta souris converti en coords du stage)
+                        const newX = Math.max(0, Math.round(draggedElement.origX + (e.clientX - draggedElement.startX) / sc));
+                        const newY = Math.max(0, Math.round(draggedElement.origY + (e.clientY - draggedElement.startY) / sc));
 
                         // Mettre à jour la position dans le state
                         if (type === 'title') {
@@ -7756,60 +7756,55 @@
                         // Main padding (Editor: 20px)
                         const mainPad = (20 / G_W) * 100;
 
+                        const tb1 = g1.titleBox || { x: 10, y: 10, width: hBox.width || 600, height: hBox.height || 80 };
+                        const tb1X = (tb1.x / G_W) * 100, tb1Y = (tb1.y / G_H) * 100, tb1W = (tb1.width / G_W) * 100, tb1H = (tb1.height / G_H) * 100;
+
                         html += `
-                    <div id="drag-game-on-page" class="drag-game game-1" 
-                        style="position: absolute; left: ${leftPct}%; top: ${topPct}%; width: ${widthPct}%; height: ${heightPct}%; background: ${g1.bgColor}; border: 1px solid rgba(0,0,0,0.1); box-sizing: border-box; padding: ${mainPad}%; overflow: visible;" 
-                        data-dnd-good="${goodIds}" 
+                    <div id="drag-game-on-page" class="drag-game game-1"
+                        style="position: absolute; left: ${leftPct}%; top: ${topPct}%; width: ${widthPct}%; height: ${heightPct}%; background: ${g1.bgColor}; border: 1px solid rgba(0,0,0,0.1); box-sizing: border-box; overflow: visible;"
+                        data-dnd-good="${goodIds}"
                         data-dnd-target="${targetCount}"
-                        data-dnd-score-container="score-malus-container" 
+                        data-dnd-score-container="score-malus-container"
                         data-dnd-gameid="game1"
                         data-tt-font="${ttFont.replace(/"/g, '&quot;')}"
                         data-tt-dur="${ttDur}"
                         data-tt-bg="${ttBg}"
                         data-tt-col="${ttCol}">
-                        
-                        <!-- TITRE (Block flow) -->
-                        <div class="carre_marron" style="width:${hW}%; height:${hH}%; margin:0 auto 0% auto; display:flex; justify-content:center; align-items:center; box-sizing: border-box;">
+
+                        <!-- TITRE (placement libre) -->
+                        <div class="carre_marron" style="position:absolute; left:${tb1X}%; top:${tb1Y}%; width:${tb1W}%; height:${tb1H}%; display:flex; justify-content:center; align-items:center; box-sizing:border-box; z-index:2;">
                             <h2 style="font-family:${hBox.font}; font-size:${titleFS}vw; margin:0; text-align:center;">${g1.title || 'Jeu 1'}</h2>
                         </div>
-                        
-                        <!-- WRAPPER DRAGGABLES (Editor: margin-bottom: 15px) -->
-                        <div style="margin-bottom: ${dzMargBot}%; box-sizing: border-box;">
-                             <!-- Inner list -->
-                             <div id="source" style="display: flex; gap: 1%; flex-wrap: wrap; justify-content: center; box-sizing: border-box;">
-                                ${g1.draggables.map(d => {
-                            const dW = ((d.width || 250) / G_W) * 100;
-                            const dH = ((d.height || 250) / G_H) * 100;
-                            const dMarginX = ((d.offsetX || 0) / G_W) * 100;
-                            // User Request: Descendre de +4% (Add 4%)
-                            const dMarginY = (((d.offsetY || 0) / G_H) * 100) + 4;
 
-                            return `<div class="draggable-wrapper" style="width:${dW}%; height:${dH}%; margin-top:${dMarginY}%; margin-left:${dMarginX}%; position: relative; box-sizing: border-box;">
-                                        <span class="png-wrap draggable" draggable="true" 
-                                            style="display:block; width:100%; height:100%;"
+                        <!-- DROPZONES (placement libre) -->
+                        <div id="targets" style="position:absolute; inset:0; z-index:1; box-sizing:border-box; pointer-events:none;">
+                            ${(g1.dropzones || []).map((dz, i) => {
+                                const dzX = ((dz.x || 0) / G_W) * 100;
+                                const dzY = ((dz.y || 0) / G_H) * 100;
+                                const dzW = ((dz.width || g1.zoneWidth || 250) / G_W) * 100;
+                                const dzH = ((dz.height || g1.zoneHeight || 250) / G_H) * 100;
+                                return `<div class="dropzone" data-pos="${i + 1}" style="position:absolute; left:${dzX}%; top:${dzY}%; width:${dzW}%; height:${dzH}%; font-size:${dzFS}vw; align-items:center; justify-content:center; display:flex; box-sizing:border-box; pointer-events:auto;">${i + 1}</div>`;
+                            }).join('')}
+                        </div>
+
+                        <!-- DRAGGABLES (placement libre) -->
+                        <div id="source" style="position:absolute; inset:0; z-index:3; box-sizing:border-box; pointer-events:none;">
+                            ${g1.draggables.map(d => {
+                                const dW = ((d.width || 250) / G_W) * 100;
+                                const dH = ((d.height || 250) / G_H) * 100;
+                                const dX = ((d.x || 0) / G_W) * 100;
+                                const dY = ((d.y || 0) / G_H) * 100;
+                                return `<div class="draggable-wrapper" style="position:absolute; left:${dX}%; top:${dY}%; width:${dW}%; height:${dH}%; box-sizing:border-box;">
+                                        <span class="png-wrap draggable" draggable="true"
+                                            style="display:block; width:100%; height:100%; pointer-events:auto;"
                                             data-id="${d.id}" data-tooltip="${(d.title || '').replace(/"/g, '&quot;')}">
                                             <img src="${d.src}" class="png" style="width:100%; height:100%; object-fit:contain; display:block;" data-id="${d.id}">
                                         </span>
                                     </div>`;
-                        }).join('')}
-                             </div>
+                            }).join('')}
                         </div>
 
-                        <!-- WRAPPER DROPZONES (Editor: padding-top: 70px) -->
-                        <div style=" border-top: 5px dashed #ccc; box-sizing: border-box;">
-                             <div id="targets" style="display: flex; gap: ${zGap}%; flex-wrap: wrap; justify-content: center; box-sizing: border-box;">
-                                ${(function () {
-                                let dzHtml = '';
-                                for (let i = 1; i <= targetCount; i++) {
-                                    dzHtml += `<div class="dropzone" data-pos="${i}" style="width:${zW}vw; height:${zH}vw; font-size:${dzFS}vw; align-items: center; justify-content: center; display:flex; box-sizing: border-box;">${i}</div>`;
-                                }
-                                return dzHtml;
-                            })()}
-                             </div>
-                        </div>
-                        
-
-                        <div id="score-malus-container" style="display: flex; justify-content: center; gap: 2%; margin-top: 1%; font-weight: bold; font-size:3.393vw; color: #2e7d32;"></div>
+                        <div id="score-malus-container" style="position:absolute; left:0; right:0; bottom:1%; display:flex; justify-content:center; gap:2%; font-weight:bold; font-size:3.393vw; color:#2e7d32; z-index:4;"></div>
                     </div>`;
                     }
 
@@ -7852,59 +7847,55 @@
                         const dzMargBot = (15 / G_H) * 100;
                         const mainPad = (20 / G_W) * 100;
 
+                        const tb2 = g2.titleBox || { x: 10, y: 10, width: hBox.width || 500, height: hBox.height || 70 };
+                        const tb2X = (tb2.x / G_W) * 100, tb2Y = (tb2.y / G_H) * 100, tb2W = (tb2.width / G_W) * 100, tb2H = (tb2.height / G_H) * 100;
+
                         html += `
-                    <div id="drag-game-on-page2" class="drag-game game-2" 
-                        style="position: absolute; left: ${leftPct}%; top: ${topPct}%; width: ${widthPct}%; height: ${heightPct}%; background: ${g2.bgColor}; border: 1px solid rgba(0,0,0,0.1); box-sizing: border-box; padding: ${mainPad}%; overflow: visible;"
-                        data-dnd-good="${goodIds}" 
+                    <div id="drag-game-on-page2" class="drag-game game-2"
+                        style="position: absolute; left: ${leftPct}%; top: ${topPct}%; width: ${widthPct}%; height: ${heightPct}%; background: ${g2.bgColor}; border: 1px solid rgba(0,0,0,0.1); box-sizing: border-box; overflow: visible;"
+                        data-dnd-good="${goodIds}"
                         data-dnd-target="${targetCount}"
-                        data-dnd-score-container="score-malus-container2" 
+                        data-dnd-score-container="score-malus-container2"
                         data-dnd-gameid="game2"
                         data-tt-font="${ttFont.replace(/"/g, '&quot;')}"
                         data-tt-dur="${ttDur}"
                         data-tt-bg="${ttBg}"
                         data-tt-col="${ttCol}">
-                        
-                         <!-- TITRE -->
-                        <div class="carre_marron" style="width:${hW}%; height:${hH}%; margin:0 auto 0% auto; display:flex; justify-content:center; align-items:center; box-sizing: border-box;">
+
+                        <!-- TITRE (placement libre) -->
+                        <div class="carre_marron" style="position:absolute; left:${tb2X}%; top:${tb2Y}%; width:${tb2W}%; height:${tb2H}%; display:flex; justify-content:center; align-items:center; box-sizing:border-box; z-index:2;">
                             <h2 style="font-family:${hBox.font}; font-size:${titleFS}vw; margin:0; text-align:center;">${g2.title || 'Jeu 2'}</h2>
                         </div>
 
-                         <!-- WRAPPER DRAGGABLES -->
-                        <div style="margin-bottom: ${dzMargBot}%; box-sizing: border-box;">
-                            <div id="source2" style="display: flex; gap: 1%; flex-wrap: wrap; justify-content: center; box-sizing: border-box;">
-                                ${g2.draggables.map(d => {
-                            const dW = ((d.width || 250) / G_W) * 100;
-                            const dH = ((d.height || 250) / G_H) * 100;
-                            const dMarginX = ((d.offsetX || 0) / G_W) * 100;
-                            // User Request: Descendre de +4% (Add 4%)
-                            const dMarginY = (((d.offsetY || 0) / G_H) * 100) + 4;
+                        <!-- DROPZONES (placement libre) -->
+                        <div id="targets" style="position:absolute; inset:0; z-index:1; box-sizing:border-box; pointer-events:none;">
+                            ${(g2.dropzones || []).map((dz, i) => {
+                                const dzX = ((dz.x || 0) / G_W) * 100;
+                                const dzY = ((dz.y || 0) / G_H) * 100;
+                                const dzW = ((dz.width || g2.zoneWidth || 250) / G_W) * 100;
+                                const dzH = ((dz.height || g2.zoneHeight || 250) / G_H) * 100;
+                                return `<div class="dropzone" data-pos="${i + 1}" style="position:absolute; left:${dzX}%; top:${dzY}%; width:${dzW}%; height:${dzH}%; font-size:${dzFS}vw; align-items:center; justify-content:center; display:flex; box-sizing:border-box; pointer-events:auto;">${i + 1}</div>`;
+                            }).join('')}
+                        </div>
 
-                            return `<div class="draggable-wrapper" style="width:${dW}%; height:${dH}%; margin-top:${dMarginY}%; margin-left:${dMarginX}%; position: relative; box-sizing: border-box;">
-                                        <span class="png-wrap draggable" draggable="true" 
-                                            style="display:block; width:100%; height:100%;"
+                        <!-- DRAGGABLES (placement libre) -->
+                        <div id="source2" style="position:absolute; inset:0; z-index:3; box-sizing:border-box; pointer-events:none;">
+                            ${g2.draggables.map(d => {
+                                const dW = ((d.width || 250) / G_W) * 100;
+                                const dH = ((d.height || 250) / G_H) * 100;
+                                const dX = ((d.x || 0) / G_W) * 100;
+                                const dY = ((d.y || 0) / G_H) * 100;
+                                return `<div class="draggable-wrapper" style="position:absolute; left:${dX}%; top:${dY}%; width:${dW}%; height:${dH}%; box-sizing:border-box;">
+                                        <span class="png-wrap draggable" draggable="true"
+                                            style="display:block; width:100%; height:100%; pointer-events:auto;"
                                             data-id="${d.id}" data-tooltip="${(d.title || '').replace(/"/g, '&quot;')}">
                                             <img src="${d.src}" class="png" style="width:100%; height:100%; object-fit:contain; display:block;" data-id="${d.id}">
                                         </span>
                                     </div>`;
-                        }).join('')}
-                            </div>
+                            }).join('')}
                         </div>
 
-                        <!-- WRAPPER DROPZONES -->
-                        <div style="border-top: 5px dashed #ccc; box-sizing: border-box;">
-                            <div id="targets" style="display: flex; gap: ${zGap}%; flex-wrap: wrap; justify-content: center; box-sizing: border-box;">
-                                ${(function () {
-                                let dzHtml = '';
-                                for (let i = 1; i <= targetCount; i++) {
-                                    dzHtml += `<div class="dropzone" data-pos="${i}" style="width:${zW}vw; height:${zH}vw; font-size:${dzFS}vw; align-items: center; justify-content: center; display:flex; box-sizing: border-box;">${i}</div>`;
-                                }
-                                return dzHtml;
-                            })()}
-                            </div>
-                        </div>
-                        
-
-                        <div id="score-malus-container2" style="display: flex; justify-content: center; gap: 2%; margin-top: 1%; font-weight: bold; font-size:3.393vw; color: #2e7d32;"></div>
+                        <div id="score-malus-container2" style="position:absolute; left:0; right:0; bottom:1%; display:flex; justify-content:center; gap:2%; font-weight:bold; font-size:3.393vw; color:#2e7d32; z-index:4;"></div>
                     </div>`;
                     }
 
