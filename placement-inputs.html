@@ -533,6 +533,12 @@
             cursor: grab;
             border: 2px dashed transparent;
             box-sizing: border-box;
+            pointer-events: auto;
+        }
+        .dnd-game-container { pointer-events: auto; }
+        .dnd-element.mq-dnd-selected {
+            border-color: #e8521f !important;
+            box-shadow: 0 0 0 2px rgba(232,82,31,.45);
         }
 
         .dnd-element:hover {
@@ -5319,6 +5325,8 @@
             let mqHsPipetteTarget = null;// pipette hotspot : id du hotspot qui RECEVRA le style prélevé
             let mqBoxBrushStyle = null;  // pinceau champ : style à peindre
             let mqBoxPipetteTarget = null;// pipette champ : id du champ qui RECEVRA le style prélevé
+            let mqDndSel = null;          // zone DnD actuellement sélectionnée (clic droit)
+            let mqDndAlignTarget = null;  // alignement DnD : zone à aligner sur la référence cliquée
 
             const MQ_BOX_STYLE_KEYS = ['font', 'fontSize', 'weight', 'pad', 'bgColor', 'bgAlpha', 'borderColor', 'borderW', 'radius', 'phColor', 'phOpacity', 'phSize', 'phFont', 'phWeight', 'phStyle', 'fillTyping', 'fillWrong', 'fillOk', 'hintRender', 'hintFontSize', 'hintFont', 'hintPad', 'hintMs'];
             function extractBoxStyle(b) { const o = {}; MQ_BOX_STYLE_KEYS.forEach(k => o[k] = b[k]); return o; }
@@ -5357,10 +5365,67 @@
                 mqHsPipetteTarget = null;
                 mqBoxBrushStyle = null;
                 mqBoxPipetteTarget = null;
+                mqDndAlignTarget = null;
                 mqHsBanner('');
                 document.body.style.cursor = '';
             }
             const mqCancelHsTools = mqCancelTools; // alias
+
+            // ----- Outil d'alignement des zones DnD -----
+            function mqDndZone(sel) {
+                if (!sel) return null;
+                const g = state.dndGames && state.dndGames[sel.gameId];
+                if (!g) return null;
+                let obj = null;
+                if (sel.type === 'title') obj = g.titleBox;
+                else if (sel.type === 'draggable') obj = (g.draggables || [])[parseInt(sel.index)];
+                else if (sel.type === 'dropzone') obj = (g.dropzones || [])[parseInt(sel.index)];
+                if (!obj) return null;
+                return { obj, g };
+            }
+            function mqDndSelector(sel) {
+                return '.dnd-element[data-game="' + sel.gameId + '"][data-type="' + sel.type + '"]' +
+                    (sel.index != null && sel.index !== '' ? '[data-index="' + sel.index + '"]' : '');
+            }
+            window.mqSetDndSel = function (sel) {
+                mqDndSel = sel;
+                document.querySelectorAll('.dnd-element.mq-dnd-selected').forEach(el => el.classList.remove('mq-dnd-selected'));
+                const el = document.querySelector(mqDndSelector(sel));
+                if (el) el.classList.add('mq-dnd-selected');
+            };
+            window.mqStartDndAlign = function () {
+                if (!mqDndSel) { alert('Faites d\'abord un clic droit sur la zone à aligner.'); return; }
+                const keep = mqDndSel;
+                mqCancelTools();
+                mqDndSel = keep;
+                mqDndAlignTarget = keep;
+                mqHsBanner('🎯 Aligner : cliquez la zone de RÉFÉRENCE — Maj = horizontal, Alt = vertical, Échap pour annuler');
+                document.body.style.cursor = 'crosshair';
+            };
+            function mqDndAlign(targetSel, refSel, forceH, forceV) {
+                const T = mqDndZone(targetSel), R = mqDndZone(refSel);
+                mqDndAlignTarget = null;
+                document.body.style.cursor = '';
+                if (!T || !R) { mqHsBanner(''); return; }
+                // même élément : rien à faire
+                if (targetSel.gameId === refSel.gameId && targetSel.type === refSel.type &&
+                    String(targetSel.index) === String(refSel.index)) { mqHsBanner(''); return; }
+                const TX = T.g.x + (T.obj.x || 0), TY = T.g.y + (T.obj.y || 0);
+                const RX = R.g.x + (R.obj.x || 0), RY = R.g.y + (R.obj.y || 0);
+                const dx = Math.abs(TX - RX), dy = Math.abs(TY - RY);
+                let alignX; // true = même X (alignement vertical) ; false = même Y (horizontal)
+                if (forceV) alignX = true;
+                else if (forceH) alignX = false;
+                else alignX = dx <= dy;
+                if (alignX) T.obj.x = Math.round(RX - T.g.x);
+                else T.obj.y = Math.round(RY - T.g.y);
+                renderDndGamesPreview();
+                scheduleSaveLocal();
+                const tEl = document.querySelector(mqDndSelector(targetSel));
+                if (tEl) { tEl.classList.add('mq-dnd-selected'); mqFlashEl(tEl); }
+                mqHsBanner('✅ Aligné ' + (alignX ? '(même X — vertical)' : '(même Y — horizontal)'));
+                setTimeout(() => { if (!mqDndAlignTarget) mqHsBanner(''); }, 1400);
+            }
 
             // Affiche un message de réussite puis restaure l'instruction du lien (mode multi-cibles)
             function mqLinkFeedback(msg) {
@@ -5458,7 +5523,18 @@
             // Interception des clics quand un outil est actif (phase capture)
             viewport.addEventListener('pointerdown', function (e) {
                 if (state.mode !== 'admin') return;
-                if (!mqHsBrushStyle && !mqHsLinkGroup && !mqHsPipetteTarget && !mqBoxBrushStyle && !mqBoxPipetteTarget) return;
+                if (!mqHsBrushStyle && !mqHsLinkGroup && !mqHsPipetteTarget && !mqBoxBrushStyle && !mqBoxPipetteTarget && !mqDndAlignTarget) return;
+
+                // --- Alignement DnD : aligner la zone cible sur la zone de référence cliquée ---
+                if (mqDndAlignTarget) {
+                    const refEl = e.target.closest && e.target.closest('.dnd-element');
+                    if (refEl) {
+                        e.preventDefault(); e.stopPropagation();
+                        const refSel = { gameId: refEl.dataset.game, type: refEl.dataset.type, index: refEl.dataset.index };
+                        mqDndAlign(mqDndAlignTarget, refSel, e.shiftKey, e.altKey);
+                    }
+                    return;
+                }
 
                 // --- Pinceau hotspot : peindre le hotspot cliqué ---
                 if (mqHsBrushStyle) {
@@ -5563,7 +5639,7 @@
             }, true);
 
             document.addEventListener('keydown', function (e) {
-                if (e.key === 'Escape' && (mqHsBrushStyle || mqHsLinkGroup || mqHsPipetteTarget || mqBoxBrushStyle || mqBoxPipetteTarget)) mqCancelTools();
+                if (e.key === 'Escape' && (mqHsBrushStyle || mqHsLinkGroup || mqHsPipetteTarget || mqBoxBrushStyle || mqBoxPipetteTarget || mqDndAlignTarget)) mqCancelTools();
             }, true);
 
             // 4) Épaisseur rapide du contour
@@ -6710,7 +6786,7 @@
             }
 
             // Afficher la prévisualisation des jeux DnD avec éléments draggables
-            function renderDndGamesPreview() {
+            function mqRenderDndEditorRich() {
                 if (state.mode === 'student') return;
                 const previewContainer = document.getElementById('dndGamesPreview');
                 if (!previewContainer) return;
@@ -6932,8 +7008,8 @@
                         // Ignorer si c'est la poignée
                         if (e.target.classList.contains('dnd-element-handle')) return;
 
-                        // Nécessite Ctrl
-                        if (!e.ctrlKey) return;
+                        // Déplacement libre à la souris (désactivé pendant l'alignement)
+                        if (mqDndAlignTarget) return;
 
                         e.stopPropagation();
                         e.preventDefault();
@@ -6959,7 +7035,7 @@
                 // Resize des éléments
                 document.querySelectorAll('.dnd-element-handle').forEach(handle => {
                     handle.addEventListener('mousedown', (e) => {
-                        if (!e.ctrlKey) return;
+                        if (mqDndAlignTarget) return;
 
                         e.stopImmediatePropagation();
                         e.stopPropagation();
@@ -8218,6 +8294,9 @@
                 previewContainer.style.top = '0';
                 previewContainer.style.left = '0';
                 previewContainer.style.pointerEvents = 'none';
+
+                // Utilise l'éditeur riche (placement libre par zone)
+                return mqRenderDndEditorRich();
 
                 let html = '';
 
@@ -9926,6 +10005,11 @@
                     if (pasteHsSrc) pasteHs.disabled = pasteHsSrc.disabled;
                     mqAddMenuSep();
                     mqAddMenuItem('🗑️ Supprimer le hotspot', () => mqProxyClick('btnDel'), { danger: true, kbd: '⌫' });
+                } else if (type === 'dnd') {
+                    title.textContent = 'Zone DnD';
+                    ctxMenu.appendChild(title);
+                    mqAddMenuItem('🎯 Aligner sur une référence', () => window.mqStartDndAlign && window.mqStartDndAlign());
+                    mqAddMenuItem('ℹ️ Déplacer : glisser la zone', () => {});
                 } else {
                     title.textContent = 'Canvas';
                     ctxMenu.appendChild(title);
@@ -9952,13 +10036,17 @@
             if (viewport) {
                 viewport.addEventListener('contextmenu', (e) => {
                     if (document.body.dataset.mode !== 'admin') return;
+                    const dndEl = e.target.closest('.dnd-element');
                     const boxEl = e.target.closest('.box');
                     const hsEl = e.target.closest('.hotspot-group');
                     const onCanvas = e.target.closest('#viewport, #stage, .bg, #hotspots');
-                    if (!boxEl && !hsEl && !onCanvas) return;
+                    if (!dndEl && !boxEl && !hsEl && !onCanvas) return;
                     e.preventDefault();
                     e.stopPropagation();
-                    if (boxEl) {
+                    if (dndEl) {
+                        if (window.mqSetDndSel) window.mqSetDndSel({ gameId: dndEl.dataset.game, type: dndEl.dataset.type, index: dndEl.dataset.index });
+                        mqShowContextMenu(e.clientX, e.clientY, 'dnd');
+                    } else if (boxEl) {
                         mqSelectBoxEl(boxEl);
                         mqShowContextMenu(e.clientX, e.clientY, 'box');
                     } else if (hsEl) {
