@@ -5434,6 +5434,19 @@
                 document.body.style.cursor = 'crosshair';
             };
 
+            // Réponse attendue du champ (édition rapide)
+            window.mqBoxEditAnswer = function () {
+                const b = getSelected();
+                if (!b || b.kind === 'iframe') { alert('Sélectionnez d\'abord un champ.'); return; }
+                const txt = prompt('Réponse attendue :', b.answer || '');
+                if (txt === null) return;
+                b.answer = txt;
+                if (b.hintSameAsAnswer) b.hint = txt;
+                if (state.selectedId === b.id) syncPropsFromSelected();
+                render();
+                scheduleSaveLocal();
+            };
+
             // Interception des clics quand un outil est actif (phase capture)
             viewport.addEventListener('pointerdown', function (e) {
                 if (state.mode !== 'admin') return;
@@ -9864,6 +9877,7 @@
                     title.textContent = 'Champ texte';
                     ctxMenu.appendChild(title);
                     mqAddMenuItem('⚙️ Propriétés', () => mqSetInspectorTab('text'));
+                    mqAddMenuItem('✅ Réponse attendue…', () => window.mqBoxEditAnswer && window.mqBoxEditAnswer());
                     mqAddMenuSep();
                     mqAddMenuItem('📋 Dupliquer', () => mqProxyClick('btnDup'), { kbd: '⌘D' });
                     mqAddMenuItem('⬆️ Mettre devant', () => mqProxyClick('btnFront'), { kbd: ']' });
