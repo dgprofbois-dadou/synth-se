@@ -5311,6 +5311,107 @@
                 scheduleSaveLocal();
             }
 
+            // ===== Outils rapides du menu clic-droit hotspot =====
+            let mqHsBrushStyle = null;   // style capturé par le pinceau (actif si non null)
+            let mqHsLinkGroup = null;    // nom de groupe à appliquer en mode lien (actif si non null)
+
+            function mqHsBanner(text) {
+                let b = document.getElementById('mqHsBanner');
+                if (!text) { if (b) b.remove(); return; }
+                if (!b) {
+                    b = document.createElement('div');
+                    b.id = 'mqHsBanner';
+                    b.style.cssText = 'position:fixed;top:56px;left:50%;transform:translateX(-50%);z-index:99999;background:#1f2733;color:#fff;padding:8px 14px;border-radius:18px;font:13px/1.2 sans-serif;box-shadow:0 4px 16px rgba(0,0,0,.3);pointer-events:none;';
+                    document.body.appendChild(b);
+                }
+                b.textContent = text;
+            }
+
+            function mqCancelHsTools() {
+                mqHsBrushStyle = null;
+                mqHsLinkGroup = null;
+                mqHsBanner('');
+                document.body.style.cursor = '';
+            }
+
+            // 1) Infobulle : éditer le texte à afficher
+            window.mqHotspotEditTip = function () {
+                const h = getSelectedHotspot();
+                if (!h) { alert('Sélectionnez d\'abord un hotspot.'); return; }
+                const txt = prompt('Infobulle — texte à afficher :', h.tip || '');
+                if (txt === null) return;
+                h.tip = txt;
+                const grp = (h.group || '').trim();
+                if (grp) for (const hs of state.hotspots) if ((hs.group || '').trim() === grp) hs.tip = txt;
+                syncHotspotUI();
+                render();
+                scheduleSaveLocal();
+            };
+
+            // 2) Pinceau : capture le style du hotspot puis l'applique aux hotspots cliqués
+            window.mqStartHotspotBrush = function () {
+                const h = getSelectedHotspot();
+                if (!h) { alert('Sélectionnez d\'abord un hotspot source.'); return; }
+                mqHsLinkGroup = null;
+                mqHsBrushStyle = extractHotspotStyle(h);
+                mqHsBanner('🖌️ Pinceau actif : cliquez les hotspots à styliser — Échap pour terminer');
+                document.body.style.cursor = 'copy';
+            };
+
+            // 3) Lien : lie le hotspot à un champ texte (même nom de groupe)
+            window.mqStartHotspotLink = function () {
+                const h = getSelectedHotspot();
+                if (!h) { alert('Sélectionnez d\'abord un hotspot.'); return; }
+                let grp = (h.group || '').trim();
+                if (!grp) {
+                    grp = 'lien-' + Math.random().toString(36).slice(2, 6);
+                    h.group = grp;
+                    syncHotspotUI();
+                    render();
+                    scheduleSaveLocal();
+                }
+                mqHsBrushStyle = null;
+                mqHsLinkGroup = grp;
+                mqHsBanner('🔗 Lien « ' + grp + ' » : cliquez le champ texte à lier — Échap pour annuler');
+                document.body.style.cursor = 'crosshair';
+            };
+
+            // Interception des clics quand un outil hotspot est actif (phase capture)
+            viewport.addEventListener('pointerdown', function (e) {
+                if (state.mode !== 'admin') return;
+                if (!mqHsBrushStyle && !mqHsLinkGroup) return;
+
+                if (mqHsBrushStyle) {
+                    const hsEl = e.target.closest && e.target.closest('.hotspot-group');
+                    if (hsEl) {
+                        e.preventDefault(); e.stopPropagation();
+                        const h = state.hotspots.find(x => x.id === hsEl.dataset.hsid);
+                        if (h) { Object.assign(h, mqHsBrushStyle); render(); scheduleSaveLocal(); }
+                    }
+                    return;
+                }
+
+                if (mqHsLinkGroup) {
+                    const boxEl = e.target.closest && e.target.closest('.box');
+                    if (boxEl) {
+                        e.preventDefault(); e.stopPropagation();
+                        const b = state.boxes.find(x => x.id === boxEl.dataset.id);
+                        if (b && b.kind !== 'iframe') {
+                            b.group = mqHsLinkGroup;
+                            if (state.selectedId === b.id && typeof pGroup !== 'undefined' && pGroup) pGroup.value = b.group;
+                            render(); scheduleSaveLocal();
+                            mqHsBanner('✅ Champ lié à « ' + mqHsLinkGroup + ' »');
+                            setTimeout(mqCancelHsTools, 900);
+                        }
+                    }
+                    return;
+                }
+            }, true);
+
+            document.addEventListener('keydown', function (e) {
+                if (e.key === 'Escape' && (mqHsBrushStyle || mqHsLinkGroup)) mqCancelHsTools();
+            }, true);
+
 
 
 
@@ -9464,6 +9565,9 @@
                     title.textContent = 'Hotspot';
                     ctxMenu.appendChild(title);
                     mqAddMenuItem('⚙️ Propriétés', () => mqSetInspectorTab('hotspot'));
+                    mqAddMenuItem('💬 Infobulle…', () => window.mqHotspotEditTip && window.mqHotspotEditTip());
+                    mqAddMenuItem('🖌️ Pinceau de style', () => window.mqStartHotspotBrush && window.mqStartHotspotBrush());
+                    mqAddMenuItem('🔗 Lier à un champ', () => window.mqStartHotspotLink && window.mqStartHotspotLink());
                     mqAddMenuSep();
                     mqAddMenuItem('📋 Dupliquer', () => mqProxyClick('btnDup'), { kbd: '⌘D' });
                     mqAddMenuItem('🎨 Copier le style', () => mqProxyClick('btnCopyStyle'));
