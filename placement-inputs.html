@@ -2955,6 +2955,7 @@
                     el.addEventListener('pointerdown', (e) => {
                         if (state.mode !== 'admin') return;
                         if (e.target.classList.contains('handle')) return;
+                        if (e.button !== 0 || !e.isTrusted) return;
                         e.preventDefault();
                         e.stopPropagation();
                         dragging = true;
@@ -3583,6 +3584,7 @@
                     el.addEventListener('pointerdown', (e) => {
                         if (state.mode !== 'admin') return;
                         if (e.target.classList.contains('handle')) return;
+                        if (e.button !== 0 || !e.isTrusted) return;
                         e.preventDefault();
                         e.stopPropagation();
                         dragging = true;
@@ -5443,7 +5445,13 @@
                     if (hsEl) {
                         e.preventDefault(); e.stopPropagation();
                         const h = state.hotspots.find(x => x.id === hsEl.dataset.hsid);
-                        if (h) { Object.assign(h, mqHsBrushStyle); render(); mqFlashHotspot(h.id); scheduleSaveLocal(); }
+                        if (h) {
+                            Object.assign(h, mqHsBrushStyle);
+                            render();
+                            if (state.selectedHotspotId === h.id) syncHotspotUI();
+                            mqFlashHotspot(h.id);
+                            scheduleSaveLocal();
+                        }
                     }
                     return;
                 }
@@ -5458,6 +5466,7 @@
                         if (src && tgt) {
                             Object.assign(tgt, extractHotspotStyle(src));
                             render();
+                            if (state.selectedHotspotId === tgt.id) syncHotspotUI();
                             mqFlashHotspot(src.id); mqFlashHotspot(tgt.id);
                             scheduleSaveLocal();
                             mqHsBanner('✅ Style prélevé et appliqué');
