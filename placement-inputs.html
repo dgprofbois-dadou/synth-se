@@ -2177,6 +2177,10 @@
                     </div>
                     <button id="btnAddDraggableGame1" type="button" style="width:100%; font-size:12px;">+ Ajouter
                         image</button>
+                    <label style="font-size:12px; font-weight:bold; display:block; margin:8px 0 5px;">Images fixes (décor) :</label>
+                    <div id="dndGame1DecorList"
+                        style="max-height:150px; overflow-y:auto; background:#fff; padding:5px; border-radius:4px; border:1px solid #ddd; margin-bottom:5px;"></div>
+                    <button id="btnAddDecorGame1" type="button" style="width:100%; font-size:12px;">🖼️ + Image fixe</button>
                 </div>
 
 
@@ -2272,6 +2276,10 @@
                     </div>
                     <button id="btnAddDraggableGame2" type="button" style="width:100%; font-size:12px;">+ Ajouter
                         image</button>
+                    <label style="font-size:12px; font-weight:bold; display:block; margin:8px 0 5px;">Images fixes (décor) :</label>
+                    <div id="dndGame2DecorList"
+                        style="max-height:150px; overflow-y:auto; background:#fff; padding:5px; border-radius:4px; border:1px solid #ddd; margin-bottom:5px;"></div>
+                    <button id="btnAddDecorGame2" type="button" style="width:100%; font-size:12px;">🖼️ + Image fixe</button>
                 </div>
 
 
@@ -6073,6 +6081,9 @@
                 g.dropzones = Array.isArray(saved && saved.dropzones)
                     ? saved.dropzones.map((d) => Object.assign({}, d))
                     : (defaults.dropzones || []).map((d) => Object.assign({}, d));
+                g.decorImages = Array.isArray(saved && saved.decorImages)
+                    ? saved.decorImages.map((d) => Object.assign({ x: 50, y: 50, width: 300, height: 200, z: 0 }, d))
+                    : [];
                 g.titleBox = Object.assign({}, defaults.titleBox || {}, (saved && saved.titleBox) || {});
                 g.header = Object.assign({}, defaults.header || {}, (saved && saved.header) || {});
                 const ttDef = defaults.tooltip || {};
@@ -6390,28 +6401,34 @@
             // Restaure les images des jeux DnD déportées en IndexedDB ('idb:dnd_...')
             function hydrateDndImages() {
                 let pending = 0, changed = false;
-                ['game1', 'game2'].forEach(gid => {
-                    const g = state.dndGames && state.dndGames[gid];
-                    if (!g || !Array.isArray(g.draggables)) return;
-                    g.draggables.forEach(d => {
+                const done = () => {
+                    if (pending === 0 && changed) {
+                        try {
+                            render();
+                            renderDraggablesList('game1');
+                            renderDraggablesList('game2');
+                            if (typeof renderDecorList === 'function') { renderDecorList('game1'); renderDecorList('game2'); }
+                            renderDndGamesPreview();
+                        } catch (e) { /* ignore */ }
+                    }
+                };
+                const hydrateArr = (arr) => {
+                    if (!Array.isArray(arr)) return;
+                    arr.forEach(d => {
                         if (d && typeof d.src === 'string' && d.src.indexOf('idb:') === 0) {
                             const key = d.src.slice(4);
                             pending++;
                             idbGet(key).then(url => {
                                 if (url) { d.src = url; _idbSaved[key] = url; changed = true; }
-                            }).catch(e => console.warn('hydrateDnd', e)).finally(() => {
-                                pending--;
-                                if (pending === 0 && changed) {
-                                    try {
-                                        render();
-                                        renderDraggablesList('game1');
-                                        renderDraggablesList('game2');
-                                        renderDndGamesPreview();
-                                    } catch (e) { /* ignore */ }
-                                }
-                            });
+                            }).catch(e => console.warn('hydrateDnd', e)).finally(() => { pending--; done(); });
                         }
                     });
+                };
+                ['game1', 'game2'].forEach(gid => {
+                    const g = state.dndGames && state.dndGames[gid];
+                    if (!g) return;
+                    hydrateArr(g.draggables);
+                    hydrateArr(g.decorImages);
                 });
             }
             // Restaure une image de fond dans son champ : data-URL/chemin direct, ou marqueur 'idb:bgX'
@@ -6461,6 +6478,15 @@
                                 g.draggables.forEach(d => {
                                     if (d && typeof d.src === 'string' && d.src.indexOf('data:') === 0) {
                                         const key = 'dnd_' + gid + '_' + d.id;
+                                        idbStore(key, d.src);
+                                        d.src = 'idb:' + key;
+                                    }
+                                });
+                            }
+                            if (g && Array.isArray(g.decorImages)) {
+                                g.decorImages.forEach(d => {
+                                    if (d && typeof d.src === 'string' && d.src.indexOf('data:') === 0) {
+                                        const key = 'decor_' + gid + '_' + d.id;
                                         idbStore(key, d.src);
                                         d.src = 'idb:' + key;
                                     }
@@ -6794,6 +6820,79 @@
                 saveLocal();
             };
 
+            // ===== Images fixes (décor) des jeux DnD =====
+            window.updateDecorPosition = function (gameId, index, property, value) {
+                const arr = state.dndGames[gameId].decorImages;
+                if (!arr || !arr[index]) return;
+                arr[index][property] = parseInt(value) || 0;
+                renderDndGamesPreview();
+                saveLocal();
+            };
+            window.removeDecorImage = function (gameId, index) {
+                if (!confirm('Supprimer cette image fixe ?')) return;
+                state.dndGames[gameId].decorImages.splice(index, 1);
+                renderDndGamesPreview();
+                renderDecorList(gameId);
+                saveLocal();
+            };
+            window.replaceDecorImage = function (gameId, index) {
+                const input = document.createElement('input');
+                input.type = 'file'; input.accept = 'image/*';
+                input.onchange = (e) => {
+                    const f = e.target.files[0]; if (!f) return;
+                    const r = new FileReader();
+                    r.onload = (ev) => {
+                        state.dndGames[gameId].decorImages[index].src = ev.target.result;
+                        renderDndGamesPreview(); renderDecorList(gameId); saveLocal();
+                    };
+                    r.readAsDataURL(f);
+                };
+                input.click();
+            };
+            window.addDecorImage = function (gameId) {
+                const input = document.createElement('input');
+                input.type = 'file'; input.accept = 'image/*';
+                input.onchange = (e) => {
+                    const f = e.target.files[0]; if (!f) return;
+                    const r = new FileReader();
+                    r.onload = (ev) => {
+                        if (!state.dndGames[gameId].decorImages) state.dndGames[gameId].decorImages = [];
+                        state.dndGames[gameId].decorImages.push({
+                            id: 'decor-' + Math.random().toString(36).slice(2, 7),
+                            src: ev.target.result,
+                            x: 50, y: 50, width: 300, height: 200, z: 0
+                        });
+                        renderDndGamesPreview(); renderDecorList(gameId); saveLocal();
+                    };
+                    r.readAsDataURL(f);
+                };
+                input.click();
+            };
+            function renderDecorList(gameId) {
+                const list = document.getElementById(gameId === 'game1' ? 'dndGame1DecorList' : 'dndGame2DecorList');
+                if (!list) return;
+                const arr = state.dndGames[gameId].decorImages || [];
+                if (arr.length === 0) {
+                    list.innerHTML = '<div style="font-size:11px; color:#999; text-align:center; padding:8px;">Aucune image fixe</div>';
+                    return;
+                }
+                list.innerHTML = arr.map((d, index) => `
+                    <div style="padding:6px; border-bottom:1px solid #eee; background:#fff; display:flex; gap:6px; align-items:flex-start;">
+                        <img src="${d.src}" style="width:42px; height:42px; object-fit:contain; border:1px solid #ccc; background:#f0f0f0;">
+                        <div style="flex:1; display:flex; flex-direction:column; gap:5px;">
+                            <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px;">
+                                ${mqDimPosField('Largeur', d.width || 300, 'updateDecorPosition', gameId, index, 'width', 10)}
+                                ${mqDimPosField('Hauteur', d.height || 200, 'updateDecorPosition', gameId, index, 'height', 10)}
+                                ${mqDimPosField('Plan (z)', d.z || 0, 'updateDecorPosition', gameId, index, 'z', 1)}
+                            </div>
+                            <div style="display:flex; gap:5px;">
+                                <button type="button" onclick="window.replaceDecorImage('${gameId}', ${index})" style="flex:1; font-size:11px; cursor:pointer;">🔄 Remplacer</button>
+                                <button type="button" onclick="window.removeDecorImage('${gameId}', ${index})" style="font-size:11px; color:#fff; background:#ff4444; border:none; border-radius:4px; padding:3px 8px; cursor:pointer;">✕</button>
+                            </div>
+                        </div>
+                    </div>`).join('');
+            }
+
             // ---------------------------------------------------------
             // GESTION IMPORT / EXPORT COMPLET DU PROJET
             // ---------------------------------------------------------
@@ -6972,6 +7071,15 @@
                             </div>`;
                     });
 
+                    (g1.decorImages || []).forEach((dc, idx) => {
+                        html += `
+                            <div class="dnd-element dnd-decor" data-game="game1" data-type="decor" data-index="${idx}"
+                                 style="left: ${dc.x || 0}px; top: ${dc.y || 0}px; width: ${dc.width || 300}px; height: ${dc.height || 200}px; z-index: ${dc.z || 0};">
+                                <img src="${dc.src}" style="width:100%; height:100%; object-fit:contain; pointer-events:none; display:block;">
+                                <div class="dnd-element-handle" data-game="game1" data-type="decor" data-index="${idx}"></div>
+                            </div>`;
+                    });
+
                     html += `
                         </div>`;
                 }
@@ -7023,6 +7131,15 @@
                             <div class="dnd-element dnd-dropzone" data-game="game2" data-type="dropzone" data-index="${idx}"
                                  style="left: ${dz.x}px; top: ${dz.y}px; width: ${dz.width}px; height: ${dz.height}px; z-index: 1;">
                                 <div class="dnd-element-handle" data-game="game2" data-type="dropzone" data-index="${idx}"></div>
+                            </div>`;
+                    });
+
+                    (g2.decorImages || []).forEach((dc, idx) => {
+                        html += `
+                            <div class="dnd-element dnd-decor" data-game="game2" data-type="decor" data-index="${idx}"
+                                 style="left: ${dc.x || 0}px; top: ${dc.y || 0}px; width: ${dc.width || 300}px; height: ${dc.height || 200}px; z-index: ${dc.z || 0};">
+                                <img src="${dc.src}" style="width:100%; height:100%; object-fit:contain; pointer-events:none; display:block;">
+                                <div class="dnd-element-handle" data-game="game2" data-type="decor" data-index="${idx}"></div>
                             </div>`;
                     });
 
@@ -7113,8 +7230,8 @@
                         // Ignorer si c'est la poignée
                         if (e.target.classList.contains('dnd-element-handle')) return;
 
-                        // Déplacement libre à la souris (désactivé pendant l'alignement)
-                        if (mqDndAlignTarget) return;
+                        // Déplacement libre à la souris (désactivé pendant les outils alignement/taille)
+                        if (mqDndAlignTarget || mqDndSizeBrush || mqDndSizePipetteTarget) return;
 
                         e.stopPropagation();
                         e.preventDefault();
@@ -7129,6 +7246,7 @@
                         if (type === 'title') { ox = g0.titleBox.x || 0; oy = g0.titleBox.y || 0; }
                         else if (type === 'draggable') { ox = (g0.draggables[idx0].x) || 0; oy = (g0.draggables[idx0].y) || 0; }
                         else if (type === 'dropzone') { ox = (g0.dropzones[idx0].x) || 0; oy = (g0.dropzones[idx0].y) || 0; }
+                        else if (type === 'decor') { const a = (g0.decorImages || [])[idx0] || {}; ox = a.x || 0; oy = a.y || 0; }
 
                         draggedElement = { el, gameId, type, index, startX: e.clientX, startY: e.clientY, origX: ox, origY: oy };
 
@@ -7141,7 +7259,7 @@
                 // Resize des éléments
                 document.querySelectorAll('.dnd-element-handle').forEach(handle => {
                     handle.addEventListener('mousedown', (e) => {
-                        if (mqDndAlignTarget) return;
+                        if (mqDndAlignTarget || mqDndSizeBrush || mqDndSizePipetteTarget) return;
 
                         e.stopImmediatePropagation();
                         e.stopPropagation();
@@ -7174,28 +7292,24 @@
                         const newY = Math.max(0, Math.round(draggedElement.origY + (e.clientY - draggedElement.startY) / sc));
 
                         // Mettre à jour la position dans le state
+                        const idx = parseInt(index);
                         if (type === 'title') {
-                            state.dndGames[gameId].titleBox.x = Math.max(0, newX);
-                            state.dndGames[gameId].titleBox.y = Math.max(0, newY);
+                            state.dndGames[gameId].titleBox.x = newX;
+                            state.dndGames[gameId].titleBox.y = newY;
                         } else if (type === 'draggable') {
-                            const idx = parseInt(index);
-                            if (!state.dndGames[gameId].draggables[idx].x) state.dndGames[gameId].draggables[idx].x = 0;
-                            if (!state.dndGames[gameId].draggables[idx].y) state.dndGames[gameId].draggables[idx].y = 0;
-                            state.dndGames[gameId].draggables[idx].x = Math.max(0, newX);
-                            state.dndGames[gameId].draggables[idx].y = Math.max(0, newY);
+                            state.dndGames[gameId].draggables[idx].x = newX;
+                            state.dndGames[gameId].draggables[idx].y = newY;
                         } else if (type === 'dropzone') {
-                            const idx = parseInt(index);
-                            state.dndGames[gameId].dropzones[idx].x = Math.max(0, newX);
-                            state.dndGames[gameId].dropzones[idx].y = Math.max(0, newY);
+                            state.dndGames[gameId].dropzones[idx].x = newX;
+                            state.dndGames[gameId].dropzones[idx].y = newY;
+                        } else if (type === 'decor') {
+                            state.dndGames[gameId].decorImages[idx].x = newX;
+                            state.dndGames[gameId].decorImages[idx].y = newY;
                         }
 
                         // Mise à jour visuelle immédiate
-                        el.style.left = (type === 'title' ? state.dndGames[gameId].titleBox.x :
-                            type === 'draggable' ? state.dndGames[gameId].draggables[parseInt(index)].x :
-                                state.dndGames[gameId].dropzones[parseInt(index)].x) + 'px';
-                        el.style.top = (type === 'title' ? state.dndGames[gameId].titleBox.y :
-                            type === 'draggable' ? state.dndGames[gameId].draggables[parseInt(index)].y :
-                                state.dndGames[gameId].dropzones[parseInt(index)].y) + 'px';
+                        el.style.left = newX + 'px';
+                        el.style.top = newY + 'px';
 
                     } else if (resizingElement) {
                         const { el, gameId, type, index } = resizingElement;
@@ -7227,6 +7341,10 @@
                             const idx = parseInt(index);
                             state.dndGames[gameId].dropzones[idx].width = newWidth;
                             state.dndGames[gameId].dropzones[idx].height = newHeight;
+                        } else if (type === 'decor') {
+                            const idx = parseInt(index);
+                            state.dndGames[gameId].decorImages[idx].width = newWidth;
+                            state.dndGames[gameId].decorImages[idx].height = newHeight;
                         }
 
                         // Mise à jour visuelle immédiate
@@ -7238,10 +7356,12 @@
                 // Relâchement de la souris
                 document.addEventListener('mouseup', () => {
                     if (draggedElement || resizingElement) {
+                        const moved = draggedElement || resizingElement;
                         saveLocal();
                         if (viewport) viewport.style.pointerEvents = '';
                         document.body.style.userSelect = '';
                         document.body.style.cursor = '';
+                        if (moved && moved.type === 'decor') renderDecorList(moved.gameId);
                     }
                     draggedElement = null;
                     resizingElement = null;
@@ -7382,6 +7502,7 @@
                 if (el('HeaderAlign')) el('HeaderAlign').value = hdr.align || 'center';
                 if (typeof renderDropzonesList === 'function') renderDropzonesList(gameId);
                 if (typeof updateDraggablesUI === 'function') updateDraggablesUI(gameId);
+                if (typeof renderDecorList === 'function') renderDecorList(gameId);
             }
 
             function loadDndGamesUI() {
@@ -7920,6 +8041,15 @@
                             }).join('')}
                         </div>
 
+                        <!-- IMAGES FIXES (décor) -->
+                        ${(g1.decorImages || []).map(dc => {
+                            const cX = ((dc.x || 0) / G_W) * 100;
+                            const cY = ((dc.y || 0) / G_H) * 100;
+                            const cW = ((dc.width || 300) / G_W) * 100;
+                            const cH = ((dc.height || 200) / G_H) * 100;
+                            return `<img src="${dc.src}" alt="" style="position:absolute; left:${cX}%; top:${cY}%; width:${cW}%; height:${cH}%; object-fit:contain; pointer-events:none; z-index:${dc.z || 0};">`;
+                        }).join('')}
+
                         <div id="score-malus-container" style="position:absolute; left:0; right:0; bottom:1%; display:flex; justify-content:center; gap:2%; font-weight:bold; font-size:3.393vw; color:#2e7d32; z-index:4;"></div>
                     </div>`;
                     }
@@ -8010,6 +8140,15 @@
                                     </div>`;
                             }).join('')}
                         </div>
+
+                        <!-- IMAGES FIXES (décor) -->
+                        ${(g2.decorImages || []).map(dc => {
+                            const cX = ((dc.x || 0) / G_W) * 100;
+                            const cY = ((dc.y || 0) / G_H) * 100;
+                            const cW = ((dc.width || 300) / G_W) * 100;
+                            const cH = ((dc.height || 200) / G_H) * 100;
+                            return `<img src="${dc.src}" alt="" style="position:absolute; left:${cX}%; top:${cY}%; width:${cW}%; height:${cH}%; object-fit:contain; pointer-events:none; z-index:${dc.z || 0};">`;
+                        }).join('')}
 
                         <div id="score-malus-container2" style="position:absolute; left:0; right:0; bottom:1%; display:flex; justify-content:center; gap:2%; font-weight:bold; font-size:3.393vw; color:#2e7d32; z-index:4;"></div>
                     </div>`;
@@ -9030,6 +9169,7 @@
                 $('dndGame1HeaderItalic') && $('dndGame1HeaderItalic').addEventListener('change', saveDndGamesFromUI);
                 $('dndGame1HeaderAlign') && $('dndGame1HeaderAlign').addEventListener('change', saveDndGamesFromUI);
                 btnAddDraggableGame1.addEventListener('click', () => addDraggable('game1'));
+                $('btnAddDecorGame1') && $('btnAddDecorGame1').addEventListener('click', () => window.addDecorImage('game1'));
             }
 
             if (dndGame2Enabled) {
@@ -9052,6 +9192,7 @@
                 $('dndGame2HeaderItalic') && $('dndGame2HeaderItalic').addEventListener('change', saveDndGamesFromUI);
                 $('dndGame2HeaderAlign') && $('dndGame2HeaderAlign').addEventListener('change', saveDndGamesFromUI);
                 btnAddDraggableGame2.addEventListener('click', () => addDraggable('game2'));
+                $('btnAddDecorGame2') && $('btnAddDecorGame2').addEventListener('click', () => window.addDecorImage('game2'));
             }
 
             // Le bouton unique pour TOUT supprimer (Input, Hotspot, Point)
