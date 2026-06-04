@@ -4689,14 +4689,14 @@
                 const container = document.getElementById('dndGamesPreview');
                 if (!container) return;
 
-                // Nettoyer le contenu précédent
-                container.innerHTML = '';
-
-                // Afficher uniquement en mode élève
+                // En mode admin, l'aperçu est géré par renderDndGamesPreview() :
+                // ne pas effacer/masquer ici (sinon le jeu disparaît à chaque render()).
                 if (state.mode !== 'student') {
-                    container.style.display = 'none';
                     return;
                 }
+
+                // Nettoyer le contenu précédent (mode élève)
+                container.innerHTML = '';
 
                 // Le container reste dans le stage (absolute) — pointer-events none sauf sur les jeux
                 container.style.position = 'absolute';
