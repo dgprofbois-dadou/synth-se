@@ -5467,6 +5467,37 @@
                 setTimeout(() => { if (!mqDndAlignTarget) mqHsBanner(''); }, 1400);
             }
 
+            // ----- Répartir régulièrement une rangée/colonne de zones (distribution) -----
+            window.mqDndDistribute = function (forceDir) {
+                const sel = mqDndSel;
+                if (!sel) { alert('Faites d\'abord un clic droit sur une zone.'); return; }
+                const g = state.dndGames[sel.gameId];
+                let arr = null;
+                if (sel.type === 'dropzone') arr = g.dropzones;
+                else if (sel.type === 'draggable') arr = g.draggables;
+                else if (sel.type === 'decor') arr = g.decorImages;
+                if (!arr || arr.length < 3) { alert('Il faut au moins 3 éléments du même type pour les répartir.'); return; }
+                const ref = mqDndZone(sel).obj;
+                const xs = arr.map(z => z.x || 0), ys = arr.map(z => z.y || 0);
+                const spreadX = Math.max(...xs) - Math.min(...xs);
+                const spreadY = Math.max(...ys) - Math.min(...ys);
+                const horizontal = forceDir ? (forceDir === 'h') : (spreadX >= spreadY);
+                const items = arr.slice().sort((a, b) => horizontal ? ((a.x || 0) - (b.x || 0)) : ((a.y || 0) - (b.y || 0)));
+                const n = items.length;
+                if (horizontal) {
+                    const first = items[0].x || 0, last = items[n - 1].x || 0;
+                    items.forEach((z, i) => { z.x = Math.round(first + i * (last - first) / (n - 1)); z.y = ref.y || 0; });
+                } else {
+                    const first = items[0].y || 0, last = items[n - 1].y || 0;
+                    items.forEach((z, i) => { z.y = Math.round(first + i * (last - first) / (n - 1)); z.x = ref.x || 0; });
+                }
+                renderDndGamesPreview();
+                mqRefreshDndLists();
+                scheduleSaveLocal();
+                mqHsBanner('✅ Réparti régulièrement ' + (horizontal ? '(rangée)' : '(colonne)'));
+                setTimeout(() => mqHsBanner(''), 1400);
+            };
+
             // ----- Taille des zones DnD : saisie, pinceau, pipette -----
             window.mqDndEditSize = function () {
                 const z = mqDndZone(mqDndSel);
@@ -6677,6 +6708,7 @@
             function mqRefreshDndLists() {
                 try { renderDraggablesList('game1'); renderDraggablesList('game2'); } catch (e) { }
                 try { renderDropzonesList('game1'); renderDropzonesList('game2'); } catch (e) { }
+                try { renderDecorList('game1'); renderDecorList('game2'); } catch (e) { }
             }
 
             function renderDraggablesList(gameId) {
@@ -10204,6 +10236,9 @@
                     title.textContent = 'Zone DnD';
                     ctxMenu.appendChild(title);
                     mqAddMenuItem('🎯 Aligner sur une référence', () => window.mqStartDndAlign && window.mqStartDndAlign());
+                    mqAddMenuItem('↔️ Répartir régulièrement (auto)', () => window.mqDndDistribute && window.mqDndDistribute());
+                    mqAddMenuItem('↔️ Répartir en rangée (horizontal)', () => window.mqDndDistribute && window.mqDndDistribute('h'));
+                    mqAddMenuItem('↕️ Répartir en colonne (vertical)', () => window.mqDndDistribute && window.mqDndDistribute('v'));
                     mqAddMenuSep();
                     mqAddMenuItem('📐 Taille…', () => window.mqDndEditSize && window.mqDndEditSize());
                     mqAddMenuItem('🖌️ Pinceau de taille', () => window.mqStartDndSizeBrush && window.mqStartDndSizeBrush());
