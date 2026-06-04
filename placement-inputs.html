@@ -2158,6 +2158,13 @@
                         <input id="dndGame1HeaderFontSize" type="number" value="60" min="10" max="200"
                             style="width:35px; font-size:10px; height:20px;" title="Taille police (px)"
                             placeholder="px">
+                        <label style="font-size:11px; font-weight:bold;" title="Gras"><input type="checkbox" id="dndGame1HeaderBold"> G</label>
+                        <label style="font-size:11px; font-style:italic;" title="Italique"><input type="checkbox" id="dndGame1HeaderItalic"> I</label>
+                        <select id="dndGame1HeaderAlign" style="width:70px; font-size:10px; height:20px;" title="Alignement du titre">
+                            <option value="left">Gauche</option>
+                            <option value="center" selected>Centre</option>
+                            <option value="right">Droite</option>
+                        </select>
                     </div>
                 </div>
                 <div style="margin-top:10px;">
@@ -2243,9 +2250,16 @@
                             <option value="'Comic Sans MS', sans-serif">Comic</option>
                             <option value="Verdana, sans-serif" selected>Verdana</option>
                         </select>
-                        <input id="dndGame2HeaderFontSize" type="number" value="50" min="10" max="40"
+                        <input id="dndGame2HeaderFontSize" type="number" value="50" min="10" max="200"
                             style="width:35px; font-size:10px; height:20px;" title="Taille police (px)"
                             placeholder="px">
+                        <label style="font-size:11px; font-weight:bold;" title="Gras"><input type="checkbox" id="dndGame2HeaderBold"> G</label>
+                        <label style="font-size:11px; font-style:italic;" title="Italique"><input type="checkbox" id="dndGame2HeaderItalic"> I</label>
+                        <select id="dndGame2HeaderAlign" style="width:70px; font-size:10px; height:20px;" title="Alignement du titre">
+                            <option value="left">Gauche</option>
+                            <option value="center" selected>Centre</option>
+                            <option value="right">Droite</option>
+                        </select>
                     </div>
                 </div>
                 <div style="margin-top:10px;">
@@ -6114,6 +6128,9 @@
                     if ($('dndGame1HeaderHeight')) g1.header.height = parseInt($('dndGame1HeaderHeight').value, 10) || 80;
                     if ($('dndGame1HeaderFont')) g1.header.font = $('dndGame1HeaderFont').value;
                     if ($('dndGame1HeaderFontSize')) g1.header.fontSize = parseInt($('dndGame1HeaderFontSize').value, 10) || 60;
+                    if ($('dndGame1HeaderBold')) g1.header.bold = $('dndGame1HeaderBold').checked;
+                    if ($('dndGame1HeaderItalic')) g1.header.italic = $('dndGame1HeaderItalic').checked;
+                    if ($('dndGame1HeaderAlign')) g1.header.align = $('dndGame1HeaderAlign').value;
                     if (!g1.titleBox) g1.titleBox = { x: 10, y: 10, width: 600, height: 80 };
                     g1.titleBox.width = g1.header.width;
                     g1.titleBox.height = g1.header.height;
@@ -6142,6 +6159,9 @@
                     if ($('dndGame2HeaderHeight')) g2.header.height = parseInt($('dndGame2HeaderHeight').value, 10) || 180;
                     if ($('dndGame2HeaderFont')) g2.header.font = $('dndGame2HeaderFont').value;
                     if ($('dndGame2HeaderFontSize')) g2.header.fontSize = parseInt($('dndGame2HeaderFontSize').value, 10) || 18;
+                    if ($('dndGame2HeaderBold')) g2.header.bold = $('dndGame2HeaderBold').checked;
+                    if ($('dndGame2HeaderItalic')) g2.header.italic = $('dndGame2HeaderItalic').checked;
+                    if ($('dndGame2HeaderAlign')) g2.header.align = $('dndGame2HeaderAlign').value;
                     if (!g2.titleBox) g2.titleBox = { x: 10, y: 10, width: 500, height: 70 };
                     g2.titleBox.width = g2.header.width;
                     g2.titleBox.height = g2.header.height;
@@ -6919,7 +6939,7 @@
                             <!-- Zone titre DRAGGABLE -->
                             <div class="dnd-element dnd-title" data-game="game1" data-type="title"
                                  style="left: ${g1.titleBox.x}px; top: ${g1.titleBox.y}px; width: ${g1.titleBox.width}px; height: ${g1.titleBox.height}px; z-index: 2;">
-                                <h2>${g1.title || 'Game 1'}</h2>
+                                <h2 style="margin:0; width:100%; font-family:${(g1.header && g1.header.font) || 'Verdana, sans-serif'}; font-size:${(g1.header && g1.header.fontSize) || 60}px; font-weight:${(g1.header && g1.header.bold) ? 'bold' : 'normal'}; font-style:${(g1.header && g1.header.italic) ? 'italic' : 'normal'}; text-align:${(g1.header && g1.header.align) || 'center'};">${g1.title || 'Game 1'}</h2>
                                 <div class="dnd-element-handle" data-game="game1" data-type="title"></div>
                             </div>
                             
@@ -6972,7 +6992,7 @@
                             <!-- Zone titre DRAGGABLE -->
                             <div class="dnd-element dnd-title" data-game="game2" data-type="title"
                                  style="left: ${g2.titleBox.x}px; top: ${g2.titleBox.y}px; width: ${g2.titleBox.width}px; height: ${g2.titleBox.height}px; z-index: 2;">
-                                <h2>${g2.title || 'Game 2'}</h2>
+                                <h2 style="margin:0; width:100%; font-family:${(g2.header && g2.header.font) || 'Verdana, sans-serif'}; font-size:${(g2.header && g2.header.fontSize) || 50}px; font-weight:${(g2.header && g2.header.bold) ? 'bold' : 'normal'}; font-style:${(g2.header && g2.header.italic) ? 'italic' : 'normal'}; text-align:${(g2.header && g2.header.align) || 'center'};">${g2.title || 'Game 2'}</h2>
                                 <div class="dnd-element-handle" data-game="game2" data-type="title"></div>
                             </div>
                             
@@ -7357,6 +7377,9 @@
                 if (el('HeaderHeight')) el('HeaderHeight').value = hdr.height ?? g.titleBox?.height ?? 80;
                 if (el('HeaderFont')) el('HeaderFont').value = hdr.font || 'Verdana, sans-serif';
                 if (el('HeaderFontSize')) el('HeaderFontSize').value = hdr.fontSize ?? 60;
+                if (el('HeaderBold')) el('HeaderBold').checked = !!hdr.bold;
+                if (el('HeaderItalic')) el('HeaderItalic').checked = !!hdr.italic;
+                if (el('HeaderAlign')) el('HeaderAlign').value = hdr.align || 'center';
                 if (typeof renderDropzonesList === 'function') renderDropzonesList(gameId);
                 if (typeof updateDraggablesUI === 'function') updateDraggablesUI(gameId);
             }
@@ -7866,7 +7889,7 @@
 
                         <!-- TITRE (placement libre) -->
                         <div class="carre_marron" style="position:absolute; left:${tb1X}%; top:${tb1Y}%; width:${tb1W}%; height:${tb1H}%; display:flex; justify-content:center; align-items:center; box-sizing:border-box; z-index:2;">
-                            <h2 style="font-family:${hBox.font}; font-size:${titleFS}vw; margin:0; text-align:center;">${g1.title || 'Jeu 1'}</h2>
+                            <h2 style="font-family:${hBox.font}; font-size:${titleFS}vw; margin:0; width:100%; text-align:${hBox.align || 'center'}; font-weight:${hBox.bold ? 'bold' : 'normal'}; font-style:${hBox.italic ? 'italic' : 'normal'};">${g1.title || 'Jeu 1'}</h2>
                         </div>
 
                         <!-- DROPZONES (placement libre) -->
@@ -7957,7 +7980,7 @@
 
                         <!-- TITRE (placement libre) -->
                         <div class="carre_marron" style="position:absolute; left:${tb2X}%; top:${tb2Y}%; width:${tb2W}%; height:${tb2H}%; display:flex; justify-content:center; align-items:center; box-sizing:border-box; z-index:2;">
-                            <h2 style="font-family:${hBox.font}; font-size:${titleFS}vw; margin:0; text-align:center;">${g2.title || 'Jeu 2'}</h2>
+                            <h2 style="font-family:${hBox.font}; font-size:${titleFS}vw; margin:0; width:100%; text-align:${hBox.align || 'center'}; font-weight:${hBox.bold ? 'bold' : 'normal'}; font-style:${hBox.italic ? 'italic' : 'normal'};">${g2.title || 'Jeu 2'}</h2>
                         </div>
 
                         <!-- DROPZONES (placement libre) -->
@@ -9003,6 +9026,9 @@
                 dndGame1HeaderHeight.addEventListener('input', saveDndGamesFromUI);
                 dndGame1HeaderFont.addEventListener('change', saveDndGamesFromUI);
                 dndGame1HeaderFontSize.addEventListener('input', saveDndGamesFromUI);
+                $('dndGame1HeaderBold') && $('dndGame1HeaderBold').addEventListener('change', saveDndGamesFromUI);
+                $('dndGame1HeaderItalic') && $('dndGame1HeaderItalic').addEventListener('change', saveDndGamesFromUI);
+                $('dndGame1HeaderAlign') && $('dndGame1HeaderAlign').addEventListener('change', saveDndGamesFromUI);
                 btnAddDraggableGame1.addEventListener('click', () => addDraggable('game1'));
             }
 
@@ -9022,6 +9048,9 @@
                 dndGame2HeaderHeight.addEventListener('input', saveDndGamesFromUI);
                 dndGame2HeaderFont.addEventListener('change', saveDndGamesFromUI);
                 dndGame2HeaderFontSize.addEventListener('input', saveDndGamesFromUI);
+                $('dndGame2HeaderBold') && $('dndGame2HeaderBold').addEventListener('change', saveDndGamesFromUI);
+                $('dndGame2HeaderItalic') && $('dndGame2HeaderItalic').addEventListener('change', saveDndGamesFromUI);
+                $('dndGame2HeaderAlign') && $('dndGame2HeaderAlign').addEventListener('change', saveDndGamesFromUI);
                 btnAddDraggableGame2.addEventListener('click', () => addDraggable('game2'));
             }
 
