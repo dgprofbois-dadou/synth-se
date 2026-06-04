@@ -8885,73 +8885,14 @@
                     };
                     inputsDiv.appendChild(inputTitle);
 
-                    // Ligne 3 : Dimensions et Offset Y
+                    // Ligne 3 : Dimensions et position (steppers lisibles)
                     const rowDim = document.createElement('div');
-                    rowDim.style.cssText = 'display:flex; align-items:center; gap:3px; margin-top:2px;';
-
-                    const labelDim = document.createElement('span');
-                    labelDim.textContent = 'Dim:';
-                    labelDim.style.fontSize = '9px';
-                    labelDim.style.color = '#666';
-                    rowDim.appendChild(labelDim);
-
-                    const inputW = document.createElement('input');
-                    inputW.type = 'number';
-                    inputW.value = d.width || 250;
-                    inputW.title = 'Largeur (px)';
-                    inputW.placeholder = 'W';
-                    inputW.style.cssText = 'width:35px; padding:1px; font-size:10px; border:1px solid #ddd;';
-                    inputW.onchange = (e) => { d.width = parseInt(e.target.value); saveLocal(); renderDndGamesPreview(); };
-                    rowDim.appendChild(inputW);
-
-                    const spanX = document.createElement('span');
-                    spanX.textContent = 'x';
-                    spanX.style.fontSize = '9px';
-                    rowDim.appendChild(spanX);
-
-                    const inputH = document.createElement('input');
-                    inputH.type = 'number';
-                    inputH.value = d.height || 250;
-                    inputH.title = 'Hauteur (px)';
-                    inputH.placeholder = 'H';
-                    inputH.style.cssText = 'width:28px; padding:1px; font-size:10px; border:1px solid #ddd;';
-                    inputH.onchange = (e) => { d.height = parseInt(e.target.value); saveLocal(); renderDndGamesPreview(); };
-                    rowDim.appendChild(inputH);
-
-                    // Position X
-                    const labelX = document.createElement('span');
-                    labelX.textContent = 'X:';
-                    labelX.style.fontSize = '9px';
-                    labelX.style.color = '#666';
-                    labelX.style.marginLeft = '3px';
-                    rowDim.appendChild(labelX);
-
-                    const inputX = document.createElement('input');
-                    inputX.type = 'number';
-                    inputX.value = d.offsetX || 0;
-                    inputX.title = 'Décalage X (px)';
-                    inputX.placeholder = '0';
-                    inputX.style.cssText = 'width:28px; padding:1px; font-size:10px; border:1px solid #ddd;';
-                    inputX.onchange = (e) => { d.offsetX = parseInt(e.target.value); saveLocal(); renderDndGamesPreview(); };
-                    rowDim.appendChild(inputX);
-
-                    // Position Y
-                    const labelY = document.createElement('span');
-                    labelY.textContent = 'Y:';
-                    labelY.style.fontSize = '9px';
-                    labelY.style.color = '#666';
-                    labelY.style.marginLeft = '3px';
-                    rowDim.appendChild(labelY);
-
-                    const inputY = document.createElement('input');
-                    inputY.type = 'number';
-                    inputY.value = d.offsetY || 0;
-                    inputY.title = 'Décalage Y (px)';
-                    inputY.placeholder = '0';
-                    inputY.style.cssText = 'width:28px; padding:1px; font-size:10px; border:1px solid #ddd;';
-                    inputY.onchange = (e) => { d.offsetY = parseInt(e.target.value); saveLocal(); renderDndGamesPreview(); };
-                    rowDim.appendChild(inputY);
-
+                    rowDim.style.cssText = 'display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:4px;';
+                    rowDim.innerHTML =
+                        mqDimPosField('Largeur', d.width || 250, 'updateDraggablePosition', gameId, index, 'width', 10) +
+                        mqDimPosField('Hauteur', d.height || 250, 'updateDraggablePosition', gameId, index, 'height', 10) +
+                        mqDimPosField('X', d.x || 0, 'updateDraggablePosition', gameId, index, 'x', 5) +
+                        mqDimPosField('Y', d.y || 0, 'updateDraggablePosition', gameId, index, 'y', 5);
                     inputsDiv.appendChild(rowDim);
 
                     listContainer.appendChild(div);
