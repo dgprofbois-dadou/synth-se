@@ -2177,6 +2177,7 @@
                     </div>
                     <button id="btnAddDraggableGame1" type="button" style="width:100%; font-size:12px;">+ Ajouter
                         image</button>
+                    <button id="btnAddTextGame1" type="button" style="width:100%; font-size:12px; margin-top:4px;">🔤 + Étiquette texte</button>
                     <label style="font-size:12px; font-weight:bold; display:block; margin:8px 0 5px;">Images fixes (décor) :</label>
                     <div id="dndGame1DecorList"
                         style="max-height:150px; overflow-y:auto; background:#fff; padding:5px; border-radius:4px; border:1px solid #ddd; margin-bottom:5px;"></div>
@@ -2276,6 +2277,7 @@
                     </div>
                     <button id="btnAddDraggableGame2" type="button" style="width:100%; font-size:12px;">+ Ajouter
                         image</button>
+                    <button id="btnAddTextGame2" type="button" style="width:100%; font-size:12px; margin-top:4px;">🔤 + Étiquette texte</button>
                     <label style="font-size:12px; font-weight:bold; display:block; margin:8px 0 5px;">Images fixes (décor) :</label>
                     <div id="dndGame2DecorList"
                         style="max-height:150px; overflow-y:auto; background:#fff; padding:5px; border-radius:4px; border:1px solid #ddd; margin-bottom:5px;"></div>
@@ -6853,6 +6855,32 @@
                 saveLocal();
             };
 
+            // ===== Étiquettes texte draggables =====
+            window.addTextDraggable = function (gameId) {
+                const arr = state.dndGames[gameId].draggables;
+                const id = prompt('ID de l\'étiquette (ex: 1, 2, 3…) :', String(arr.length + 1));
+                if (!id) return;
+                arr.push({
+                    id, kind: 'text', text: 'Étiquette', title: '',
+                    x: 10 + arr.length * 70, y: 120, width: 240, height: 80,
+                    fontSize: 28, font: 'Arial, sans-serif', color: '#000000',
+                    bold: false, italic: false, bg: '#ffe082', bgOn: true
+                });
+                if (typeof updateDraggablesUI === 'function') updateDraggablesUI(gameId);
+                renderDndGamesPreview();
+                saveLocal();
+            };
+            // Met à jour une propriété (texte/police/couleur…) d'une étiquette
+            window.updateTextDraggable = function (gameId, index, property, value) {
+                const d = state.dndGames[gameId].draggables[index];
+                if (!d) return;
+                if (property === 'bold' || property === 'italic' || property === 'bgOn') d[property] = !!value;
+                else if (property === 'fontSize') d[property] = parseInt(value) || 12;
+                else d[property] = value;
+                renderDndGamesPreview();
+                saveLocal();
+            };
+
             // ===== Images fixes (décor) des jeux DnD =====
             window.updateDecorPosition = function (gameId, index, property, value) {
                 const arr = state.dndGames[gameId].decorImages;
@@ -7023,6 +7051,25 @@
             }
 
             // Afficher la prévisualisation des jeux DnD avec éléments draggables
+            // Style d'une étiquette texte draggable
+            function mqDndTextStyle(d) {
+                return 'width:100%;height:100%;display:flex;align-items:center;justify-content:center;text-align:center;box-sizing:border-box;padding:4px;overflow:hidden;'
+                    + 'font-family:' + (d.font || 'Arial, sans-serif') + ';'
+                    + 'font-size:' + (d.fontSize || 28) + 'px;'
+                    + 'color:' + (d.color || '#000000') + ';'
+                    + 'font-weight:' + (d.bold ? 'bold' : 'normal') + ';'
+                    + 'font-style:' + (d.italic ? 'italic' : 'normal') + ';'
+                    + 'background:' + (d.bgOn ? (d.bg || '#ffffff') : 'transparent') + ';'
+                    + 'border-radius:8px;';
+            }
+            // Contenu interne d'un draggable : image OU étiquette texte
+            function mqDndItemInner(d) {
+                if (d.kind === 'text') {
+                    return '<div class="dnd-label" style="' + mqDndTextStyle(d) + '">' + escapeHtml(d.text || 'Étiquette') + '</div>';
+                }
+                return '<img src="' + (d.src || '') + '" class="png" data-id="' + (d.id || '') + '" alt="" onerror="this.style.display=\'none\'" style="width:100%;height:100%;object-fit:contain;display:block;">';
+            }
+
             function mqRenderDndEditorRich() {
                 if (state.mode === 'student') return;
                 const previewContainer = document.getElementById('dndGamesPreview');
@@ -7088,7 +7135,7 @@
                                  data-tooltip="${(d.title || '').replace(/"/g, '&quot;')}"
                                  data-hint-font="${g1.tooltipFont || "'OpenDyslexic', sans-serif"}"
                                  data-duration="${g1.tooltipDuration || 3000}">
-                                <img src="${d.src}" class="png" alt="${(d.title || 'Image ' + d.id).replace(/"/g, '&quot;')}" onerror="this.style.display='none'" style="width:100%; height:100%; object-fit:contain;">
+                                ${mqDndItemInner(d)}
                                 <div class="dnd-element-handle" data-game="game1" data-type="draggable" data-index="${idx}"></div>
                             </div>`;
                     });
@@ -7151,7 +7198,7 @@
                                  data-tooltip="${(d.title || '').replace(/"/g, '&quot;')}"
                                  data-hint-font="${g2.tooltipFont || "'OpenDyslexic', sans-serif"}"
                                  data-duration="${g2.tooltipDuration || 3000}">
-                                <img src="${d.src}" class="png" alt="${(d.title || 'Image ' + d.id).replace(/"/g, '&quot;')}" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZmlsbD0icmVkIiBkPSJNMTIgMmMyLjYgMCA2IDMuNCA2IDZ2MmgydjEwaC0xNnYtMTBoMnYtMmMwLTIuNiAzLjQtNiA2LTZ6bTAgNGMtMS4xIDAtMiAuOS0yIDJ2MmgyLjI4YzEuNTYuNTIgMi43MiAxLjcyIDIuNzIgM3YxaC0xMHYtMWgwLTMuMjhsLS4yOC0uMWMtLjMyLS4xMS0uNjUtLjI2LS45Ni0uNDMtLjczLS40LTEuMzgtMS4wNS0xLjc2LTEuODN2LTEuMTRjMC0xLjEuOS0yIDItMnptMCA2YTEgMSAwIDAgMSAxIDFhMSAxIDAgMCAxLTEgMXoiLz48L3N2Zz4=' " style="width:100%; height:100%; object-fit:contain; display:block;">
+                                ${mqDndItemInner(d)}
                                 <div class="dnd-element-handle" data-game="game2" data-type="draggable" data-index="${idx}"></div>
                             </div>`;
                     });
@@ -8150,7 +8197,7 @@
                                         <span class="png-wrap draggable" draggable="true"
                                             style="display:block; width:100%; height:100%; pointer-events:auto;"
                                             data-id="${d.id}" data-tooltip="${(d.title || '').replace(/"/g, '&quot;')}">
-                                            <img src="${d.src}" class="png" style="width:100%; height:100%; object-fit:contain; display:block;" data-id="${d.id}">
+                                            ${mqDndItemInner(d)}
                                         </span>
                                     </div>`;
                             }).join('')}
@@ -8250,7 +8297,7 @@
                                         <span class="png-wrap draggable" draggable="true"
                                             style="display:block; width:100%; height:100%; pointer-events:auto;"
                                             data-id="${d.id}" data-tooltip="${(d.title || '').replace(/"/g, '&quot;')}">
-                                            <img src="${d.src}" class="png" style="width:100%; height:100%; object-fit:contain; display:block;" data-id="${d.id}">
+                                            ${mqDndItemInner(d)}
                                         </span>
                                     </div>`;
                             }).join('')}
@@ -9071,37 +9118,42 @@
                     const imgContainer = document.createElement('div');
                     imgContainer.style.cssText = 'display:flex; flex-direction:column; gap:2px; align-items:center;';
 
-                    const img = document.createElement('img');
-                    img.src = d.src;
-                    img.style.cssText = 'width:40px; height:40px; object-fit:contain; border:1px solid #ccc; background:#f0f0f0;';
-                    imgContainer.appendChild(img);
+                    if (d.kind === 'text') {
+                        const badge = document.createElement('div');
+                        badge.textContent = 'Tx';
+                        badge.title = 'Étiquette texte';
+                        badge.style.cssText = 'width:40px; height:40px; display:flex; align-items:center; justify-content:center; border:1px solid #ccc; background:#fff8e1; font-weight:bold; color:#a06800; border-radius:4px;';
+                        imgContainer.appendChild(badge);
+                    } else {
+                        const img = document.createElement('img');
+                        img.src = d.src;
+                        img.style.cssText = 'width:40px; height:40px; object-fit:contain; border:1px solid #ccc; background:#f0f0f0;';
+                        imgContainer.appendChild(img);
 
-                    // BOUTON REMPLACER (NOUVEAU)
-                    const btnRep = document.createElement('button');
-                    btnRep.textContent = '🔄';
-                    btnRep.title = 'Remplacer l\'image'; // Hover text
-                    btnRep.style.cssText = 'font-size:10px; padding:1px 4px; cursor:pointer; margin-top:2px; border:1px solid #ccc; background:#eee; border-radius:3px;';
-                    btnRep.onclick = () => {
-                        const input = document.createElement('input');
-                        input.type = 'file';
-                        input.accept = 'image/*';
-                        input.onchange = (e) => {
-                            const file = e.target.files[0];
-                            if (!file) return;
-                            const reader = new FileReader();
-                            reader.onload = (ev) => {
-                                d.src = ev.target.result; // Update source only
-                                // Optionally update title if empty? No, keep existing config.
-                                saveLocal();
-                                renderDndGamesPreview();
-                                updateDraggablesUI(gameId);
-                                console.log('✅ Image replaced for ID:', d.id);
+                        const btnRep = document.createElement('button');
+                        btnRep.textContent = '🔄';
+                        btnRep.title = 'Remplacer l\'image';
+                        btnRep.style.cssText = 'font-size:10px; padding:1px 4px; cursor:pointer; margin-top:2px; border:1px solid #ccc; background:#eee; border-radius:3px;';
+                        btnRep.onclick = () => {
+                            const input = document.createElement('input');
+                            input.type = 'file';
+                            input.accept = 'image/*';
+                            input.onchange = (e) => {
+                                const file = e.target.files[0];
+                                if (!file) return;
+                                const reader = new FileReader();
+                                reader.onload = (ev) => {
+                                    d.src = ev.target.result;
+                                    saveLocal();
+                                    renderDndGamesPreview();
+                                    updateDraggablesUI(gameId);
+                                };
+                                reader.readAsDataURL(file);
                             };
-                            reader.readAsDataURL(file);
+                            input.click();
                         };
-                        input.click();
-                    };
-                    imgContainer.appendChild(btnRep);
+                        imgContainer.appendChild(btnRep);
+                    }
                     div.appendChild(imgContainer);
 
 
@@ -9163,6 +9215,32 @@
                         renderDndGamesPreview();
                     };
                     inputsDiv.appendChild(inputTitle);
+
+                    // Contrôles spécifiques aux étiquettes texte
+                    if (d.kind === 'text') {
+                        const fonts = ['Arial, sans-serif', 'Verdana, sans-serif', 'Georgia, serif', "'Comic Sans MS', sans-serif", "'OpenDyslexic', sans-serif", "'Courier New', monospace"];
+                        const tWrap = document.createElement('div');
+                        tWrap.style.cssText = 'display:flex; flex-direction:column; gap:5px; margin-top:4px; padding:5px; background:#fffdf5; border:1px solid #f0e3b0; border-radius:5px;';
+                        tWrap.innerHTML =
+                            '<input type="text" value="' + escapeHtml(d.text || '') + '" placeholder="Texte de l\'étiquette" '
+                            + 'oninput="window.updateTextDraggable(\'' + gameId + '\', ' + index + ', \'text\', this.value)" '
+                            + 'style="width:100%; padding:4px; font-size:13px; border:1px solid #ddd;">'
+                            + '<div style="display:flex; gap:5px; align-items:center; flex-wrap:wrap;">'
+                            + '<label style="font-size:11px;">Taille</label>'
+                            + '<input type="number" value="' + (d.fontSize || 28) + '" min="8" max="200" onchange="window.updateTextDraggable(\'' + gameId + '\', ' + index + ', \'fontSize\', this.value)" style="width:52px; padding:3px; font-size:12px;">'
+                            + '<select onchange="window.updateTextDraggable(\'' + gameId + '\', ' + index + ', \'font\', this.value)" style="font-size:11px; flex:1; min-width:80px;">'
+                            + fonts.map(f => '<option value="' + f + '"' + ((d.font || 'Arial, sans-serif') === f ? ' selected' : '') + '>' + f.split(',')[0].replace(/'/g, '') + '</option>').join('')
+                            + '</select>'
+                            + '<input type="color" value="' + (d.color || '#000000') + '" title="Couleur du texte" oninput="window.updateTextDraggable(\'' + gameId + '\', ' + index + ', \'color\', this.value)" style="width:28px; height:24px; padding:0; border:1px solid #ccc;">'
+                            + '</div>'
+                            + '<div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">'
+                            + '<label style="font-size:12px; font-weight:bold;"><input type="checkbox" ' + (d.bold ? 'checked' : '') + ' onchange="window.updateTextDraggable(\'' + gameId + '\', ' + index + ', \'bold\', this.checked)"> G</label>'
+                            + '<label style="font-size:12px; font-style:italic;"><input type="checkbox" ' + (d.italic ? 'checked' : '') + ' onchange="window.updateTextDraggable(\'' + gameId + '\', ' + index + ', \'italic\', this.checked)"> I</label>'
+                            + '<label style="font-size:11px;"><input type="checkbox" ' + (d.bgOn ? 'checked' : '') + ' onchange="window.updateTextDraggable(\'' + gameId + '\', ' + index + ', \'bgOn\', this.checked)"> Fond</label>'
+                            + '<input type="color" value="' + (d.bg || '#ffe082') + '" title="Couleur du fond" oninput="window.updateTextDraggable(\'' + gameId + '\', ' + index + ', \'bg\', this.value)" style="width:28px; height:24px; padding:0; border:1px solid #ccc;">'
+                            + '</div>';
+                        inputsDiv.appendChild(tWrap);
+                    }
 
                     // Ligne 3 : Dimensions et position (steppers lisibles)
                     const rowDim = document.createElement('div');
@@ -9286,6 +9364,7 @@
                 $('dndGame1HeaderItalic') && $('dndGame1HeaderItalic').addEventListener('change', saveDndGamesFromUI);
                 $('dndGame1HeaderAlign') && $('dndGame1HeaderAlign').addEventListener('change', saveDndGamesFromUI);
                 btnAddDraggableGame1.addEventListener('click', () => addDraggable('game1'));
+                $('btnAddTextGame1') && $('btnAddTextGame1').addEventListener('click', () => window.addTextDraggable('game1'));
                 $('btnAddDecorGame1') && $('btnAddDecorGame1').addEventListener('click', () => window.addDecorImage('game1'));
             }
 
@@ -9309,6 +9388,7 @@
                 $('dndGame2HeaderItalic') && $('dndGame2HeaderItalic').addEventListener('change', saveDndGamesFromUI);
                 $('dndGame2HeaderAlign') && $('dndGame2HeaderAlign').addEventListener('change', saveDndGamesFromUI);
                 btnAddDraggableGame2.addEventListener('click', () => addDraggable('game2'));
+                $('btnAddTextGame2') && $('btnAddTextGame2').addEventListener('click', () => window.addTextDraggable('game2'));
                 $('btnAddDecorGame2') && $('btnAddDecorGame2').addEventListener('click', () => window.addDecorImage('game2'));
             }
 
