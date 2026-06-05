@@ -6368,8 +6368,10 @@
 
                 // Jeux DnD : fusion avec modèle complet (évite champs manquants au rechargement)
                 state.dndGames = normalizeDndGames(obj.dndGames || state.dndGames);
-                hydrateDndImages();
+                // IMPORTANT : loadDndGamesUI recrée les objets (normalize) -> hydrater APRÈS,
+                // sinon l'image restaurée est posée sur des objets abandonnés (visuel perdu).
                 loadDndGamesUI();
+                hydrateDndImages();
 
                 refreshStageLayout(() => {
                     render();
@@ -6435,11 +6437,10 @@
                 const done = () => {
                     if (pending === 0 && changed) {
                         try {
-                            render();
-                            renderDraggablesList('game1');
-                            renderDraggablesList('game2');
-                            if (typeof renderDecorList === 'function') { renderDecorList('game1'); renderDecorList('game2'); }
                             renderDndGamesPreview();
+                            if (typeof updateDraggablesUI === 'function') { updateDraggablesUI('game1'); updateDraggablesUI('game2'); }
+                            else { renderDraggablesList('game1'); renderDraggablesList('game2'); }
+                            if (typeof renderDecorList === 'function') { renderDecorList('game1'); renderDecorList('game2'); }
                         } catch (e) { /* ignore */ }
                     }
                 };
