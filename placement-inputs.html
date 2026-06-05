@@ -7918,7 +7918,9 @@
                             const itop = (b.y / containerBaseH) * 100;
                             const iw = (b.w / containerBaseW) * 100;
                             const ih = (b.h / containerBaseH) * 100;
-                            const isrc = (b.src || '').replace(/"/g, '&quot;');
+                            let iabs = b.src || '';
+                            try { iabs = new URL(b.src || '', document.baseURI).href; } catch (e) { }
+                            const isrc = iabs.replace(/"/g, '&quot;');
                             html += `
                 <div class="iframe-wrapper" style="position:absolute; top:${itop}%; left:${ileft}%; width:${iw}%; height:${ih}%; z-index:8;">
                     <iframe src="${isrc}" style="width:100%; height:100%; border:0; display:block;" scrolling="${b.iframeScroll ? 'yes' : 'no'}" allowfullscreen></iframe>
@@ -8202,7 +8204,9 @@
                             const itop = (localY / containerBaseH) * 100;
                             const iw = (b.w / containerBaseW) * 100;
                             const ih = (b.h / containerBaseH) * 100;
-                            const isrc = (b.src || '').replace(/"/g, '&quot;');
+                            let iabs = b.src || '';
+                            try { iabs = new URL(b.src || '', document.baseURI).href; } catch (e) { }
+                            const isrc = iabs.replace(/"/g, '&quot;');
                             html += `
                 <div class="iframe-wrapper" style="position:absolute; top:${itop}%; left:${ileft}%; width:${iw}%; height:${ih}%; z-index:8;">
                     <iframe src="${isrc}" style="width:100%; height:100%; border:0; display:block;" scrolling="${b.iframeScroll ? 'yes' : 'no'}" allowfullscreen></iframe>
