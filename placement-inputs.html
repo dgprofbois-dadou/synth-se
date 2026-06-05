@@ -7594,6 +7594,70 @@
                     return out;
                 }
 
+                // ===== Embarquement hors-ligne du contenu des iframes (HTML + CSS + JS + images en base64) =====
+                async function mqFetchText(url) {
+                    const res = await fetch(url);
+                    if (!res.ok) throw new Error('HTTP ' + res.status + ' ' + url);
+                    return await res.text();
+                }
+                async function mqFetchDataUrl(url) {
+                    const res = await fetch(url);
+                    if (!res.ok) throw new Error('HTTP ' + res.status + ' ' + url);
+                    const blob = await res.blob();
+                    return await new Promise((resolve, reject) => {
+                        const r = new FileReader();
+                        r.onload = () => resolve(r.result);
+                        r.onerror = reject;
+                        r.readAsDataURL(blob);
+                    });
+                }
+                async function mqInlineCssUrls(cssText, baseUrl) {
+                    const seen = {};
+                    const matches = [...cssText.matchAll(/url\(\s*['"]?([^'")]+)['"]?\s*\)/g)];
+                    for (const m of matches) {
+                        const raw = (m[1] || '').trim();
+                        if (!raw || /^data:/i.test(raw) || seen[raw]) continue;
+                        seen[raw] = 1;
+                        try {
+                            const abs = new URL(raw, baseUrl).href;
+                            const data = await mqFetchDataUrl(abs);
+                            cssText = cssText.split(m[0]).join('url("' + data + '")');
+                        } catch (e) { /* laisse l'URL */ }
+                    }
+                    return cssText;
+                }
+                async function mqInlineIframeDoc(absUrl) {
+                    const htmlText = await mqFetchText(absUrl);
+                    const doc = new DOMParser().parseFromString(htmlText, 'text/html');
+                    doc.querySelectorAll('base').forEach(b => b.remove());
+                    for (const img of [...doc.querySelectorAll('img[src]')]) {
+                        const s = img.getAttribute('src');
+                        if (!s || /^data:/i.test(s)) continue;
+                        try { img.setAttribute('src', await mqFetchDataUrl(new URL(s, absUrl).href)); } catch (e) { }
+                    }
+                    for (const sc of [...doc.querySelectorAll('script[src]')]) {
+                        const s = sc.getAttribute('src');
+                        if (!s) continue;
+                        try { sc.textContent = await mqFetchText(new URL(s, absUrl).href); sc.removeAttribute('src'); } catch (e) { }
+                    }
+                    for (const lk of [...doc.querySelectorAll('link[rel~="stylesheet"][href]')]) {
+                        const s = lk.getAttribute('href');
+                        if (!s) continue;
+                        try {
+                            const cssAbs = new URL(s, absUrl).href;
+                            let css = await mqFetchText(cssAbs);
+                            css = await mqInlineCssUrls(css, cssAbs);
+                            const st = doc.createElement('style');
+                            st.textContent = css;
+                            lk.replaceWith(st);
+                        } catch (e) { }
+                    }
+                    for (const st of [...doc.querySelectorAll('style')]) {
+                        try { st.textContent = await mqInlineCssUrls(st.textContent, absUrl); } catch (e) { }
+                    }
+                    return '<!DOCTYPE html>' + doc.documentElement.outerHTML;
+                }
+
                 btnGen.addEventListener('click', async () => {
 
                     const exportRuntime = await mqLoadExportRuntime();
@@ -7803,6 +7867,22 @@
                         return;
                     }
 
+                    // === Embarquer le contenu de chaque iframe (hors-ligne) ===
+                    const mqIframeInline = {};
+                    {
+                        const frames = (state.boxes || []).filter(b => b.kind === 'iframe' && b.src);
+                        for (const fb of frames) {
+                            let absUrl = fb.src;
+                            try { absUrl = new URL(fb.src, document.baseURI).href; } catch (e) { }
+                            try {
+                                mqIframeInline[fb.id] = await mqInlineIframeDoc(absUrl);
+                            } catch (e) {
+                                console.warn('Iframe non embarquee (lien externe) :', absUrl, e);
+                                mqIframeInline[fb.id] = null;
+                            }
+                        }
+                    }
+
                     // Chemin relatif pour iframe Moodle (// = même protocole que la page : HTTP ou HTTPS)
                     const genFileName = (prefix || 'exercice').replace(/[^\w\u00C0-\u024F.-]+/gi, '_') + '.html';
                     const moodleIframeSrc = `//VOTRE-DOMAINE/chemin/vers/${genFileName}`;
@@ -7923,7 +8003,7 @@
                             const isrc = iabs.replace(/"/g, '&quot;');
                             html += `
                 <div class="iframe-wrapper" style="position:absolute; top:${itop}%; left:${ileft}%; width:${iw}%; height:${ih}%; z-index:8;">
-                    <iframe src="${isrc}" style="width:100%; height:100%; border:0; display:block;" scrolling="${b.iframeScroll ? 'yes' : 'no'}" allowfullscreen></iframe>
+                    ${mqIframeInline[b.id] ? `<iframe srcdoc="${mqIframeInline[b.id].replace(/&/g, '&amp;').replace(/"/g, '&quot;')}"` : `<iframe src="${isrc}"`} style="width:100%; height:100%; border:0; display:block;" scrolling="${b.iframeScroll ? 'yes' : 'no'}" allowfullscreen></iframe>
                 </div>`;
                             return;
                         }
@@ -8209,7 +8289,7 @@
                             const isrc = iabs.replace(/"/g, '&quot;');
                             html += `
                 <div class="iframe-wrapper" style="position:absolute; top:${itop}%; left:${ileft}%; width:${iw}%; height:${ih}%; z-index:8;">
-                    <iframe src="${isrc}" style="width:100%; height:100%; border:0; display:block;" scrolling="${b.iframeScroll ? 'yes' : 'no'}" allowfullscreen></iframe>
+                    ${mqIframeInline[b.id] ? `<iframe srcdoc="${mqIframeInline[b.id].replace(/&/g, '&amp;').replace(/"/g, '&quot;')}"` : `<iframe src="${isrc}"`} style="width:100%; height:100%; border:0; display:block;" scrolling="${b.iframeScroll ? 'yes' : 'no'}" allowfullscreen></iframe>
                 </div>`;
                             return;
                         }
