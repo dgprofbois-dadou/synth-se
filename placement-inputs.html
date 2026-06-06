@@ -2479,6 +2479,8 @@
                 selectedVertex: null,
                 draggingVertex: null,
                 insertionData: null,
+                hsTransform: null,   // { hsId } quand le mode Transform (poignées) est actif
+                draggingScale: null, // état du redimensionnement en cours via une poignée
 
                 // Configuration des jeux DnD
                 dndGames: {
@@ -4473,6 +4475,39 @@
             });
 
             viewport.addEventListener('pointermove', (e) => {
+                // 0. REDIMENSIONNEMENT VIA POIGNÉE (mode Transform)
+                if (state.draggingScale && state.mode === 'admin') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const ds = state.draggingScale;
+                    const h = state.hotspots.find(x => x.id === ds.hsId);
+                    if (h) {
+                        const loc = stageToLocal(e.clientX, e.clientY);
+                        const MIN = 0.05;
+                        let sx = 1, sy = 1;
+                        if (ds.axis === 'x') {
+                            const d = (ds.origCx - ds.anchorX) || 1e-6;
+                            sx = (loc.x - ds.anchorX) / d;
+                        } else if (ds.axis === 'y') {
+                            const d = (ds.origCy - ds.anchorY) || 1e-6;
+                            sy = (loc.y - ds.anchorY) / d;
+                        } else { // proportionnel : projection de la souris sur la diagonale ancre→coin
+                            const vx = ds.origCx - ds.anchorX, vy = ds.origCy - ds.anchorY;
+                            const d = (vx * vx + vy * vy) || 1e-6;
+                            const s = ((loc.x - ds.anchorX) * vx + (loc.y - ds.anchorY) * vy) / d;
+                            sx = s; sy = s;
+                        }
+                        if (!isFinite(sx) || sx < MIN) sx = MIN;
+                        if (!isFinite(sy) || sy < MIN) sy = MIN;
+                        h.points = ds.origPts.map(([px, py]) => [
+                            Math.round(ds.anchorX + (px - ds.anchorX) * sx),
+                            Math.round(ds.anchorY + (py - ds.anchorY) * sy)
+                        ]);
+                        render();
+                    }
+                    return;
+                }
+
                 // 1. GESTION DRAG VERTEX (Déplacement d'un point existant)
                 if (state.draggingVertex && state.mode === 'admin') {
                     e.preventDefault();
@@ -4491,7 +4526,7 @@
                 const oldInsert = state.insertionData;
                 state.insertionData = null;
 
-                if (state.mode === 'admin' && state.selectedHotspotId && !panning && !state.draggingVertex) {
+                if (state.mode === 'admin' && state.selectedHotspotId && !panning && !state.draggingVertex && !state.hsTransform) {
                     const h = state.hotspots.find(x => x.id === state.selectedHotspotId);
                     if (h) {
                         const { x, y } = stageToLocal(e.clientX, e.clientY);
@@ -4559,6 +4594,12 @@
                 applyTransform();
             });
             viewport.addEventListener('pointerup', () => {
+                if (state.draggingScale) {
+                    state.draggingScale = null;
+                    saveLocal();
+                    if (state.selectedHotspotId) syncHotspotUI();
+                    render();
+                }
                 if (state.draggingVertex) {
                     state.draggingVertex = null;
                     saveLocal(); // Save position after drag
@@ -4566,7 +4607,7 @@
                 if (!panning) return;
                 panning = false;
             });
-            viewport.addEventListener('pointercancel', () => { panning = false; state.draggingVertex = null; });
+            viewport.addEventListener('pointercancel', () => { panning = false; state.draggingVertex = null; state.draggingScale = null; });
 
 
             const hsTimers = new Map(); // id -> timer
@@ -5201,6 +5242,7 @@
                             e.stopPropagation();
                             state.selectedId = null;
                             state.selectedHotspotId = h.id;
+                            if (state.hsTransform && state.hsTransform.hsId !== h.id) state.hsTransform = null;
                             syncHotspotUI();
 
                             // Déplacement polygone (Ctrl + Drag)
@@ -5229,8 +5271,12 @@
                         });
                     }
 
-                    // Handles (Poignées points)
-                    if (state.mode === 'admin' && h.id === state.selectedHotspotId) {
+                    // Boîte de transformation (Ctrl+T / T) : poignées de redimensionnement
+                    if (state.mode === 'admin' && h.id === state.selectedHotspotId && state.hsTransform && state.hsTransform.hsId === h.id) {
+                        mqDrawTransformHandles(h);
+                    }
+                    // Handles (Poignées points) — masquées en mode Transform
+                    if (state.mode === 'admin' && h.id === state.selectedHotspotId && !(state.hsTransform && state.hsTransform.hsId === h.id)) {
                         h.points.forEach((pt, idx) => {
                             const handle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
                             handle.classList.add('vertex-handle');
@@ -5256,7 +5302,7 @@
                     }
 
                     // Point fantôme insertion
-                    if (state.mode === 'admin' && state.insertionData && state.selectedHotspotId === state.insertionData.hsId) {
+                    if (state.mode === 'admin' && !state.hsTransform && state.insertionData && state.selectedHotspotId === state.insertionData.hsId) {
                         const ghost = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
                         ghost.setAttribute('cx', state.insertionData.point[0]);
                         ghost.setAttribute('cy', state.insertionData.point[1]);
@@ -5268,6 +5314,73 @@
                         svg.appendChild(ghost);
                     }
                 }
+            }
+
+            // Boîte englobante d'un hotspot (coords stage)
+            function mqHotspotBBox(h) {
+                const pts = h.points || [];
+                if (!pts.length) return null;
+                let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+                pts.forEach(([x, y]) => {
+                    if (x < minX) minX = x; if (x > maxX) maxX = x;
+                    if (y < minY) minY = y; if (y > maxY) maxY = y;
+                });
+                return { minX, minY, maxX, maxY, w: maxX - minX, h: maxY - minY };
+            }
+
+            // Dessine la boîte de transformation + 8 poignées (4 coins + 4 milieux de côté)
+            function mqDrawTransformHandles(h) {
+                const bb = mqHotspotBBox(h);
+                if (!bb) return;
+                const NS = 'http://www.w3.org/2000/svg';
+                const cx = (bb.minX + bb.maxX) / 2, cy = (bb.minY + bb.maxY) / 2;
+                const hs = Math.max(8, Math.min(bb.w, bb.h) * 0.06); // demi-taille des poignées, proportionnelle
+                const sw = Math.max(2, hs * 0.25);
+
+                // Rectangle englobant (pointillés)
+                const rect = document.createElementNS(NS, 'rect');
+                rect.setAttribute('x', bb.minX); rect.setAttribute('y', bb.minY);
+                rect.setAttribute('width', bb.w); rect.setAttribute('height', bb.h);
+                rect.setAttribute('fill', 'none');
+                rect.setAttribute('stroke', '#2d8cff');
+                rect.setAttribute('stroke-width', sw);
+                rect.setAttribute('stroke-dasharray', (hs) + ' ' + (hs * 0.6));
+                rect.style.pointerEvents = 'none';
+                svg.appendChild(rect);
+
+                // axis: 'xy' (proportionnel), 'x' (largeur), 'y' (hauteur)
+                const handles = [
+                    { key: 'nw', x: bb.minX, y: bb.minY, axis: 'xy', ax: bb.maxX, ay: bb.maxY, cur: 'nwse-resize' },
+                    { key: 'n', x: cx, y: bb.minY, axis: 'y', ax: cx, ay: bb.maxY, cur: 'ns-resize' },
+                    { key: 'ne', x: bb.maxX, y: bb.minY, axis: 'xy', ax: bb.minX, ay: bb.maxY, cur: 'nesw-resize' },
+                    { key: 'e', x: bb.maxX, y: cy, axis: 'x', ax: bb.minX, ay: cy, cur: 'ew-resize' },
+                    { key: 'se', x: bb.maxX, y: bb.maxY, axis: 'xy', ax: bb.minX, ay: bb.minY, cur: 'nwse-resize' },
+                    { key: 's', x: cx, y: bb.maxY, axis: 'y', ax: cx, ay: bb.minY, cur: 'ns-resize' },
+                    { key: 'sw', x: bb.minX, y: bb.maxY, axis: 'xy', ax: bb.maxX, ay: bb.minY, cur: 'nesw-resize' },
+                    { key: 'w', x: bb.minX, y: cy, axis: 'x', ax: bb.maxX, ay: cy, cur: 'ew-resize' }
+                ];
+
+                handles.forEach((hd) => {
+                    const r = document.createElementNS(NS, 'rect');
+                    r.setAttribute('x', hd.x - hs); r.setAttribute('y', hd.y - hs);
+                    r.setAttribute('width', hs * 2); r.setAttribute('height', hs * 2);
+                    r.setAttribute('fill', hd.axis === 'xy' ? '#2d8cff' : '#ffffff');
+                    r.setAttribute('stroke', hd.axis === 'xy' ? '#ffffff' : '#2d8cff');
+                    r.setAttribute('stroke-width', sw);
+                    r.style.cursor = hd.cur;
+                    r.style.pointerEvents = 'all';
+                    r.addEventListener('pointerdown', (e) => {
+                        e.preventDefault(); e.stopPropagation();
+                        state.draggingScale = {
+                            hsId: h.id,
+                            axis: hd.axis,
+                            anchorX: hd.ax, anchorY: hd.ay,
+                            origCx: hd.x, origCy: hd.y,
+                            origPts: (h.points || []).map((p) => [p[0], p[1]])
+                        };
+                    });
+                    svg.appendChild(r);
+                });
             }
 
             function syncHotspotUI() {
@@ -5999,8 +6112,30 @@
                     return;
                 }
 
+                // 0. TRANSFORM (Ctrl+T ou T) : poignées de redimensionnement du hotspot sélectionné
+                if ((e.key === 't' || e.key === 'T') && state.mode === 'admin') {
+                    if (state.selectedHotspotId) {
+                        e.preventDefault();
+                        state.hsTransform = (state.hsTransform && state.hsTransform.hsId === state.selectedHotspotId)
+                            ? null : { hsId: state.selectedHotspotId };
+                        if (typeof mqHsBanner === 'function') {
+                            mqHsBanner(state.hsTransform
+                                ? '↔️ Transform : coins = proportionnel · côtés = largeur/hauteur · Échap pour quitter'
+                                : '');
+                        }
+                        render();
+                    }
+                    return;
+                }
+
                 // 1. Touche ÉCHAP : Annulation
                 if (e.key === 'Escape') {
+                    if (state.hsTransform) {
+                        state.hsTransform = null;
+                        if (typeof mqHsBanner === 'function') mqHsBanner('');
+                        render();
+                        return;
+                    }
                     if (drawingHotspot && state.hotspotDraft) {
                         state.hotspotDraft.pop();
                         if (state.hotspotDraft.length === 0) {
