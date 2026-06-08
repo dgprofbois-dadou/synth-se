@@ -8208,10 +8208,9 @@
                             let filter = (h.shadowX || h.shadowBlur) ? `filter:drop-shadow(${h.shadowX}px ${h.shadowY}px ${h.shadowBlur}px ${h.shadowColor});` : '';
                             const alphaIdle = (h.alphaIdle !== undefined) ? h.alphaIdle : 0.5;
                             const alphaActive = (h.alphaActive !== undefined) ? h.alphaActive : 0.35;
-                            html += `<g class="hotspot-group" data-tooltip="${safeTip}" data-alpha-idle="${alphaIdle}" data-alpha-active="${alphaActive}" data-group="${group}" style="pointer-events:auto; mix-blend-mode:${h.blendMode || 'multiply'}">
-                            <rect data-alpha-idle="${alphaIdle}" data-alpha-active="${alphaActive}" width="0" height="0" style="display:none; pointer-events:none;"></rect>
+                            html += `<g class="hotspot-group" data-tooltip="${safeTip}" data-alpha-active="${alphaActive}" data-group="${group}" style="pointer-events:auto; mix-blend-mode:${h.blendMode || 'multiply'}">
                             <polygon class="hs-fill" points="${pts}" style="fill:${h.fill}; stroke:none; fill-opacity:${alphaIdle};"></polygon>
-                            <polygon class="hs-stroke" points="${pts}" style="fill:none; stroke:${h.stroke}; stroke-width:${h.strokeW}; stroke-opacity:${alphaIdle}; mix-blend-mode:normal; ${filter}"></polygon>
+                            <polygon class="hs-stroke" points="${pts}" style="fill:none; stroke:${h.stroke}; stroke-width:${h.strokeW}; stroke-opacity:0; mix-blend-mode:normal; ${filter}"></polygon>
                         </g>`;
                         });
                     html += `</svg>`;
@@ -8380,10 +8379,9 @@
                             let filter = (h.shadowX || h.shadowBlur) ? `filter:drop-shadow(${h.shadowX}px ${h.shadowY}px ${h.shadowBlur}px ${h.shadowColor});` : '';
                             const alphaIdle = (h.alphaIdle !== undefined) ? h.alphaIdle : 0.5;
                             const alphaActive = (h.alphaActive !== undefined) ? h.alphaActive : 0.35;
-                            html += `<g class="hotspot-group" data-tooltip="${safeTip}" data-alpha-idle="${alphaIdle}" data-alpha-active="${alphaActive}" data-group="${group}" style="pointer-events:auto; mix-blend-mode:${h.blendMode || 'multiply'}">
-                            <rect data-alpha-idle="${alphaIdle}" data-alpha-active="${alphaActive}" width="0" height="0" style="display:none; pointer-events:none;"></rect>
+                            html += `<g class="hotspot-group" data-tooltip="${safeTip}" data-alpha-active="${alphaActive}" data-group="${group}" style="pointer-events:auto; mix-blend-mode:${h.blendMode || 'multiply'}">
                             <polygon class="hs-fill" points="${pts}" style="fill:${h.fill}; stroke:none; fill-opacity:${alphaIdle};"></polygon>
-                            <polygon class="hs-stroke" points="${pts}" style="fill:none; stroke:${h.stroke}; stroke-width:${h.strokeW}; stroke-opacity:${alphaIdle}; mix-blend-mode:normal; ${filter}"></polygon>
+                            <polygon class="hs-stroke" points="${pts}" style="fill:none; stroke:${h.stroke}; stroke-width:${h.strokeW}; stroke-opacity:0; mix-blend-mode:normal; ${filter}"></polygon>
                         </g>`;
                         });
                     html += `</svg>`;
