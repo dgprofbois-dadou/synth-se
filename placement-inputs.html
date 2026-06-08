@@ -2321,9 +2321,6 @@
 
     <script src="mq-export-runtime.js"></script>
     <script>
-        // Plafond technique du nombre de jeux DnD. Déclaré au niveau du script (hors des IIFE)
-        // pour être visible par TOUTES les IIFE de ce <script>.
-        const MQ_MAX_GAMES = 20;
         (() => {
             const $ = (id) => document.getElementById(id);
 
@@ -6054,6 +6051,7 @@
                 return JSON.parse(JSON.stringify(value));
             }
 
+            const MQ_MAX_GAMES = 20;
             function mqGameNum(gameId) {
                 const m = /(\d+)/.exec(String(gameId || ''));
                 return m ? parseInt(m[1], 10) : 1;
@@ -7562,10 +7560,7 @@
 
             function loadDndGamesUI() {
                 state.dndGames = normalizeDndGames(state.dndGames);
-                if (typeof mqEnsureDndGamePanels === 'function') mqEnsureDndGamePanels();
                 mqGameIds().forEach(gid => mqLoadOneDndGameToForm(gid, state.dndGames[gid]));
-                if (typeof mqUpdateAddRemoveButtons === 'function') mqUpdateAddRemoveButtons();
-                if (typeof window.mqEnhanceDndPanels === 'function') window.mqEnhanceDndPanels();
                 if (state.mode === 'admin') renderDndGamesPreview();
             }
 
@@ -9333,121 +9328,6 @@
 
 
 
-            // === Jeux DnD dynamiques (nombre illimité, plafonné à MQ_MAX_GAMES) ===
-            function mqBuildGamePanelHTML(n) {
-                const bg = (n % 2 === 1) ? '#f0f8ff' : '#f0fff0';
-                const bd = (n % 2 === 1) ? '#4a90e2' : '#4ade80';
-                return ''
-                    + '<div data-mq-dnd-panel="' + n + '" style="background:' + bg + '; padding:10px; border-radius:8px; margin-bottom:15px; border:2px solid ' + bd + ';">'
-                    + '<div class="row"><label style="font-weight:bold;">Game ' + n + ' (Page 1)</label>'
-                    + '<input type="checkbox" id="dndGame' + n + 'Enabled" style="width:auto;"></div>'
-                    + '<div class="row"><label>Titre</label>'
-                    + '<input id="dndGame' + n + 'Title" type="text" placeholder="Titre du jeu"></div>'
-                    + '<div class="row"><label>Bonnes réponses (IDs)</label>'
-                    + '<input id="dndGame' + n + 'GoodIds" type="text" placeholder="Ex: 1,2,3"></div>'
-                    + '<div class="row"><label>Nombre de zones</label>'
-                    + '<input id="dndGame' + n + 'TargetCount" type="number" min="1" max="10" value="4"></div>'
-                    + '<div class="row"><label style="font-size:11px;">Zones (L x H | Gap)</label>'
-                    + '<div style="display:flex; gap:3px; align-items:center;">'
-                    + '<input id="dndGame' + n + 'ZoneWidth" type="number" value="250" style="width:35px; font-size:11px; padding:2px;" placeholder="L" title="Largeur">'
-                    + '<span style="font-size:10px;">x</span>'
-                    + '<input id="dndGame' + n + 'ZoneHeight" type="number" value="250" style="width:35px; font-size:11px; padding:2px;" placeholder="H" title="Hauteur">'
-                    + '<span style="font-size:10px; color:#999;">|</span>'
-                    + '<input id="dndGame' + n + 'ZoneGap" type="number" value="10" style="width:35px; font-size:11px; padding:2px;" placeholder="Gap" title="Espacement"></div></div>'
-                    + '<div class="row" style="margin-top:4px; padding-top:4px; border-top:1px dashed #eee;">'
-                    + '<label style="font-size:11px; width:100%;">Tooltips (Police/Durée/Fond/Txt)</label>'
-                    + '<div style="display:flex; flex-wrap:wrap; gap:4px; align-items:center;">'
-                    + '<select id="dndGame' + n + 'TooltipFont" style="width:75px; font-size:10px; height:20px;">'
-                    + '<option value="Arial, sans-serif">Arial</option>'
-                    + '<option value="\'OpenDyslexic\', sans-serif" selected>Dyslexic</option>'
-                    + '<option value="\'Comic Sans MS\', sans-serif">Comic</option>'
-                    + '<option value="Verdana, sans-serif">Verdana</option></select>'
-                    + '<input id="dndGame' + n + 'TooltipDuration" type="number" value="3000" style="width:40px; font-size:10px; height:20px;" title="Durée (ms)" placeholder="ms">'
-                    + '<input id="dndGame' + n + 'TooltipBgColor" type="color" value="#333333" style="width:20px; height:20px; padding:0; border:none; cursor:pointer;" title="Couleur de fond">'
-                    + '<input id="dndGame' + n + 'TooltipTextColor" type="color" value="#ffffff" style="width:20px; height:20px; padding:0; border:none; cursor:pointer;" title="Couleur du texte"></div></div>'
-                    + '<div class="row" style="margin-top:4px; padding-top:4px; border-top:1px dashed #eee;">'
-                    + '<label style="font-size:11px; width:100%;">Bande Titre (L x H | Police | Taille)</label>'
-                    + '<div style="display:flex; flex-wrap:wrap; gap:4px; align-items:center;">'
-                    + '<input id="dndGame' + n + 'HeaderWidth" type="number" value="600" style="width:45px; font-size:10px; height:20px;" title="Largeur" placeholder="L">'
-                    + '<span style="font-size:10px;">x</span>'
-                    + '<input id="dndGame' + n + 'HeaderHeight" type="number" value="80" style="width:40px; font-size:10px; height:20px;" title="Hauteur" placeholder="H">'
-                    + '<select id="dndGame' + n + 'HeaderFont" style="width:75px; font-size:10px; height:20px;" title="Police du titre">'
-                    + '<option value="Arial, sans-serif">Arial</option>'
-                    + '<option value="\'OpenDyslexic\', sans-serif">Dyslexic</option>'
-                    + '<option value="\'Comic Sans MS\', sans-serif">Comic</option>'
-                    + '<option value="Verdana, sans-serif" selected>Verdana</option></select>'
-                    + '<input id="dndGame' + n + 'HeaderFontSize" type="number" value="60" min="10" max="200" style="width:35px; font-size:10px; height:20px;" title="Taille police (px)" placeholder="px">'
-                    + '<label style="font-size:11px; font-weight:bold;" title="Gras"><input type="checkbox" id="dndGame' + n + 'HeaderBold"> G</label>'
-                    + '<label style="font-size:11px; font-style:italic;" title="Italique"><input type="checkbox" id="dndGame' + n + 'HeaderItalic"> I</label>'
-                    + '<select id="dndGame' + n + 'HeaderAlign" style="width:70px; font-size:10px; height:20px;" title="Alignement du titre">'
-                    + '<option value="left">Gauche</option>'
-                    + '<option value="center" selected>Centre</option>'
-                    + '<option value="right">Droite</option></select></div></div>'
-                    + '<div style="margin-top:10px;">'
-                    + '<label style="font-size:12px; font-weight:bold; display:block; margin-bottom:5px;">Images draggables:</label>'
-                    + '<div id="dndGame' + n + 'DraggablesList" style="max-height:150px; overflow-y:auto; background:#fff; padding:5px; border-radius:4px; border:1px solid #ddd; margin-bottom:5px;">'
-                    + '<div style="font-size:11px; color:#999; text-align:center; padding:10px;">Aucune image ajoutée</div></div>'
-                    + '<button id="btnAddDraggableGame' + n + '" type="button" style="width:100%; font-size:12px;">+ Ajouter image</button>'
-                    + '<button id="btnAddTextGame' + n + '" type="button" style="width:100%; font-size:12px; margin-top:4px;">🔤 + Étiquette texte</button>'
-                    + '<label style="font-size:12px; font-weight:bold; display:block; margin:8px 0 5px;">Images fixes (décor) :</label>'
-                    + '<div id="dndGame' + n + 'DecorList" style="max-height:150px; overflow-y:auto; background:#fff; padding:5px; border-radius:4px; border:1px solid #ddd; margin-bottom:5px;"></div>'
-                    + '<button id="btnAddDecorGame' + n + '" type="button" style="width:100%; font-size:12px;">🖼️ + Image fixe</button>'
-                    + '</div></div>';
-            }
-
-            function mqEnsureDndGamePanels() {
-                const host = $('dndGamesExtra');
-                if (!host) return;
-                const count = mqGameIds().length;
-                for (let n = 3; n <= count; n++) {
-                    if (!$('dndGame' + n + 'Enabled')) host.insertAdjacentHTML('beforeend', mqBuildGamePanelHTML(n));
-                }
-            }
-            function mqUpdateAddRemoveButtons() {
-                const count = mqGameIds().length;
-                const rm = $('btnRemoveDndGame'); if (rm) rm.style.display = (count > 2) ? '' : 'none';
-                const add = $('btnAddDndGame'); if (add) add.disabled = (count >= MQ_MAX_GAMES);
-            }
-            function addDndGame() {
-                if (typeof syncDndGamesFromUI === 'function') syncDndGamesFromUI();
-                if (!state.dndGames) state.dndGames = normalizeDndGames(null);
-                const count = mqGameIds().length;
-                if (count >= MQ_MAX_GAMES) { if (window.mqToast) mqToast('Nombre maximum de jeux atteint (' + MQ_MAX_GAMES + ')', { warn: true }); return; }
-                const n = count + 1;
-                const gid = 'game' + n;
-                const tpl = mqDefaultDndGamesTemplate();
-                state.dndGames[gid] = normalizeDndGame(undefined, tpl[gid] || tpl.game2);
-                state.dndGames[gid].enabled = true;
-                state.dndGames[gid].title = 'Jeu ' + n;
-                if (!state.dndGames.dndResults) state.dndGames.dndResults = {};
-                state.dndGames.dndResults[gid] = 0;
-                mqEnsureDndGamePanels();
-                loadDndGamesUI();
-                if (typeof window.mqEnhanceDndPanels === 'function') window.mqEnhanceDndPanels();
-                mqUpdateAddRemoveButtons();
-                try { renderDndGamesPreview(); } catch (e) { }
-                if (typeof saveDndGamesFromUI === 'function') saveDndGamesFromUI();
-                if (window.mqToast) mqToast('Jeu ' + n + ' ajouté');
-            }
-            function removeLastDndGame() {
-                const count = mqGameIds().length;
-                if (count <= 2) return;
-                const n = count;
-                const gid = 'game' + n;
-                if (!confirm('Retirer le jeu ' + n + ' ? Son contenu sera définitivement supprimé.')) return;
-                const chk = $('dndGame' + n + 'Enabled');
-                const panel = chk && chk.closest('[data-mq-dnd-panel]');
-                if (panel) panel.remove();
-                if (state.dndGames) { delete state.dndGames[gid]; if (state.dndGames.dndResults) delete state.dndGames.dndResults[gid]; }
-                mqUpdateAddRemoveButtons();
-                try { renderDndGamesPreview(); } catch (e) { }
-                if (typeof saveDndGamesFromUI === 'function') saveDndGamesFromUI();
-                if (window.mqToast) mqToast('Jeu ' + n + ' retiré');
-            }
-            // Génère les panneaux des jeux existants (3..N) puis remplit les champs, avant l'init de mqUiInit
-            mqEnsureDndGamePanels();
-            loadDndGamesUI();
-            mqUpdateAddRemoveButtons();
         })();
     </script>
     <script id="mq-ui-init">
@@ -9537,15 +9417,145 @@
                 row.replaceChildren(subLab, toolbar);
             }
 
+            // === Jeux DnD dynamiques (nombre illimité, plafonné à MQ_MAX_GAMES) ===
+            function mqBuildGamePanelHTML(n) {
+                const bg = (n % 2 === 1) ? '#f0f8ff' : '#f0fff0';
+                const bd = (n % 2 === 1) ? '#4a90e2' : '#4ade80';
+                return ''
+                    + '<div data-mq-dnd-panel="' + n + '" style="display:none; background:' + bg + '; padding:10px; border-radius:8px; margin-bottom:15px; border:2px solid ' + bd + ';">'
+                    + '<div class="row"><label style="font-weight:bold;">Game ' + n + ' (Page 1)</label>'
+                    + '<input type="checkbox" id="dndGame' + n + 'Enabled" style="width:auto;"></div>'
+                    + '<div class="row"><label>Titre</label>'
+                    + '<input id="dndGame' + n + 'Title" type="text" placeholder="Titre du jeu"></div>'
+                    + '<div class="row"><label>Bonnes réponses (IDs)</label>'
+                    + '<input id="dndGame' + n + 'GoodIds" type="text" placeholder="Ex: 1,2,3"></div>'
+                    + '<div class="row"><label>Nombre de zones</label>'
+                    + '<input id="dndGame' + n + 'TargetCount" type="number" min="1" max="10" value="4"></div>'
+                    + '<div class="row"><label style="font-size:11px;">Zones (L x H | Gap)</label>'
+                    + '<div style="display:flex; gap:3px; align-items:center;">'
+                    + '<input id="dndGame' + n + 'ZoneWidth" type="number" value="250" style="width:35px; font-size:11px; padding:2px;" placeholder="L" title="Largeur">'
+                    + '<span style="font-size:10px;">x</span>'
+                    + '<input id="dndGame' + n + 'ZoneHeight" type="number" value="250" style="width:35px; font-size:11px; padding:2px;" placeholder="H" title="Hauteur">'
+                    + '<span style="font-size:10px; color:#999;">|</span>'
+                    + '<input id="dndGame' + n + 'ZoneGap" type="number" value="10" style="width:35px; font-size:11px; padding:2px;" placeholder="Gap" title="Espacement"></div></div>'
+                    + '<div class="row" style="margin-top:4px; padding-top:4px; border-top:1px dashed #eee;">'
+                    + '<label style="font-size:11px; width:100%;">Tooltips (Police/Durée/Fond/Txt)</label>'
+                    + '<div style="display:flex; flex-wrap:wrap; gap:4px; align-items:center;">'
+                    + '<select id="dndGame' + n + 'TooltipFont" style="width:75px; font-size:10px; height:20px;">'
+                    + '<option value="Arial, sans-serif">Arial</option>'
+                    + '<option value="\'OpenDyslexic\', sans-serif" selected>Dyslexic</option>'
+                    + '<option value="\'Comic Sans MS\', sans-serif">Comic</option>'
+                    + '<option value="Verdana, sans-serif">Verdana</option></select>'
+                    + '<input id="dndGame' + n + 'TooltipDuration" type="number" value="3000" style="width:40px; font-size:10px; height:20px;" title="Durée (ms)" placeholder="ms">'
+                    + '<input id="dndGame' + n + 'TooltipBgColor" type="color" value="#333333" style="width:20px; height:20px; padding:0; border:none; cursor:pointer;" title="Couleur de fond">'
+                    + '<input id="dndGame' + n + 'TooltipTextColor" type="color" value="#ffffff" style="width:20px; height:20px; padding:0; border:none; cursor:pointer;" title="Couleur du texte"></div></div>'
+                    + '<div class="row" style="margin-top:4px; padding-top:4px; border-top:1px dashed #eee;">'
+                    + '<label style="font-size:11px; width:100%;">Bande Titre (L x H | Police | Taille)</label>'
+                    + '<div style="display:flex; flex-wrap:wrap; gap:4px; align-items:center;">'
+                    + '<input id="dndGame' + n + 'HeaderWidth" type="number" value="600" style="width:45px; font-size:10px; height:20px;" title="Largeur" placeholder="L">'
+                    + '<span style="font-size:10px;">x</span>'
+                    + '<input id="dndGame' + n + 'HeaderHeight" type="number" value="80" style="width:40px; font-size:10px; height:20px;" title="Hauteur" placeholder="H">'
+                    + '<select id="dndGame' + n + 'HeaderFont" style="width:75px; font-size:10px; height:20px;" title="Police du titre">'
+                    + '<option value="Arial, sans-serif">Arial</option>'
+                    + '<option value="\'OpenDyslexic\', sans-serif">Dyslexic</option>'
+                    + '<option value="\'Comic Sans MS\', sans-serif">Comic</option>'
+                    + '<option value="Verdana, sans-serif" selected>Verdana</option></select>'
+                    + '<input id="dndGame' + n + 'HeaderFontSize" type="number" value="60" min="10" max="200" style="width:35px; font-size:10px; height:20px;" title="Taille police (px)" placeholder="px">'
+                    + '<label style="font-size:11px; font-weight:bold;" title="Gras"><input type="checkbox" id="dndGame' + n + 'HeaderBold"> G</label>'
+                    + '<label style="font-size:11px; font-style:italic;" title="Italique"><input type="checkbox" id="dndGame' + n + 'HeaderItalic"> I</label>'
+                    + '<select id="dndGame' + n + 'HeaderAlign" style="width:70px; font-size:10px; height:20px;" title="Alignement du titre">'
+                    + '<option value="left">Gauche</option>'
+                    + '<option value="center" selected>Centre</option>'
+                    + '<option value="right">Droite</option></select></div></div>'
+                    + '<div style="margin-top:10px;">'
+                    + '<label style="font-size:12px; font-weight:bold; display:block; margin-bottom:5px;">Images draggables:</label>'
+                    + '<div id="dndGame' + n + 'DraggablesList" style="max-height:150px; overflow-y:auto; background:#fff; padding:5px; border-radius:4px; border:1px solid #ddd; margin-bottom:5px;">'
+                    + '<div style="font-size:11px; color:#999; text-align:center; padding:10px;">Aucune image ajoutée</div></div>'
+                    + '<button id="btnAddDraggableGame' + n + '" type="button" style="width:100%; font-size:12px;">+ Ajouter image</button>'
+                    + '<button id="btnAddTextGame' + n + '" type="button" style="width:100%; font-size:12px; margin-top:4px;">🔤 + Étiquette texte</button>'
+                    + '<label style="font-size:12px; font-weight:bold; display:block; margin:8px 0 5px;">Images fixes (décor) :</label>'
+                    + '<div id="dndGame' + n + 'DecorList" style="max-height:150px; overflow-y:auto; background:#fff; padding:5px; border-radius:4px; border:1px solid #ddd; margin-bottom:5px;"></div>'
+                    + '<button id="btnAddDecorGame' + n + '" type="button" style="width:100%; font-size:12px;">🖼️ + Image fixe</button>'
+                    + '</div></div>';
+            }
+
+            function mqEnsureDndGamePanels() {
+                const host = $('dndGamesExtra');
+                if (!host) return;
+                for (let n = 3; n <= MQ_MAX_GAMES; n++) {
+                    if (!document.getElementById('dndGame' + n + 'Enabled')) {
+                        host.insertAdjacentHTML('beforeend', mqBuildGamePanelHTML(n));
+                    }
+                }
+            }
+
+            function mqDndCardEl(n) {
+                const chk = $('dndGame' + n + 'Enabled');
+                if (!chk) return null;
+                return chk.closest('[data-mq-dnd-panel]') || chk.closest('.mq-dnd-card');
+            }
+
+            function mqUpdateDndPanelVisibility() {
+                const count = mqGameIds().length;
+                for (let n = 3; n <= MQ_MAX_GAMES; n++) {
+                    const card = mqDndCardEl(n);
+                    if (card) card.style.display = (n <= count) ? '' : 'none';
+                }
+                const rm = $('btnRemoveDndGame');
+                if (rm) rm.style.display = (count > 2) ? '' : 'none';
+                const add = $('btnAddDndGame');
+                if (add) add.disabled = (count >= MQ_MAX_GAMES);
+            }
+
+            function addDndGame() {
+                if (typeof syncDndGamesFromUI === 'function') syncDndGamesFromUI();
+                if (!state.dndGames) state.dndGames = normalizeDndGames(null);
+                const count = mqGameIds().length;
+                if (count >= MQ_MAX_GAMES) {
+                    if (window.mqToast) mqToast('Nombre maximum de jeux atteint (' + MQ_MAX_GAMES + ')', { warn: true });
+                    return;
+                }
+                const n = count + 1;
+                const gid = 'game' + n;
+                const tpl = mqDefaultDndGamesTemplate();
+                state.dndGames[gid] = normalizeDndGame(undefined, tpl[gid] || tpl.game2);
+                state.dndGames[gid].enabled = true;
+                state.dndGames[gid].title = 'Jeu ' + n;
+                if (!state.dndGames.dndResults) state.dndGames.dndResults = {};
+                state.dndGames.dndResults[gid] = 0;
+                mqEnsureDndGamePanels();
+                loadDndGamesUI();
+                mqEnhanceDndPanels();
+                mqUpdateDndPanelVisibility();
+                try { renderDndGamesPreview(); } catch (e) { }
+                if (typeof saveDndGamesFromUI === 'function') saveDndGamesFromUI();
+                if (window.mqToast) mqToast('Jeu ' + n + ' ajouté');
+            }
+
+            function removeLastDndGame() {
+                const count = mqGameIds().length;
+                if (count <= 2) return;
+                const n = count;
+                const gid = 'game' + n;
+                if (!confirm('Retirer le jeu ' + n + ' ? Son contenu sera définitivement supprimé.')) return;
+                if (state.dndGames) {
+                    delete state.dndGames[gid];
+                    if (state.dndGames.dndResults) delete state.dndGames.dndResults[gid];
+                }
+                mqUpdateDndPanelVisibility();
+                try { renderDndGamesPreview(); } catch (e) { }
+                if (typeof saveDndGamesFromUI === 'function') saveDndGamesFromUI();
+                if (window.mqToast) mqToast('Jeu ' + n + ' retiré');
+            }
+
             function mqEnhanceDndPanels() {
                 const mqCardEmojis = ['🎯', '🧩', '🧠', '🎨', '⭐', '🚀', '🎲', '🔧', '📦', '🎵'];
-                for (let n = 1; n <= MQ_MAX_GAMES; n++) {
-                    const id = 'dndGame' + n + 'Enabled';
-                    const cls = (n % 2 === 1) ? 'mq-dnd-card--1' : 'mq-dnd-card--2';
-                    const emoji = mqCardEmojis[(n - 1) % mqCardEmojis.length];
-                    const title = 'Jeu ' + n + ' — Page 1';
+                mqGameIds().map((gid, idx) => {
+                    const n = idx + 1;
+                    return ['dndGame' + n + 'Enabled', (n % 2 === 1 ? 'mq-dnd-card--1' : 'mq-dnd-card--2'), mqCardEmojis[idx % mqCardEmojis.length], 'Jeu ' + n + ' — Page 1'];
+                }).forEach(([id, cls, emoji, title]) => {
                     const chk = $(id);
-                    if (!chk) continue;
+                    if (!chk) return;
                     let card = chk.closest('.mq-dnd-card');
                     if (!card) {
                         let el = chk.parentElement;
@@ -9557,7 +9567,7 @@
                             el = el.parentElement;
                         }
                     }
-                    if (!card || card.id === 'left') continue;
+                    if (!card || card.id === 'left') return;
                     card.classList.add('mq-dnd-card', cls);
                     card.style.cssText = '';
                     const firstRow = chk.closest('.row');
@@ -9605,16 +9615,14 @@
                             oldLab.style.display = 'none';
                         }
                     }
-                }
-                for (let n = 1; n <= MQ_MAX_GAMES; n++) {
-                    const p = 'dndGame' + n;
-                    if (!$(p + 'Enabled')) continue;
+                });
+                mqGameIds().forEach((gid, idx) => {
+                    const p = 'dndGame' + (idx + 1);
                     mqLayoutDndZoneRow(p);
                     mqLayoutDndToolbar(p + 'TooltipFont', '💬 Infobulles');
                     mqLayoutDndToolbar(p + 'HeaderWidth', '🏷️ Bandeau titre');
-                }
+                });
             }
-            window.mqEnhanceDndPanels = mqEnhanceDndPanels;
 
             function mqBuildInspectorTabs() {
                 const left = $('left');
@@ -10013,7 +10021,10 @@
             mqSyncModePill();
             mqRefreshMainGrid();
 
+            mqEnsureDndGamePanels();
             mqBuildInspectorTabs();
+            mqUpdateDndPanelVisibility();
+            loadDndGamesUI();
 
             const viewport = $('viewport');
             if (viewport) viewport.tabIndex = 0;
