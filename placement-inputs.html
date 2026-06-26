@@ -4786,78 +4786,44 @@
                     const gameConfig = state.dndGames[gameId];
                     if (!gameConfig || !gameConfig.enabled) return;
 
-                    // Créer le conteneur du jeu
+                    // Créer le conteneur du jeu (placement libre — identique à l'éditeur admin)
                     const gameEl = document.createElement('div');
                     gameEl.className = 'drag-game';
                     gameEl.id = `dnd-${gameId}`;
-                    gameEl.style.position = 'absolute';
-                    gameEl.style.left = (gameConfig.x || 100) + 'px';
-                    gameEl.style.top = (gameConfig.y || (100 + index * 500)) + 'px';
-                    gameEl.style.width = (gameConfig.width || 800) + 'px';
-                    gameEl.style.minHeight = (gameConfig.height || 400) + 'px';
-                    gameEl.style.background = gameConfig.bgColor || 'rgba(255, 255, 255, 0.95)';
-                    gameEl.style.borderRadius = '15px';
-                    gameEl.style.padding = '20px';
-                    gameEl.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
-                    gameEl.style.pointerEvents = 'auto';
+                    gameEl.style.cssText = `position:absolute; left:${gameConfig.x || 100}px; top:${(typeof gameConfig.y === 'number') ? gameConfig.y : (100 + index * 500)}px; width:${gameConfig.width || 800}px; height:${gameConfig.height || 400}px; padding:0; transform:none; background:transparent; box-shadow:none; border-radius:0; pointer-events:auto; overflow:visible;`;
 
-                    // Titre
+                    // Fond opaque (multiply, arrondi) comme l'admin
+                    const bgEl = document.createElement('div');
+                    bgEl.style.cssText = `position:absolute; inset:0; background:${gameConfig.bgColor || 'rgba(255,255,255,1)'}; border-radius:30px; box-shadow:0 4px 12px rgba(0,0,0,0.3); z-index:0; mix-blend-mode:multiply;`;
+                    gameEl.appendChild(bgEl);
+
+                    // Titre (placement libre via titleBox, comme l'admin)
+                    const tb = gameConfig.titleBox || { x: 10, y: 10, width: 600, height: 80 };
+                    const hdr = gameConfig.header || {};
                     const titleEl = document.createElement('div');
                     titleEl.className = 'carre_marron';
-                    titleEl.style.background = '#a58871';
-                    titleEl.style.padding = '15px';
-                    titleEl.style.borderRadius = '10px';
-                    titleEl.style.marginBottom = '15px';
-
-                    // Utiliser les propriétés header personnalisées
-                    const headerWidth = (gameConfig.header && gameConfig.header.width) || 2225;
-                    const headerHeight = (gameConfig.header && gameConfig.header.height) || 180;
-                    const headerFont = (gameConfig.header && gameConfig.header.font) || 'Verdana, sans-serif';
-                    const headerFontSize = (gameConfig.header && gameConfig.header.fontSize) || 60;
-
-                    titleEl.style.width = headerWidth + 'px';
-                    titleEl.style.height = headerHeight + 'px';
-                    titleEl.style.display = 'flex';
-                    titleEl.style.alignItems = 'center';
-                    titleEl.style.justifyContent = 'center';
-
-                    titleEl.innerHTML = `<h2 style="color: white; margin: 0; font-size: ${headerFontSize}px; font-family: ${headerFont}; text-shadow: 11px 9px 12px rgb(0 0 0);">${gameConfig.title || 'Jeu DnD'}</h2>`;
+                    titleEl.style.cssText = `position:absolute; left:${tb.x}px; top:${tb.y}px; width:${tb.width}px; height:${tb.height}px; display:flex; align-items:center; justify-content:center; box-sizing:border-box; z-index:2;`;
+                    titleEl.innerHTML = `<h2 style="margin:0; width:100%; color:white; font-family:${hdr.font || 'Verdana, sans-serif'}; font-size:${hdr.fontSize || 60}px; font-weight:${hdr.bold ? 'bold' : 'normal'}; font-style:${hdr.italic ? 'italic' : 'normal'}; text-align:${hdr.align || 'center'}; text-shadow:11px 9px 12px rgb(0 0 0);">${gameConfig.title || 'Jeu DnD'}</h2>`;
                     gameEl.appendChild(titleEl);
 
-                    // Zone source (images draggables)
+                    // Zone source (images draggables) — placement absolu (comme l'admin)
                     const sourceEl = document.createElement('div');
                     sourceEl.id = `source-${gameId}`;
-                    sourceEl.style.display = 'flex';
-                    sourceEl.style.flexWrap = 'wrap';
-                    sourceEl.style.gap = '10px';
-                    sourceEl.style.marginBottom = '15px';
-                    sourceEl.style.padding = '10px';
-                    sourceEl.style.borderRadius = '8px';
-                    sourceEl.style.mixBlendMode = 'multiply';
+                    sourceEl.style.cssText = 'position:absolute; inset:0; z-index:3; pointer-events:none;';
 
                     // Ajouter les images draggables
-                    (gameConfig.draggables || []).forEach(drag => {
+                    (gameConfig.draggables || []).forEach((drag, idx) => {
+                        const dx = (typeof drag.x === 'number') ? drag.x : (10 + idx * 70);
+                        const dy = (typeof drag.y === 'number') ? drag.y : 120;
+                        const dw = drag.width || 250;
+                        const dh = drag.height || 250;
                         const img = document.createElement('img');
                         img.src = drag.src;
                         img.className = 'draggable';
                         img.draggable = true;
                         img.dataset.id = drag.id;
                         img.title = drag.title || drag.tooltip || '';
-
-                        // Utiliser les dimensions configurées
-                        img.style.width = (drag.width || 80) + 'px';
-                        img.style.height = (drag.height || 80) + 'px';
-
-                        // Appliquer les décalages si définis
-                        if (drag.offsetX) img.style.marginLeft = drag.offsetX + 'px';
-                        if (drag.offsetY) img.style.marginTop = drag.offsetY + 'px';
-
-                        img.style.border = '2px solid #333';
-                        img.style.borderRadius = '5px';
-                        img.style.cursor = 'grab';
-                        img.style.objectFit = 'contain';
-                        img.style.transition = 'opacity 0.2s, transform 0.2s';
-                        img.style.opacity = '1';
+                        img.style.cssText = `position:absolute; left:${dx}px; top:${dy}px; width:${dw}px; height:${dh}px; object-fit:contain; cursor:grab; pointer-events:auto; opacity:1; transition:opacity 0.2s, transform 0.2s; box-sizing:border-box;`;
 
                         // Events drag
                         img.addEventListener('dragstart', (e) => {
@@ -4884,13 +4850,10 @@
 
                     gameEl.appendChild(sourceEl);
 
-                    // Zone targets (dropzones)
+                    // Zone targets (dropzones) — placement absolu depuis le tableau dropzones
                     const targetsEl = document.createElement('div');
                     targetsEl.id = `targets-${gameId}`;
-                    targetsEl.style.display = 'flex';
-                    targetsEl.style.gap = (gameConfig.zoneGap || 10) + 'px'; // Utiliser le gap configuré
-                    targetsEl.style.justifyContent = 'center';
-                    targetsEl.style.marginBottom = '15px';
+                    targetsEl.style.cssText = 'position:absolute; inset:0; z-index:1; pointer-events:none;';
 
                     const targetCount = gameConfig.targetCount || 5;
                     const goodIds = (gameConfig.goodIds || '').split(',').map(s => s.trim()).filter(Boolean);
@@ -4898,23 +4861,12 @@
                     const used = new Set();
                     let nbErreurs = 0;
 
-                    // Créer les dropzones
-                    for (let i = 0; i < targetCount; i++) {
+                    // Créer les dropzones EN PLACEMENT LIBRE (depuis le tableau dropzones, comme l'admin)
+                    (gameConfig.dropzones || []).forEach((dz, i) => {
                         const zone = document.createElement('div');
                         zone.className = 'dropzone';
                         zone.dataset.pos = String(i + 1);
-
-                        // Utiliser les dimensions configurées
-                        zone.style.width = (gameConfig.zoneWidth || 100) + 'px';
-                        zone.style.height = (gameConfig.zoneHeight || 100) + 'px';
-
-                        zone.style.border = '3px dashed #666';
-                        zone.style.borderRadius = '8px';
-                        zone.style.background = 'rgba(255, 255, 255, 0.5)';
-                        zone.style.display = 'flex';
-                        zone.style.alignItems = 'center';
-                        zone.style.justifyContent = 'center';
-                        zone.style.transition = 'all 0.3s ease';
+                        zone.style.cssText = `position:absolute; left:${dz.x || 0}px; top:${dz.y || 0}px; width:${dz.width || (gameConfig.zoneWidth || 80)}px; height:${dz.height || (gameConfig.zoneHeight || 80)}px; border:3px dashed #666; border-radius:8px; background:rgba(255,255,255,0.5); display:flex; align-items:center; justify-content:center; transition:all 0.3s ease; pointer-events:auto; box-sizing:border-box;`;
 
                         // Events drop
                         zone.addEventListener('dragover', (e) => {
@@ -5044,27 +4996,19 @@
                         });
 
                         targetsEl.appendChild(zone);
-                    }
+                    });
 
                     gameEl.appendChild(targetsEl);
 
-                    // Zone de résultat et score
+                    // Zone de résultat et score (en bas du conteneur, placement absolu)
                     const resultEl = document.createElement('div');
                     resultEl.id = `result-${gameId}`;
-                    resultEl.style.textAlign = 'center';
-                    resultEl.style.fontWeight = 'bold';
-                    resultEl.style.marginTop = '10px';
-                    resultEl.style.minHeight = '30px';
+                    resultEl.style.cssText = 'position:absolute; left:0; right:0; bottom:40px; text-align:center; font-weight:bold; min-height:30px; z-index:4; pointer-events:none;';
                     gameEl.appendChild(resultEl);
 
                     const scoreContainer = document.createElement('div');
                     scoreContainer.id = `score-malus-${gameId}`;
-                    scoreContainer.style.display = 'flex';
-                    scoreContainer.style.justifyContent = 'center';
-                    scoreContainer.style.gap = '15px';
-                    scoreContainer.style.marginTop = '5px';
-                    scoreContainer.style.fontWeight = 'bold';
-                    scoreContainer.style.fontSize = '50px';
+                    scoreContainer.style.cssText = 'position:absolute; left:0; right:0; bottom:1%; display:flex; justify-content:center; gap:15px; font-weight:bold; font-size:50px; z-index:4; pointer-events:none;';
 
                     gameEl.appendChild(scoreContainer);
 
