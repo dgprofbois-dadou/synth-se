@@ -2304,6 +2304,9 @@
                 <button id="btnDownload" type="button" style="flex:1;">Télécharger .json</button>
             </div>
             <textarea id="io" placeholder="JSON ici..."></textarea>
+            <div style="display:flex; gap:8px; margin-top:8px;">
+                <button id="btnResetAll" type="button" title="Efface tous les champs texte et tous les hotspots (iframes et jeux Drag & Drop conservés)" style="flex:1; background:#fde8e8; color:#b91c1c; border:1px solid #f1b0b0; border-radius:6px; font-weight:bold; padding:8px;">🗑️ Remise à zéro (textes + hotspots)</button>
+            </div>
         </div>
 
         <div id="viewport" aria-label="Zone zoomable">
@@ -7142,6 +7145,34 @@
             function exportProjectJSON() {
                 flushProjectStateBeforeSave();
                 return JSON.stringify(buildExportObject(), null, 2);
+            }
+
+            // Bouton Remise à zéro : efface tous les champs texte et tous les hotspots
+            function resetInputsAndHotspots() {
+                const nbInputs = (state.boxes || []).filter(b => b.kind !== 'iframe').length;
+                const nbHotspots = (state.hotspots || []).length;
+                if (nbInputs === 0 && nbHotspots === 0) {
+                    alert('Aucun champ texte ni hotspot à effacer.');
+                    return;
+                }
+                if (!confirm('Remise à zéro ?\n\nCela supprimera ' + nbInputs + ' champ(s) texte et ' + nbHotspots + ' hotspot(s).\nLes iframes et les jeux Drag & Drop sont conservés.\n\nCette action est irréversible.')) return;
+                try { stopAllHotspots(); } catch (e) { }
+                // Conserver uniquement les iframes côté "boxes" ; supprimer tous les hotspots
+                state.boxes = (state.boxes || []).filter(b => b.kind === 'iframe');
+                state.hotspots = [];
+                state.selectedId = null;
+                state.selectedHotspotId = null;
+                state.selectedVertex = null;
+                state.hsTransform = null;
+                state.draggingScale = null;
+                if (typeof selInfo !== 'undefined' && selInfo) selInfo.textContent = 'Aucun champ sélectionné.';
+                try { syncHotspotUI(); } catch (e) { }
+                render();
+                saveLocal();
+                if (window.mqToast) mqToast('Champs texte et hotspots effacés');
+            }
+            if ($('btnResetAll')) {
+                $('btnResetAll').addEventListener('click', resetInputsAndHotspots);
             }
 
             // Bouton Exporter (Afficher dans textarea)
