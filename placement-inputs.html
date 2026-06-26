@@ -4802,7 +4802,7 @@
                     const hdr = gameConfig.header || {};
                     const titleEl = document.createElement('div');
                     titleEl.className = 'carre_marron';
-                    titleEl.style.cssText = `position:absolute; left:${tb.x}px; top:${tb.y}px; width:${tb.width}px; height:${tb.height}px; display:flex; align-items:center; justify-content:center; box-sizing:border-box; z-index:2;`;
+                    titleEl.style.cssText = `position:absolute; left:${tb.x}px; top:${tb.y}px; width:${tb.width}px; height:${tb.height}px; display:flex; align-items:center; justify-content:center; box-sizing:border-box; background:#a58871; border-radius:10px; color:white; z-index:2;`;
                     titleEl.innerHTML = `<h2 style="margin:0; width:100%; color:white; font-family:${hdr.font || 'Verdana, sans-serif'}; font-size:${hdr.fontSize || 60}px; font-weight:${hdr.bold ? 'bold' : 'normal'}; font-style:${hdr.italic ? 'italic' : 'normal'}; text-align:${hdr.align || 'center'}; text-shadow:11px 9px 12px rgb(0 0 0);">${gameConfig.title || 'Jeu DnD'}</h2>`;
                     gameEl.appendChild(titleEl);
 
@@ -4920,6 +4920,12 @@
                             clone.style.width = '100%';
                             clone.style.height = '100%';
                             clone.style.objectFit = 'contain'; // Garde les proportions
+                            // Annuler le placement absolu hérité de l'image d'origine (sinon le clone s'affiche à côté)
+                            clone.style.position = 'static';
+                            clone.style.left = 'auto';
+                            clone.style.top = 'auto';
+                            clone.style.right = 'auto';
+                            clone.style.bottom = 'auto';
                             // Réinitialiser les marges pour éviter le décalage
                             clone.style.margin = '0';
                             clone.style.marginTop = '0';
