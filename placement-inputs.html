@@ -8166,7 +8166,7 @@
                         const fsVw = (b.fontSize || 16) * pxToVw;
                         const padVw = (b.pad || 0) * pxToVw;
 
-                        const styles = `width:100%; height:100%; font-family:${b.font}; font-size:${fsVw}vw; font-weight:${b.weight}; padding:${padVw}vw;`;
+                        const styles = `width:100%; height:100%; font-family:${b.font}; font-size:${b.fontSize || 16}px; font-weight:${b.weight}; padding:${b.pad || 0}px;`;
 
                         html += `
                 <div class="input-wrapper" style="top:${topPct}%; left:${leftPct}%; width:${wPct}%; height:${hPct}%;" 
@@ -8255,7 +8255,7 @@
 
                         <!-- TITRE (placement libre) -->
                         <div class="carre_marron" style="position:absolute; left:${tbX}%; top:${tbY}%; width:${tbW}%; height:${tbH}%; display:flex; justify-content:center; align-items:center; box-sizing:border-box; z-index:2;">
-                            <h2 style="font-family:${hBox.font || 'Verdana, sans-serif'}; font-size:${titleFS}vw; margin:0; width:100%; text-align:${hBox.align || 'center'}; font-weight:${hBox.bold ? 'bold' : 'normal'}; font-style:${hBox.italic ? 'italic' : 'normal'};">${g.title || ('Jeu ' + n)}</h2>
+                            <h2 style="font-family:${hBox.font || 'Verdana, sans-serif'}; font-size:${hBox.fontSize || 60}px; margin:0; width:100%; text-align:${hBox.align || 'center'}; font-weight:${hBox.bold ? 'bold' : 'normal'}; font-style:${hBox.italic ? 'italic' : 'normal'};">${g.title || ('Jeu ' + n)}</h2>
                         </div>
 
                         <!-- DROPZONES (placement libre) -->
@@ -8265,7 +8265,7 @@
                                 const dzY = ((dz.y || 0) / G_H) * 100;
                                 const dzW = ((dz.width || g.zoneWidth || 250) / G_W) * 100;
                                 const dzH = ((dz.height || g.zoneHeight || 250) / G_H) * 100;
-                                return `<div class="dropzone" data-pos="${i + 1}" style="position:absolute; left:${dzX}%; top:${dzY}%; width:${dzW}%; height:${dzH}%; font-size:${dzFS}vw; align-items:center; justify-content:center; display:flex; box-sizing:border-box; pointer-events:auto;">${i + 1}</div>`;
+                                return `<div class="dropzone" data-pos="${i + 1}" style="position:absolute; left:${dzX}%; top:${dzY}%; width:${dzW}%; height:${dzH}%; font-size:${Math.round((dz.height || g.zoneHeight || 80) * 0.4)}px; align-items:center; justify-content:center; display:flex; box-sizing:border-box; pointer-events:auto;">${i + 1}</div>`;
                             }).join('')}
                         </div>
 
@@ -8295,7 +8295,7 @@
                             return `<img src="${dc.src}" alt="" style="position:absolute; left:${cX}%; top:${cY}%; width:${cW}%; height:${cH}%; object-fit:contain; pointer-events:none; z-index:${dc.z || 0};">`;
                         }).join('')}
 
-                        <div id="score-malus-container${sfx}" class="score-malus-container" style="position:absolute; left:0; right:0; bottom:1%; display:flex; justify-content:center; gap:2%; font-weight:bold; font-size:3.393vw; color:#2e7d32; z-index:4;"></div>
+                        <div id="score-malus-container${sfx}" class="score-malus-container" style="position:absolute; left:0; right:0; bottom:1%; display:flex; justify-content:center; gap:2%; font-weight:bold; font-size:${Math.round((g.height || 400) * 0.07)}px; color:#2e7d32; z-index:4;"></div>
                     </div>`;
                     });
 
@@ -8338,7 +8338,7 @@
                         const fsVw = (b.fontSize || 16) * pxToVw;
                         const padVw = (b.pad || 0) * pxToVw;
 
-                        const styles = `width:100%; height:100%; font-family:${b.font}; font-size:${fsVw}vw; font-weight:${b.weight}; padding:${padVw}vw;`;
+                        const styles = `width:100%; height:100%; font-family:${b.font}; font-size:${b.fontSize || 16}px; font-weight:${b.weight}; padding:${b.pad || 0}px;`;
 
                         html += `
                 <div class="input-wrapper" style="top:${topPct}%; left:${leftPct}%; width:${wPct}%; height:${hPct}%;" 
