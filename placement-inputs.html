@@ -8133,7 +8133,7 @@
                     // CONVERSION EN POURCENTAGE (Fix Zoom)
                     const containerBaseW = 4961;
                     const containerBaseH = 3508;
-                    const pxToVw = 288 / 4961;
+                    const pxToVw = 100 / 4961; // 100/4961 : police proportionnelle au fond (ratio texte/boite identique a l editeur)
 
                     // --- INPUTS PAGE 1 ---
                     state.boxes.filter(b => b.y < 3500).forEach(b => {
@@ -8219,7 +8219,7 @@
                         if (!g || !g.enabled) return;
                         const n = mqGameNum(gameId);
                         const sfx = (n === 1) ? '' : String(n);
-                        const pxToVw = 288 / 4961;
+                        const pxToVw = 100 / 4961; // 100/4961 : police proportionnelle au fond (ratio texte/boite identique a l editeur)
                         const goodIds = g.goodIds || '';
                         const targetCount = parseInt(g.targetCount) || 0;
                         const ttFont = (g.tooltip && g.tooltip.font) ? g.tooltip.font : "'OpenDyslexic', sans-serif";
