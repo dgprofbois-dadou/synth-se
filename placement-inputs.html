@@ -4790,7 +4790,9 @@
                     const gameEl = document.createElement('div');
                     gameEl.className = 'drag-game';
                     gameEl.id = `dnd-${gameId}`;
-                    gameEl.style.cssText = `position:absolute; left:${gameConfig.x || 100}px; top:${(typeof gameConfig.y === 'number') ? gameConfig.y : (100 + index * 500)}px; width:${gameConfig.width || 800}px; height:${gameConfig.height || 400}px; padding:0; transform:none; background:transparent; box-shadow:none; border-radius:0; pointer-events:auto; overflow:visible;`;
+                    // pointer-events:none sur le conteneur -> les zones vides du jeu laissent passer le survol
+                    // vers les hotspots/inputs en dessous ; seules les images et les zones (auto) sont interactives.
+                    gameEl.style.cssText = `position:absolute; left:${gameConfig.x || 100}px; top:${(typeof gameConfig.y === 'number') ? gameConfig.y : (100 + index * 500)}px; width:${gameConfig.width || 800}px; height:${gameConfig.height || 400}px; padding:0; transform:none; background:transparent; box-shadow:none; border-radius:0; pointer-events:none; overflow:visible;`;
 
                     // Fond opaque (multiply, arrondi) comme l'admin
                     const bgEl = document.createElement('div');
@@ -4916,9 +4918,11 @@
                             clone.style.cursor = 'pointer';
                             clone.style.opacity = '1';
                             clone.style.filter = 'none';
-                            // L'image doit remplir toute la dropzone
-                            clone.style.width = '100%';
-                            clone.style.height = '100%';
+                            // Garder la TAILLE D'ORIGINE de l'image (ne pas l'agrandir à la taille de la zone)
+                            if (orig.style.width) clone.style.width = orig.style.width;
+                            if (orig.style.height) clone.style.height = orig.style.height;
+                            clone.style.maxWidth = 'none';
+                            clone.style.maxHeight = 'none';
                             clone.style.objectFit = 'contain'; // Garde les proportions
                             // Annuler le placement absolu hérité de l'image d'origine (sinon le clone s'affiche à côté)
                             clone.style.position = 'static';
