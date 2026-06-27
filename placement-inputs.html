@@ -8166,7 +8166,7 @@
                         const fsVw = (b.fontSize || 16) * pxToVw;
                         const padVw = (b.pad || 0) * pxToVw;
 
-                        const styles = `width:100%; height:100%; font-family:${b.font}; font-size:${b.fontSize || 16}px; font-weight:${b.weight}; padding:${b.pad || 0}px;`;
+                        const styles = `width:100%; height:100%; font-family:${b.font}; font-size:${b.fontSize || 16}px; font-weight:${b.weight}; padding:${b.pad ?? 4}px; border:2px solid #666; border-radius:8px; box-sizing:border-box;`;
 
                         html += `
                 <div class="input-wrapper" style="top:${topPct}%; left:${leftPct}%; width:${wPct}%; height:${hPct}%;" 
@@ -8338,7 +8338,7 @@
                         const fsVw = (b.fontSize || 16) * pxToVw;
                         const padVw = (b.pad || 0) * pxToVw;
 
-                        const styles = `width:100%; height:100%; font-family:${b.font}; font-size:${b.fontSize || 16}px; font-weight:${b.weight}; padding:${b.pad || 0}px;`;
+                        const styles = `width:100%; height:100%; font-family:${b.font}; font-size:${b.fontSize || 16}px; font-weight:${b.weight}; padding:${b.pad ?? 4}px; border:2px solid #666; border-radius:8px; box-sizing:border-box;`;
 
                         html += `
                 <div class="input-wrapper" style="top:${topPct}%; left:${leftPct}%; width:${wPct}%; height:${hPct}%;" 
