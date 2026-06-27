@@ -8133,7 +8133,7 @@
                     // CONVERSION EN POURCENTAGE (Fix Zoom)
                     const containerBaseW = 4961;
                     const containerBaseH = 3508;
-                    const pxToVw = 100 / 4961; // 100/4961 : police proportionnelle au fond (ratio texte/boite identique a l editeur)
+                    const pxToVw = 288 / 4961;
 
                     // --- INPUTS PAGE 1 ---
                     state.boxes.filter(b => b.y < 3500).forEach(b => {
@@ -8219,7 +8219,7 @@
                         if (!g || !g.enabled) return;
                         const n = mqGameNum(gameId);
                         const sfx = (n === 1) ? '' : String(n);
-                        const pxToVw = 100 / 4961; // 100/4961 : police proportionnelle au fond (ratio texte/boite identique a l editeur)
+                        const pxToVw = 288 / 4961;
                         const goodIds = g.goodIds || '';
                         const targetCount = parseInt(g.targetCount) || 0;
                         const ttFont = (g.tooltip && g.tooltip.font) ? g.tooltip.font : "'OpenDyslexic', sans-serif";
@@ -8243,7 +8243,7 @@
 
                         html += `
                     <div id="drag-game-on-page${sfx}" class="drag-game game-${n}"
-                        style="position: absolute; left: ${leftPct}%; top: ${topPct}%; width: ${widthPct}%; height: ${heightPct}%; background: ${g.bgColor}; border: 1px solid rgba(0,0,0,0.1); box-sizing: border-box; overflow: visible;"
+                        style="position: absolute; left: ${leftPct}%; top: ${topPct}%; width: ${widthPct}%; height: ${heightPct}%; background: ${g.bgColor}; border: 1px solid rgba(0,0,0,0.1); box-sizing: border-box; overflow: visible; scale: 1; transform: none; min-width: 0; min-height: 0; border-radius: 30px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); font-size: inherit;"
                         data-dnd-good="${goodIds}"
                         data-dnd-target="${targetCount}"
                         data-dnd-score-container="score-malus-container${sfx}"
