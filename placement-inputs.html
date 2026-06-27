@@ -8188,7 +8188,7 @@
                         .map(x => x.h)
                         .forEach(h => {
                             const pts = h.points.map(p => p.join(',')).join(' ');
-                            const safeTip = (h.tip || '').replace(/"/g, '&quot;');
+                            const safeTip = ((h.tip && h.tip.trim()) ? h.tip : (h.label || '')).replace(/"/g, '&quot;');
                             const group = (h.group || '').replace(/"/g, '&quot;');
                             let filter = (h.shadowX || h.shadowBlur) ? `filter:drop-shadow(${h.shadowX}px ${h.shadowY}px ${h.shadowBlur}px ${h.shadowColor});` : '';
                             const alphaIdle = (h.alphaIdle !== undefined) ? h.alphaIdle : 0.5;
@@ -8360,7 +8360,7 @@
                         .map(x => x.h)
                         .forEach(h => {
                             const pts = h.points.map(p => [p[0], p[1] - 3508].join(',')).join(' ');
-                            const safeTip = (h.tip || '').replace(/"/g, '&quot;');
+                            const safeTip = ((h.tip && h.tip.trim()) ? h.tip : (h.label || '')).replace(/"/g, '&quot;');
                             const group = (h.group || '').replace(/"/g, '&quot;');
                             let filter = (h.shadowX || h.shadowBlur) ? `filter:drop-shadow(${h.shadowX}px ${h.shadowY}px ${h.shadowBlur}px ${h.shadowColor});` : '';
                             const alphaIdle = (h.alphaIdle !== undefined) ? h.alphaIdle : 0.5;
