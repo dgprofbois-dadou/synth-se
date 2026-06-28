@@ -3271,12 +3271,25 @@
                     let totalW = 0;
                     let totalH = 0;
 
+                    // IMPORTANT : le stage est en display:flex (align-items:stretch) -> chaque image
+                    // est ÉTIRÉE à la dimension transversale max. On calcule donc la taille d'après
+                    // les dimensions AFFICHÉES (étirées), pas les dimensions naturelles, sinon le
+                    // viewBox du SVG ne correspond pas aux images quand elles ont des résolutions
+                    // différentes -> clics/points décalés.
                     if (state.layout === 'column') {
+                        // empilées verticalement, étirées à la largeur max
                         totalW = Math.max(...allImgs.map((i) => mqImgDim(i)), 0);
-                        totalH = allImgs.reduce((acc, i) => acc + mqImgDimH(i), 0);
+                        totalH = allImgs.reduce((acc, i) => {
+                            const w = mqImgDim(i) || totalW || 1;
+                            return acc + Math.round(mqImgDimH(i) * (totalW / w));
+                        }, 0);
                     } else {
-                        totalW = allImgs.reduce((acc, i) => acc + mqImgDim(i), 0);
+                        // côte à côte, étirées à la hauteur max
                         totalH = Math.max(...allImgs.map((i) => mqImgDimH(i)), 0);
+                        totalW = allImgs.reduce((acc, i) => {
+                            const h = mqImgDimH(i) || totalH || 1;
+                            return acc + Math.round(mqImgDim(i) * (totalH / h));
+                        }, 0);
                     }
 
                     if (totalW <= 0 || totalH <= 0) {
