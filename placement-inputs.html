@@ -9371,7 +9371,13 @@
             }
             const mqBgImgs = Array.from(document.querySelectorAll('#stage img.bg'));
             mqBgImgs.forEach((img) => {
-                img.addEventListener('load', mqBootOnce);
+                // À CHAQUE chargement d'image (y compris une nouvelle image de fond), on
+                // resynchronise la taille du stage et le viewBox du SVG, sinon l'espace de
+                // coordonnées reste périmé -> clic et point de hotspot décalés.
+                img.addEventListener('load', () => {
+                    mqBootOnce();
+                    try { if (typeof updateStageSize === 'function') updateStageSize(); } catch (e) { }
+                });
                 img.addEventListener('error', mqBootOnce);
             });
             if (mqBgImgs.length && mqBgImgs.every((img) => img.complete)) {
