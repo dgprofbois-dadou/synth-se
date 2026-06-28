@@ -1,0 +1,26 @@
+---
+description: Commit et push automatiques sur GitHub après chaque modification
+alwaysApply: true
+---
+
+# Déploiement GitHub automatique
+
+Ce projet est testé en ligne via une page serveur synchronisée avec GitHub. **Ne pas attendre que l'utilisateur demande un push.**
+
+## Après chaque tâche qui modifie des fichiers
+
+1. Vérifier `git status` et `git diff`.
+2. **Commit** les changements pertinents (message concis en français, style du dépôt).
+3. **Push** immédiatement sur `origin main` (ou la branche de travail courante).
+4. Confirmer à l'utilisateur que le push a réussi (hash du commit + branche).
+
+## Règles
+
+- Ne pas committer de secrets (`.env`, clés, credentials).
+- Ne pas push `--force` sur `main`/`master`.
+- Si le push échoue (auth, conflit), diagnostiquer et corriger sans abandonner.
+- Si la tâche était une simple question sans modification de fichier, ne rien committer.
+
+## Exemple de fin de tâche
+
+Après un correctif : commit → `git push origin main` → « Poussé sur GitHub (commit abc1234). »
