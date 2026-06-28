@@ -6091,7 +6091,13 @@
 
             // Keyboard nudge + Delete + ECHAP (Nouveau)
             // --- GESTION CLAVIER (Déplacements, Suppression, Échap) ---
-            // --- GESTION CLAVIER (Déplacements, Suppression, Échap) ---
+            function mqIsTypingTarget(t) {
+                if (!t || !t.tagName) return false;
+                const tag = t.tagName.toLowerCase();
+                if (tag === 'input' || tag === 'textarea' || tag === 'select') return true;
+                if (t.isContentEditable) return true;
+                return false;
+            }
             window.addEventListener('keydown', (e) => {
 
                 // --- PROTECTION CRITIQUE ---
@@ -6107,6 +6113,20 @@
                         duplicateSelection();
                     }
                     return;
+                }
+
+                // F / H : ajouter champ / hotspot (mode admin, hors zone de saisie)
+                if (state.mode === 'admin' && !(e.ctrlKey || e.metaKey || e.altKey) && !mqIsTypingTarget(e.target)) {
+                    if (e.code === 'KeyF') {
+                        e.preventDefault();
+                        if (btnAdd && !btnAdd.disabled) btnAdd.click();
+                        return;
+                    }
+                    if (e.code === 'KeyH') {
+                        e.preventDefault();
+                        if (btnHs && !btnHs.disabled) btnHs.click();
+                        return;
+                    }
                 }
 
                 // 0. TRANSFORM (Ctrl+T ou T) : poignées de redimensionnement du hotspot sélectionné
@@ -10238,8 +10258,8 @@
             modal.id = 'mqShortcutsModal';
             modal.innerHTML = '<h2>Raccourcis clavier</h2><div class="mq-kgrid">' +
                 '<div>V</div><div>Sélection / navigation</div>' +
-                '<div>F</div><div>Ajouter un champ (focus canvas)</div>' +
-                '<div>H</div><div>Ajouter un hotspot (focus canvas)</div>' +
+                '<div>F</div><div>Ajouter un champ</div>' +
+                '<div>H</div><div>Ajouter un hotspot</div>' +
                 '<div>⌘D</div><div>Dupliquer</div>' +
                 '<div>⌫</div><div>Supprimer la sélection</div>' +
                 '<div>⌘S</div><div>Enregistrer</div>' +
@@ -10247,20 +10267,12 @@
                 '<div>⌘+ / ⌘-</div><div>Zoom</div>' +
                 '<div>Esc</div><div>Désélectionner / annuler</div>' +
                 '<div>?</div><div>Ouvrir cette aide</div>' +
-                '</div><p class="mq-kfoot">Les raccourcis F/H/⌘D ne sont actifs que lorsque le focus est sur la zone canvas (cliquez sur la page).</p>';
+                '</div><p class="mq-kfoot">Les raccourcis F, H et ⌘D sont actifs en mode admin (sauf dans un champ de saisie).</p>';
             backdrop.appendChild(modal);
             document.body.appendChild(backdrop);
             function mqCloseShortcuts() { backdrop.classList.remove('mq-open'); }
             function mqOpenShortcuts() { backdrop.classList.add('mq-open'); }
             backdrop.addEventListener('click', (e) => { if (e.target === backdrop) mqCloseShortcuts(); });
-
-            function mqIsTypingTarget(t) {
-                if (!t || !t.tagName) return false;
-                const tag = t.tagName.toLowerCase();
-                if (tag === 'input' || tag === 'textarea' || tag === 'select') return true;
-                if (t.isContentEditable) return true;
-                return false;
-            }
 
             document.addEventListener('keydown', (e) => {
                 if (e.key === '?' && !e.ctrlKey && !e.altKey && !mqIsTypingTarget(e.target)) {
@@ -10278,8 +10290,6 @@
                     if (mqIsTypingTarget(e.target)) return;
                     const meta = e.metaKey || e.ctrlKey;
                     if (e.code === 'KeyV' && !meta) { /* laisser l’éditeur gérer si besoin */ }
-                    if (e.code === 'KeyF' && !meta) { e.preventDefault(); $('btnAdd') && $('btnAdd').click(); }
-                    if (e.code === 'KeyH' && !meta) { e.preventDefault(); $('btnHs') && $('btnHs').click(); }
                     if (e.code === 'KeyS' && meta) { e.preventDefault(); $('btnSaveLocal') && $('btnSaveLocal').click(); }
                     if (e.code === 'BracketRight') { e.preventDefault(); $('btnFront') && $('btnFront').click(); }
                     if (e.code === 'BracketLeft') { e.preventDefault(); $('btnBack') && $('btnBack').click(); }
