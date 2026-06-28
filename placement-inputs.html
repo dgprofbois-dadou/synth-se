@@ -6069,6 +6069,15 @@
                     return;
                 }
 
+                // Ctrl/Cmd+D : dupliquer la sélection (empêche le marque-page du navigateur)
+                if ((e.ctrlKey || e.metaKey) && (e.key === 'd' || e.key === 'D')) {
+                    e.preventDefault();
+                    if (state.mode === 'admin' && (state.selectedId || state.selectedHotspotId)) {
+                        duplicateSelection();
+                    }
+                    return;
+                }
+
                 // 0. TRANSFORM (Ctrl+T ou T) : poignées de redimensionnement du hotspot sélectionné
                 if ((e.key === 't' || e.key === 'T') && state.mode === 'admin') {
                     if (state.selectedHotspotId) {
