@@ -5705,6 +5705,24 @@
                 document.body.style.cursor = 'crosshair';
             };
 
+            // 4ter) Lien : lie le champ à un hotspot (même nom de groupe)
+            window.mqStartBoxLink = function () {
+                const b = getSelected();
+                if (!b || b.kind === 'iframe') { alert('Sélectionnez d\'abord un champ.'); return; }
+                let grp = (b.group || '').trim();
+                if (!grp) {
+                    grp = 'lien-' + Math.random().toString(36).slice(2, 6);
+                    b.group = grp;
+                    if (state.selectedId === b.id && typeof pGroup !== 'undefined' && pGroup) pGroup.value = b.group;
+                    render();
+                    scheduleSaveLocal();
+                }
+                mqCancelTools();
+                mqHsLinkGroup = grp;
+                mqHsBanner('🔗 Lien « ' + grp + ' » : cliquez un champ ou un hotspot à lier — Échap pour terminer');
+                document.body.style.cursor = 'crosshair';
+            };
+
             // Réponse attendue du champ (édition rapide)
             window.mqBoxEditAnswer = function () {
                 const b = getSelected();
@@ -10479,6 +10497,7 @@
                     mqAddMenuSep();
                     mqAddMenuItem('🖌️ Pinceau de style', () => window.mqStartBoxBrush && window.mqStartBoxBrush());
                     mqAddMenuItem('🧪 Pipette de style', () => window.mqStartBoxPipette && window.mqStartBoxPipette());
+                    mqAddMenuItem('🔗 Lier (champ ou hotspot)', () => window.mqStartBoxLink && window.mqStartBoxLink());
                     mqAddMenuItem('🎨 Copier le style', () => mqProxyClick('btnCopyBoxStyle'));
                     const pasteBtn = mqAddMenuItem('🖌️ Coller le style', () => mqProxyClick('btnPasteBoxStyle'));
                     const pasteSrc = $('btnPasteBoxStyle');
