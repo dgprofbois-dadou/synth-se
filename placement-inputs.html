@@ -1721,6 +1721,9 @@
         <button id="btnIframe" type="button">+ Iframe</button>
 
 
+        <button id="btnUndo" type="button" title="Annuler (Ctrl+Z)" disabled>↶</button>
+        <button id="btnRedo" type="button" title="Rétablir (Ctrl+Y)" disabled>↷</button>
+
         <button id="btnDup" type="button">Dupliquer</button>
         <button id="btnDel" type="button">Supprimer</button>
         <button id="btnFront" type="button">Avant</button>
@@ -3419,6 +3422,7 @@
                 btnHs.disabled = state.mode !== 'admin';
                 if (btnHsFreehand) btnHsFreehand.disabled = state.mode !== 'admin';
                 { const _bi = document.getElementById('btnIframe'); if (_bi) _bi.disabled = state.mode !== 'admin'; }
+                if (typeof mqUpdateHistoryButtons === 'function') mqUpdateHistoryButtons();
                 //btnHsDel.disabled = state.mode !== 'admin';
 
                 // propriétés actives uniquement en admin
@@ -6371,6 +6375,7 @@
             }
             document.addEventListener('keydown', mqHandleHotspotTransformShortcut, true);
             document.addEventListener('keydown', mqHandleModeShortcuts, true);
+            document.addEventListener('keydown', mqHandleUndoRedoShortcuts, true);
             window.addEventListener('keydown', (e) => {
 
                 // --- PROTECTION CRITIQUE ---
@@ -6466,6 +6471,145 @@
 
             function cloneProjectData(value) {
                 return JSON.parse(JSON.stringify(value));
+            }
+
+            const MQ_HISTORY_MAX = 50;
+            let _mqHistoryUndo = [];
+            let _mqHistoryRedo = [];
+            let _mqHistoryCursor = null;
+            let _mqHistoryRestoring = false;
+            let _mqHistorySuspended = 0;
+            let _mqHistoryDebouncePushed = false;
+            let _mqHistoryDebounceTimer = null;
+
+            function mqTakeSnapshot() {
+                try { flushProjectStateBeforeSave(); } catch (_) { /* UI pas encore prête */ }
+                return {
+                    boxes: cloneProjectData(state.boxes),
+                    hotspots: cloneProjectData(state.hotspots),
+                    dndGames: cloneProjectData(state.dndGames),
+                    layout: state.layout,
+                    selectedId: state.selectedId,
+                    selectedHotspotId: state.selectedHotspotId,
+                    exportConfig: {
+                        img1: $('confImg1') ? $('confImg1').value : '',
+                        img2: $('confImg2') ? $('confImg2').value : '',
+                        prefix: $('confPrefix') ? $('confPrefix').value : ''
+                    }
+                };
+            }
+
+            function mqUpdateHistoryButtons() {
+                const u = $('btnUndo'), r = $('btnRedo');
+                if (u) u.disabled = _mqHistoryUndo.length === 0 || state.mode !== 'admin';
+                if (r) r.disabled = _mqHistoryRedo.length === 0 || state.mode !== 'admin';
+            }
+
+            function mqHistoryReset() {
+                clearTimeout(_mqHistoryDebounceTimer);
+                _mqHistoryDebouncePushed = false;
+                _mqHistoryUndo = [];
+                _mqHistoryRedo = [];
+                _mqHistoryCursor = mqTakeSnapshot();
+                mqUpdateHistoryButtons();
+            }
+
+            function mqHistoryPushBeforeChange() {
+                if (_mqHistoryRestoring || _mqHistorySuspended > 0 || state.mode !== 'admin') return;
+                if (_mqHistoryDebouncePushed) return;
+                if (!_mqHistoryCursor) _mqHistoryCursor = mqTakeSnapshot();
+                _mqHistoryUndo.push(cloneProjectData(_mqHistoryCursor));
+                if (_mqHistoryUndo.length > MQ_HISTORY_MAX) _mqHistoryUndo.shift();
+                _mqHistoryRedo = [];
+                _mqHistoryDebouncePushed = true;
+                mqUpdateHistoryButtons();
+            }
+
+            function mqHistoryCommitCursor() {
+                if (_mqHistoryRestoring || _mqHistorySuspended > 0 || state.mode !== 'admin') return;
+                _mqHistoryCursor = mqTakeSnapshot();
+                _mqHistoryDebouncePushed = false;
+                mqUpdateHistoryButtons();
+            }
+
+            function mqApplyHistorySnapshot(snap) {
+                _mqHistoryRestoring = true;
+                try {
+                    state.boxes = cloneProjectData(snap.boxes);
+                    state.hotspots = cloneProjectData(snap.hotspots || []);
+                    state.dndGames = normalizeDndGames(snap.dndGames || state.dndGames);
+                    state.layout = snap.layout || state.layout;
+                    state.selectedId = snap.selectedId || null;
+                    state.selectedHotspotId = snap.selectedHotspotId || null;
+                    state.selectedVertex = null;
+                    state.hotspotDraft = null;
+                    state.hsTransform = null;
+                    state.draggingVertex = null;
+                    state.draggingScale = null;
+                    drawingHotspot = false;
+                    freehandTracing = false;
+
+                    if (snap.exportConfig) {
+                        resolveBgInto('confImg1', snap.exportConfig.img1 || '', 0);
+                        resolveBgInto('confImg2', snap.exportConfig.img2 || '', 1);
+                        if ($('confPrefix')) $('confPrefix').value = snap.exportConfig.prefix || '';
+                    }
+                    if (confLayout) {
+                        confLayout.value = state.layout;
+                        stage.style.flexDirection = state.layout;
+                    }
+                    stopAllHotspots();
+                    loadDndGamesUI();
+                    hydrateDndImages();
+                    refreshStageLayout(() => {
+                        render();
+                        applyTransform();
+                        setBodyMode();
+                        updateScore();
+                        if (state.selectedId) select(state.selectedId);
+                        else if (state.selectedHotspotId) syncHotspotUI();
+                        saveLocal();
+                        _mqHistoryCursor = mqTakeSnapshot();
+                        _mqHistoryRestoring = false;
+                        mqUpdateHistoryButtons();
+                    });
+                } catch (err) {
+                    _mqHistoryRestoring = false;
+                    throw err;
+                }
+            }
+
+            function mqUndo() {
+                if (state.mode !== 'admin' || !_mqHistoryUndo.length) return;
+                clearTimeout(_mqHistoryDebounceTimer);
+                _mqHistoryDebouncePushed = false;
+                _mqHistoryRedo.push(mqTakeSnapshot());
+                mqApplyHistorySnapshot(_mqHistoryUndo.pop());
+            }
+
+            function mqRedo() {
+                if (state.mode !== 'admin' || !_mqHistoryRedo.length) return;
+                clearTimeout(_mqHistoryDebounceTimer);
+                _mqHistoryDebouncePushed = false;
+                _mqHistoryUndo.push(mqTakeSnapshot());
+                mqApplyHistorySnapshot(_mqHistoryRedo.pop());
+            }
+            window.mqUndo = mqUndo;
+            window.mqRedo = mqRedo;
+
+            function mqHandleUndoRedoShortcuts(e) {
+                if (state.mode !== 'admin') return;
+                if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+                if (mqIsTypingTarget(e.target)) return;
+                if (e.code === 'KeyZ' && !e.shiftKey) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    mqUndo();
+                } else if (e.code === 'KeyY' || (e.code === 'KeyZ' && e.shiftKey)) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    mqRedo();
+                }
             }
 
             function mqGameNum(gameId) {
@@ -6772,14 +6916,17 @@
             }
 
             function importJSON() {
+                _mqHistorySuspended++;
                 let obj;
                 try {
                     obj = JSON.parse(io.value);
                 } catch {
+                    _mqHistorySuspended--;
                     alert("JSON invalide.");
                     return;
                 }
                 if (!obj || !Array.isArray(obj.boxes)) {
+                    _mqHistorySuspended--;
                     alert("Format inattendu: attendu { boxes: [...] }");
                     return;
                 }
@@ -6836,6 +6983,8 @@
                     setBodyMode();
                     if (state.mode === 'student') fitToScreen();
                     saveLocal();
+                    mqHistoryReset();
+                    _mqHistorySuspended--;
                 });
             }
 
@@ -6944,6 +7093,11 @@
 
             function saveLocal() {
                 if (_saveCycle > 0) return { ok: false, skipped: true };
+                if (!_mqHistoryRestoring && _mqHistorySuspended === 0 && state.mode === 'admin') {
+                    mqHistoryPushBeforeChange();
+                    clearTimeout(_mqHistoryDebounceTimer);
+                    _mqHistoryDebounceTimer = setTimeout(() => mqHistoryCommitCursor(), 400);
+                }
                 _saveCycle++;
                 try {
                     flushProjectStateBeforeSave();
@@ -8740,9 +8894,13 @@
                     addBox();
                     render();
                     setTimeout(fitToScreen, 100);
+                    mqHistoryReset();
                 }
                 applyTransform();
             }
+
+            if ($('btnUndo')) $('btnUndo').addEventListener('click', () => mqUndo());
+            if ($('btnRedo')) $('btnRedo').addEventListener('click', () => mqRedo());
             // --- GESTION COPIER / COLLER DE STYLE ---
 
             // 1. Fonction Copier
@@ -10169,6 +10327,14 @@
                     r2.setAttribute('height', '10');
                     r2.setAttribute('rx', '1');
                     svg.appendChild(r2);
+                } else if (name === 'undo') {
+                    p = document.createElementNS(ns, 'path');
+                    p.setAttribute('d', 'M9 7H4v5M4 12c2.5-4 7.5-5.5 11.5-3');
+                    svg.appendChild(p);
+                } else if (name === 'redo') {
+                    p = document.createElementNS(ns, 'path');
+                    p.setAttribute('d', 'M15 7h5v5M20 12c-2.5-4-7.5-5.5-11.5-3');
+                    svg.appendChild(p);
                 } else if (name === 'trash') {
                     p = document.createElementNS(ns, 'path');
                     p.setAttribute('d', 'M3 6h18M8 6V4h8v2M19 6v14H5V6M10 11v6M14 11v6');
@@ -10288,7 +10454,7 @@
             stash.setAttribute('aria-hidden', 'true');
             document.body.appendChild(stash);
 
-            const stashIds = ['btnAdd', 'btnHs', 'btnHsFreehand', 'btnIframe', 'btnDup', 'btnDel', 'btnFront', 'btnBack', 'btnGenHTML', 'btnSaveLocal', 'btnLoadLocal', 'btnFit', 'zoomSlider'];
+            const stashIds = ['btnAdd', 'btnHs', 'btnHsFreehand', 'btnIframe', 'btnUndo', 'btnRedo', 'btnDup', 'btnDel', 'btnFront', 'btnBack', 'btnGenHTML', 'btnSaveLocal', 'btnLoadLocal', 'btnFit', 'zoomSlider'];
             stashIds.forEach((sid) => {
                 const el = $(sid);
                 if (el && el.parentNode) stash.appendChild(el);
@@ -10394,6 +10560,10 @@
                 rail.appendChild(mqRailBtn('mqRailHs', '+ Hotspot', 'hotspot', 'btnHs'));
                 rail.appendChild(mqRailBtn('mqRailHsFreehand', '✏️ Hotspot', 'hotspot', 'btnHsFreehand'));
                 rail.appendChild(mqRailBtn('mqRailIframe', '+ Iframe', 'iframe', 'btnIframe'));
+                const s0 = el('div', 'mq-rail-sep');
+                rail.appendChild(s0);
+                rail.appendChild(mqRailBtn('mqRailUndo', 'Annuler', 'undo', 'btnUndo'));
+                rail.appendChild(mqRailBtn('mqRailRedo', 'Rétablir', 'redo', 'btnRedo'));
                 const s1 = el('div', 'mq-rail-sep');
                 rail.appendChild(s1);
                 rail.appendChild(mqRailBtn('mqRailDup', 'Dupliquer', 'dup', 'btnDup'));
@@ -10488,6 +10658,8 @@
                 '<div>Maj+T</div><div>Transformer un hotspot (Firefox — poignées de taille)</div>' +
                 '<div>Ctrl+T</div><div>Transformer un hotspot (Chrome / Edge)</div>' +
                 '<div>F1</div><div>Basculer mode admin / élève (aperçu)</div>' +
+                '<div>⌘Z</div><div>Annuler la dernière modification</div>' +
+                '<div>⌘Y</div><div>Rétablir (ou ⌘Maj+Z)</div>' +
                 '<div>⌘D</div><div>Dupliquer</div>' +
                 '<div>⌫</div><div>Supprimer la sélection</div>' +
                 '<div>⌘S</div><div>Enregistrer</div>' +
