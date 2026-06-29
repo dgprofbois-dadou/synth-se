@@ -6363,14 +6363,7 @@
             }
             function mqHandleModeShortcuts(e) {
                 if (e.key === 'F1' || e.code === 'F1') {
-                    if (state.mode === 'admin' && !mqIsTypingTarget(e.target)) {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        if (btnMode) btnMode.click();
-                    }
-                    return;
-                }
-                if (e.key === 'Escape' && state.mode === 'student') {
+                    if (state.mode === 'admin' && mqIsTypingTarget(e.target)) return;
                     e.preventDefault();
                     e.stopPropagation();
                     if (btnMode) btnMode.click();
@@ -6409,7 +6402,7 @@
                     }
                 }
 
-                // 1. Touche ÉCHAP : Annulation (admin) — le mode élève est géré en capture (mqHandleModeShortcuts)
+                // 1. Touche ÉCHAP : Annulation (admin) — F1 bascule admin ↔ élève (mqHandleModeShortcuts)
                 if (e.key === 'Escape') {
                     if (state.mode === 'student') return;
                     if (state.hsTransform) {
@@ -10494,13 +10487,13 @@
                 '<div>✏️</div><div>Hotspot au crayon (bouton barre d’outils)</div>' +
                 '<div>Maj+T</div><div>Transformer un hotspot (Firefox — poignées de taille)</div>' +
                 '<div>Ctrl+T</div><div>Transformer un hotspot (Chrome / Edge)</div>' +
-                '<div>F1</div><div>Passer en mode élève (aperçu)</div>' +
+                '<div>F1</div><div>Basculer mode admin / élève (aperçu)</div>' +
                 '<div>⌘D</div><div>Dupliquer</div>' +
                 '<div>⌫</div><div>Supprimer la sélection</div>' +
                 '<div>⌘S</div><div>Enregistrer</div>' +
                 '<div>] / [</div><div>Devant / derrière</div>' +
                 '<div>⌘+ / ⌘-</div><div>Zoom</div>' +
-                '<div>Esc</div><div>Quitter le mode élève · ou annuler (admin)</div>' +
+                '<div>Esc</div><div>Annuler (admin)</div>' +
                 '<div>?</div><div>Ouvrir cette aide</div>' +
                 '</div><p class="mq-kfoot">Les raccourcis F, H et Ctrl+D sont actifs en mode admin (sauf dans un champ de saisie). Sous Firefox, Ctrl+T ouvre un onglet (raccourci protégé) : utilisez Maj+T pour transformer un hotspot.</p>';
             backdrop.appendChild(modal);
