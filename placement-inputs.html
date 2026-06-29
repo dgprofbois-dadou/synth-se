@@ -2070,6 +2070,18 @@
 
 
             <h3>Infobulle (hotspot)</h3>
+            <div style="display:flex; gap:5px; margin-bottom:12px;">
+                <button id="btnCopyHsTip" type="button"
+                    style="flex:1; background:#fff8e1; border:1px solid #ffc107; color:#e65100; border-radius:6px; padding:6px;"
+                    title="Copier le texte et les réglages de l'infobulle">
+                    📋 Copier infobulle
+                </button>
+                <button id="btnPasteHsTip" type="button"
+                    style="flex:1; background:#f1f8e9; border:1px solid #4caf50; color:#1b5e20; border-radius:6px; padding:6px;"
+                    title="Coller l'infobulle copiée sur ce hotspot" disabled>
+                    📋 Coller infobulle
+                </button>
+            </div>
             <div class="row">
                 <label>Texte</label>
                 <input id="hsTip" type="text" placeholder="Texte à afficher au survol">
@@ -2450,6 +2462,7 @@
             const btnCopyStyle = $('btnCopyStyle');
             const btnPasteStyle = $('btnPasteStyle');
             let hotspotClipboard = null; // Pour stocker le style en mémoire
+            let hotspotTipClipboard = null; // Texte + réglages infobulle
             let lastHotspotStyle = null; // Dernier style créé/modifié à réappliquer aux nouveaux hotspots
             // Ajoutez ceci vers la ligne 500 (avec pHint, pAnswer...)
             const pHintSame = $('pHintSame');
@@ -5656,6 +5669,28 @@
                     tipPad: h.tipPad ?? 10,
                     tipFont: h.tipFont ?? 'inherit'
                 };
+            }
+
+            function extractHotspotTip(h) {
+                if (!h) return null;
+                return {
+                    tip: h.tip ?? '',
+                    tipMs: h.tipMs ?? 1500,
+                    tipRender: h.tipRender ?? 'image',
+                    tipFontSize: h.tipFontSize ?? 22,
+                    tipPad: h.tipPad ?? 10,
+                    tipFont: h.tipFont ?? 'inherit'
+                };
+            }
+
+            function applyHotspotTip(h, tipData) {
+                if (!h || !tipData) return;
+                h.tip = tipData.tip ?? '';
+                h.tipMs = tipData.tipMs ?? 1500;
+                h.tipRender = tipData.tipRender ?? 'image';
+                h.tipFontSize = tipData.tipFontSize ?? 22;
+                h.tipPad = tipData.tipPad ?? 10;
+                h.tipFont = tipData.tipFont ?? 'inherit';
             }
 
 
@@ -8944,6 +8979,38 @@
                 btnPasteStyle.textContent = "Collé !";
                 setTimeout(() => btnPasteStyle.textContent = oldText, 1000);
             });
+
+            const btnCopyHsTip = $('btnCopyHsTip');
+            const btnPasteHsTip = $('btnPasteHsTip');
+            if (btnCopyHsTip) btnCopyHsTip.addEventListener('click', () => {
+                const h = getSelectedHotspot();
+                if (!h) {
+                    alert("Sélectionnez un hotspot source.");
+                    return;
+                }
+                hotspotTipClipboard = extractHotspotTip(h);
+                btnCopyHsTip.textContent = 'Copié !';
+                if (btnPasteHsTip) btnPasteHsTip.disabled = false;
+                setTimeout(() => { btnCopyHsTip.textContent = '📋 Copier infobulle'; }, 1000);
+            });
+            if (btnPasteHsTip) btnPasteHsTip.addEventListener('click', () => {
+                const h = getSelectedHotspot();
+                if (!h) {
+                    alert("Sélectionnez le hotspot de destination.");
+                    return;
+                }
+                if (!hotspotTipClipboard) {
+                    alert("Copiez d'abord l'infobulle d'un hotspot.");
+                    return;
+                }
+                applyHotspotTip(h, hotspotTipClipboard);
+                syncHotspotUI();
+                render();
+                scheduleSaveLocal();
+                const oldText = btnPasteHsTip.textContent;
+                btnPasteHsTip.textContent = 'Collé !';
+                setTimeout(() => { btnPasteHsTip.textContent = oldText; }, 1000);
+            });
             // --- GESTION COPIER / COLLER DE STYLE (CHAMPS TEXTE) ---
 
             // 1. Copier le style du champ
@@ -10919,6 +10986,10 @@
                     ctxMenu.appendChild(title);
                     mqAddMenuItem('📏 Épaisseur…', () => window.mqHotspotEditThickness && window.mqHotspotEditThickness());
                     mqAddMenuItem('💬 Infobulle…', () => window.mqHotspotEditTip && window.mqHotspotEditTip());
+                    mqAddMenuItem('📋 Copier l\'infobulle', () => mqProxyClick('btnCopyHsTip'));
+                    const pasteTip = mqAddMenuItem('📋 Coller l\'infobulle', () => mqProxyClick('btnPasteHsTip'));
+                    const pasteTipSrc = $('btnPasteHsTip');
+                    if (pasteTipSrc) pasteTip.disabled = pasteTipSrc.disabled;
                     mqAddMenuItem('🖌️ Pinceau de style', () => window.mqStartHotspotBrush && window.mqStartHotspotBrush());
                     mqAddMenuItem('🧪 Pipette de style', () => window.mqStartHotspotPipette && window.mqStartHotspotPipette());
                     mqAddMenuItem('↔️ Transformer (taille)', () => window.mqToggleHotspotTransform && window.mqToggleHotspotTransform(), { kbd: 'Maj+T' });
