@@ -5603,6 +5603,7 @@
                     : '');
                 render();
             }
+            window.mqToggleHotspotTransform = mqToggleHotspotTransform;
 
             function syncHotspotUI() {
                 const h = getSelectedHotspot();
@@ -10731,7 +10732,7 @@
                     mqAddMenuItem('💬 Infobulle…', () => window.mqHotspotEditTip && window.mqHotspotEditTip());
                     mqAddMenuItem('🖌️ Pinceau de style', () => window.mqStartHotspotBrush && window.mqStartHotspotBrush());
                     mqAddMenuItem('🧪 Pipette de style', () => window.mqStartHotspotPipette && window.mqStartHotspotPipette());
-                    mqAddMenuItem('↔️ Transformer (taille)', () => mqToggleHotspotTransform(), { kbd: '⌘T' });
+                    mqAddMenuItem('↔️ Transformer (taille)', () => window.mqToggleHotspotTransform && window.mqToggleHotspotTransform(), { kbd: '⌘T' });
                     mqAddMenuItem('🔗 Lier (champ ou hotspot)', () => window.mqStartHotspotLink && window.mqStartHotspotLink());
                     mqAddMenuSep();
                     mqAddMenuItem('📋 Dupliquer', () => mqProxyClick('btnDup'), { kbd: '⌘D' });
