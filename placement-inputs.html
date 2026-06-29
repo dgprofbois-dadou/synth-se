@@ -2070,16 +2070,11 @@
 
 
             <h3>Infobulle (hotspot)</h3>
-            <div style="display:flex; gap:5px; margin-bottom:12px;">
+            <div style="margin-bottom:12px;">
                 <button id="btnCopyHsTip" type="button"
-                    style="flex:1; background:#fff8e1; border:1px solid #ffc107; color:#e65100; border-radius:6px; padding:6px;"
-                    title="Copier le texte et les réglages de l'infobulle">
-                    📋 Copier infobulle
-                </button>
-                <button id="btnPasteHsTip" type="button"
-                    style="flex:1; background:#f1f8e9; border:1px solid #4caf50; color:#1b5e20; border-radius:6px; padding:6px;"
-                    title="Coller l'infobulle copiée sur ce hotspot" disabled>
-                    📋 Coller infobulle
+                    style="width:100%; background:#fff8e1; border:1px solid #ffc107; color:#e65100; border-radius:6px; padding:8px;"
+                    title="Copier l'infobulle puis cliquer les hotspots à remplir — Échap pour terminer">
+                    💬 Copier infobulle (pinceau)
                 </button>
             </div>
             <div class="row">
@@ -5741,6 +5736,7 @@
 
             // ===== Outils rapides (clic droit) : pinceau / pipette / lien, hotspots & champs =====
             let mqHsBrushStyle = null;   // pinceau hotspot : style à peindre
+            let mqHsTipBrush = null;     // pinceau infobulle : texte + réglages à appliquer
             let mqHsLinkGroup = null;    // lien hotspot -> champ : groupe à appliquer
             let mqHsPipetteTarget = null;// pipette hotspot : id du hotspot qui RECEVRA le style prélevé
             let mqBoxBrushStyle = null;  // pinceau champ : style à peindre
@@ -5783,6 +5779,7 @@
 
             function mqCancelTools() {
                 mqHsBrushStyle = null;
+                mqHsTipBrush = null;
                 mqHsLinkGroup = null;
                 mqHsPipetteTarget = null;
                 mqBoxBrushStyle = null;
@@ -5938,7 +5935,18 @@
                 scheduleSaveLocal();
             };
 
-            // 2) Pinceau hotspot : capture CE style, puis on peint les hotspots cliqués
+            // 2) Pinceau infobulle : capture l'infobulle, puis on la colle sur les hotspots cliqués
+            window.mqStartHotspotTipBrush = function () {
+                const h = getSelectedHotspot();
+                if (!h) { alert('Sélectionnez d\'abord un hotspot source.'); return; }
+                mqCancelTools();
+                mqHsTipBrush = extractHotspotTip(h);
+                hotspotTipClipboard = mqHsTipBrush;
+                mqHsBanner('💬 Infobulle : cliquez les hotspots à remplir — Échap pour terminer');
+                document.body.style.cursor = 'copy';
+            };
+
+            // 3) Pinceau hotspot : capture CE style, puis on peint les hotspots cliqués
             window.mqStartHotspotBrush = function () {
                 const h = getSelectedHotspot();
                 if (!h) { alert('Sélectionnez d\'abord un hotspot source.'); return; }
@@ -6030,7 +6038,7 @@
             // Interception des clics quand un outil est actif (phase capture)
             viewport.addEventListener('pointerdown', function (e) {
                 if (state.mode !== 'admin') return;
-                if (!mqHsBrushStyle && !mqHsLinkGroup && !mqHsPipetteTarget && !mqBoxBrushStyle && !mqBoxPipetteTarget && !mqDndAlignTarget && !mqDndSizeBrush && !mqDndSizePipetteTarget) return;
+                if (!mqHsBrushStyle && !mqHsTipBrush && !mqHsLinkGroup && !mqHsPipetteTarget && !mqBoxBrushStyle && !mqBoxPipetteTarget && !mqDndAlignTarget && !mqDndSizeBrush && !mqDndSizePipetteTarget) return;
 
                 // --- Pinceau de taille DnD : appliquer la taille capturée aux zones cliquées ---
                 if (mqDndSizeBrush) {
@@ -6074,6 +6082,23 @@
                         e.preventDefault(); e.stopPropagation();
                         const refSel = { gameId: refEl.dataset.game, type: refEl.dataset.type, index: refEl.dataset.index };
                         mqDndAlign(mqDndAlignTarget, refSel, e.shiftKey, e.altKey);
+                    }
+                    return;
+                }
+
+                // --- Pinceau infobulle : coller l'infobulle sur le hotspot cliqué ---
+                if (mqHsTipBrush) {
+                    const hsEl = e.target.closest && e.target.closest('.hotspot-group');
+                    if (hsEl) {
+                        e.preventDefault(); e.stopPropagation();
+                        const h = state.hotspots.find(x => x.id === hsEl.dataset.hsid);
+                        if (h) {
+                            applyHotspotTip(h, mqHsTipBrush);
+                            render();
+                            if (state.selectedHotspotId === h.id) syncHotspotUI();
+                            mqFlashHotspot(h.id);
+                            scheduleSaveLocal();
+                        }
                     }
                     return;
                 }
@@ -6181,7 +6206,7 @@
             }, true);
 
             document.addEventListener('keydown', function (e) {
-                if (e.key === 'Escape' && (mqHsBrushStyle || mqHsLinkGroup || mqHsPipetteTarget || mqBoxBrushStyle || mqBoxPipetteTarget || mqDndAlignTarget || mqDndSizeBrush || mqDndSizePipetteTarget)) mqCancelTools();
+                if (e.key === 'Escape' && (mqHsBrushStyle || mqHsTipBrush || mqHsLinkGroup || mqHsPipetteTarget || mqBoxBrushStyle || mqBoxPipetteTarget || mqDndAlignTarget || mqDndSizeBrush || mqDndSizePipetteTarget)) mqCancelTools();
             }, true);
 
             // 4) Épaisseur rapide du contour
@@ -8981,35 +9006,8 @@
             });
 
             const btnCopyHsTip = $('btnCopyHsTip');
-            const btnPasteHsTip = $('btnPasteHsTip');
             if (btnCopyHsTip) btnCopyHsTip.addEventListener('click', () => {
-                const h = getSelectedHotspot();
-                if (!h) {
-                    alert("Sélectionnez un hotspot source.");
-                    return;
-                }
-                hotspotTipClipboard = extractHotspotTip(h);
-                btnCopyHsTip.textContent = 'Copié !';
-                if (btnPasteHsTip) btnPasteHsTip.disabled = false;
-                setTimeout(() => { btnCopyHsTip.textContent = '📋 Copier infobulle'; }, 1000);
-            });
-            if (btnPasteHsTip) btnPasteHsTip.addEventListener('click', () => {
-                const h = getSelectedHotspot();
-                if (!h) {
-                    alert("Sélectionnez le hotspot de destination.");
-                    return;
-                }
-                if (!hotspotTipClipboard) {
-                    alert("Copiez d'abord l'infobulle d'un hotspot.");
-                    return;
-                }
-                applyHotspotTip(h, hotspotTipClipboard);
-                syncHotspotUI();
-                render();
-                scheduleSaveLocal();
-                const oldText = btnPasteHsTip.textContent;
-                btnPasteHsTip.textContent = 'Collé !';
-                setTimeout(() => { btnPasteHsTip.textContent = oldText; }, 1000);
+                if (typeof window.mqStartHotspotTipBrush === 'function') window.mqStartHotspotTipBrush();
             });
             // --- GESTION COPIER / COLLER DE STYLE (CHAMPS TEXTE) ---
 
@@ -10986,10 +10984,7 @@
                     ctxMenu.appendChild(title);
                     mqAddMenuItem('📏 Épaisseur…', () => window.mqHotspotEditThickness && window.mqHotspotEditThickness());
                     mqAddMenuItem('💬 Infobulle…', () => window.mqHotspotEditTip && window.mqHotspotEditTip());
-                    mqAddMenuItem('📋 Copier l\'infobulle', () => mqProxyClick('btnCopyHsTip'));
-                    const pasteTip = mqAddMenuItem('📋 Coller l\'infobulle', () => mqProxyClick('btnPasteHsTip'));
-                    const pasteTipSrc = $('btnPasteHsTip');
-                    if (pasteTipSrc) pasteTip.disabled = pasteTipSrc.disabled;
+                    mqAddMenuItem('💬 Copier l\'infobulle (pinceau)', () => window.mqStartHotspotTipBrush && window.mqStartHotspotTipBrush());
                     mqAddMenuItem('🖌️ Pinceau de style', () => window.mqStartHotspotBrush && window.mqStartHotspotBrush());
                     mqAddMenuItem('🧪 Pipette de style', () => window.mqStartHotspotPipette && window.mqStartHotspotPipette());
                     mqAddMenuItem('↔️ Transformer (taille)', () => window.mqToggleHotspotTransform && window.mqToggleHotspotTransform(), { kbd: 'Maj+T' });
