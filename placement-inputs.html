@@ -255,6 +255,30 @@
             mix-blend-mode: multiply;
         }
 
+        /* Calque UI transform (au-dessus des champs texte, sans multiply) */
+        #hotspots-ui {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            overflow: visible;
+            z-index: 120;
+            mix-blend-mode: normal;
+        }
+
+        .hs-transform-box {
+            fill: none;
+            stroke: #2d8cff;
+            pointer-events: none;
+        }
+
+        .hs-transform-handle {
+            pointer-events: all !important;
+            mix-blend-mode: normal;
+        }
+
         /* Groupes de hotspots */
         .hotspot-group {
             cursor: pointer;
@@ -2318,6 +2342,7 @@
                     style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 100; pointer-events: none;">
                 </div>
                 <svg id="hotspots" xmlns="http://www.w3.org/2000/svg"></svg>
+                <svg id="hotspots-ui" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"></svg>
             </div>
         </div>
     </div>
@@ -2384,6 +2409,7 @@
             const pMultiline = $('pMultiline');
             const pRows = $('pRows');
             const svg = $('hotspots');
+            const svgUi = $('hotspots-ui');
             const btnHs = $('btnHs');
             const btnHsFreehand = $('btnHsFreehand');
 
@@ -3312,6 +3338,11 @@
                     svg.setAttribute('width', totalW);
                     svg.setAttribute('height', totalH);
                     svg.setAttribute('viewBox', `0 0 ${totalW} ${totalH}`);
+                    if (svgUi) {
+                        svgUi.setAttribute('width', totalW);
+                        svgUi.setAttribute('height', totalH);
+                        svgUi.setAttribute('viewBox', `0 0 ${totalW} ${totalH}`);
+                    }
                 } finally {
                     _updatingStageSize = false;
                 }
@@ -4634,6 +4665,7 @@
                 if (e.target.closest && (
                     e.target.closest('.box') ||
                     e.target.closest('.hotspot-group') ||
+                    e.target.closest('#hotspots-ui') ||
                     e.target.closest('#mqCtxBar')
                 )) return;
 
@@ -4643,39 +4675,6 @@
             });
 
             viewport.addEventListener('pointermove', (e) => {
-                // 0. REDIMENSIONNEMENT VIA POIGNÉE (mode Transform)
-                if (state.draggingScale && state.mode === 'admin') {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    const ds = state.draggingScale;
-                    const h = state.hotspots.find(x => x.id === ds.hsId);
-                    if (h) {
-                        const loc = stageToLocal(e.clientX, e.clientY);
-                        const MIN = 0.05;
-                        let sx = 1, sy = 1;
-                        if (ds.axis === 'x') {
-                            const d = (ds.origCx - ds.anchorX) || 1e-6;
-                            sx = (loc.x - ds.anchorX) / d;
-                        } else if (ds.axis === 'y') {
-                            const d = (ds.origCy - ds.anchorY) || 1e-6;
-                            sy = (loc.y - ds.anchorY) / d;
-                        } else { // proportionnel : projection de la souris sur la diagonale ancre→coin
-                            const vx = ds.origCx - ds.anchorX, vy = ds.origCy - ds.anchorY;
-                            const d = (vx * vx + vy * vy) || 1e-6;
-                            const s = ((loc.x - ds.anchorX) * vx + (loc.y - ds.anchorY) * vy) / d;
-                            sx = s; sy = s;
-                        }
-                        if (!isFinite(sx) || sx < MIN) sx = MIN;
-                        if (!isFinite(sy) || sy < MIN) sy = MIN;
-                        h.points = ds.origPts.map(([px, py]) => [
-                            Math.round(ds.anchorX + (px - ds.anchorX) * sx),
-                            Math.round(ds.anchorY + (py - ds.anchorY) * sy)
-                        ]);
-                        render();
-                    }
-                    return;
-                }
-
                 // 1. GESTION DRAG VERTEX (Déplacement d'un point existant)
                 if (state.draggingVertex && state.mode === 'admin') {
                     e.preventDefault();
@@ -4766,13 +4765,43 @@
                 const loc = stageToLocal(e.clientX, e.clientY);
                 mqFreehandTrack(loc.x, loc.y);
             });
-            viewport.addEventListener('pointerup', () => {
+            window.addEventListener('pointermove', (e) => {
+                if (!state.draggingScale || state.mode !== 'admin') return;
+                const ds = state.draggingScale;
+                const h = state.hotspots.find(x => x.id === ds.hsId);
+                if (!h) return;
+                const loc = stageToLocal(e.clientX, e.clientY);
+                const MIN = 0.05;
+                let sx = 1, sy = 1;
+                if (ds.axis === 'x') {
+                    const d = (ds.origCx - ds.anchorX) || 1e-6;
+                    sx = (loc.x - ds.anchorX) / d;
+                } else if (ds.axis === 'y') {
+                    const d = (ds.origCy - ds.anchorY) || 1e-6;
+                    sy = (loc.y - ds.anchorY) / d;
+                } else {
+                    const vx = ds.origCx - ds.anchorX, vy = ds.origCy - ds.anchorY;
+                    const d = (vx * vx + vy * vy) || 1e-6;
+                    const s = ((loc.x - ds.anchorX) * vx + (loc.y - ds.anchorY) * vy) / d;
+                    sx = s; sy = s;
+                }
+                if (!isFinite(sx) || sx < MIN) sx = MIN;
+                if (!isFinite(sy) || sy < MIN) sy = MIN;
+                h.points = ds.origPts.map(([px, py]) => [
+                    Math.round(ds.anchorX + (px - ds.anchorX) * sx),
+                    Math.round(ds.anchorY + (py - ds.anchorY) * sy)
+                ]);
+                render();
+            });
+            window.addEventListener('pointerup', () => {
                 if (state.draggingScale) {
                     state.draggingScale = null;
                     saveLocal();
                     if (state.selectedHotspotId) syncHotspotUI();
                     render();
                 }
+            });
+            viewport.addEventListener('pointerup', () => {
                 if (state.draggingVertex) {
                     state.draggingVertex = null;
                     saveLocal(); // Save position after drag
@@ -5240,6 +5269,7 @@
 
             function renderHotspots() {
                 svg.innerHTML = '';
+                if (svgUi) svgUi.innerHTML = '';
 
                 // 1. DESSIN DU BROUILLON (Mode Admin)
                 if (state.mode === 'admin' && state.hotspotDraft?.length) {
@@ -5423,10 +5453,6 @@
                         });
                     }
 
-                    // Boîte de transformation (Ctrl+T) : poignées de redimensionnement
-                    if (state.mode === 'admin' && h.id === state.selectedHotspotId && state.hsTransform && state.hsTransform.hsId === h.id) {
-                        mqDrawTransformHandles(h);
-                    }
                     // Handles (Poignées points) — masquées en mode Transform
                     if (state.mode === 'admin' && h.id === state.selectedHotspotId && !(state.hsTransform && state.hsTransform.hsId === h.id)) {
                         h.points.forEach((pt, idx) => {
@@ -5466,10 +5492,16 @@
                         svg.appendChild(ghost);
                     }
                 }
+
+                // Boîte de transformation (Ctrl+T) — calque UI au-dessus des champs texte
+                if (state.mode === 'admin' && state.hsTransform && state.selectedHotspotId === state.hsTransform.hsId) {
+                    const th = state.hotspots.find(x => x.id === state.hsTransform.hsId);
+                    if (th) mqDrawTransformHandles(th);
+                }
             }
 
             // Boîte englobante d'un hotspot (coords stage)
-            function mqHotspotBBox(h) {
+            function mqHotspotBBox(h, extraPad) {
                 const pts = h.points || [];
                 if (!pts.length) return null;
                 let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
@@ -5477,28 +5509,45 @@
                     if (x < minX) minX = x; if (x > maxX) maxX = x;
                     if (y < minY) minY = y; if (y > maxY) maxY = y;
                 });
+                const sc = state.scale || 1;
+                const pad = extraPad != null ? extraPad : Math.max(4, 6 / sc);
+                minX -= pad; minY -= pad; maxX += pad; maxY += pad;
+                const w = maxX - minX, hgt = maxY - minY;
+                const minSize = Math.max(16, 20 / sc);
+                if (w < minSize) {
+                    const cx = (minX + maxX) / 2;
+                    minX = cx - minSize / 2;
+                    maxX = cx + minSize / 2;
+                }
+                if (hgt < minSize) {
+                    const cy = (minY + maxY) / 2;
+                    minY = cy - minSize / 2;
+                    maxY = cy + minSize / 2;
+                }
                 return { minX, minY, maxX, maxY, w: maxX - minX, h: maxY - minY };
             }
 
             // Dessine la boîte de transformation + 8 poignées (4 coins + 4 milieux de côté)
             function mqDrawTransformHandles(h) {
+                if (!svgUi) return;
                 const bb = mqHotspotBBox(h);
-                if (!bb) return;
+                if (!bb || bb.w <= 0 || bb.h <= 0) return;
                 const NS = 'http://www.w3.org/2000/svg';
+                const sc = state.scale || 1;
                 const cx = (bb.minX + bb.maxX) / 2, cy = (bb.minY + bb.maxY) / 2;
-                const hs = Math.max(8, Math.min(bb.w, bb.h) * 0.06); // demi-taille des poignées, proportionnelle
-                const sw = Math.max(2, hs * 0.25);
+                const hs = Math.max(10 / sc, Math.min(Math.max(bb.w, bb.h) * 0.05, 28 / sc));
+                const sw = Math.max(2 / sc, 2.5 / sc);
 
-                // Rectangle englobant (pointillés)
+                const overlay = document.createElementNS(NS, 'g');
+                overlay.classList.add('hs-transform-overlay');
+
                 const rect = document.createElementNS(NS, 'rect');
+                rect.setAttribute('class', 'hs-transform-box');
                 rect.setAttribute('x', bb.minX); rect.setAttribute('y', bb.minY);
                 rect.setAttribute('width', bb.w); rect.setAttribute('height', bb.h);
-                rect.setAttribute('fill', 'none');
-                rect.setAttribute('stroke', '#2d8cff');
                 rect.setAttribute('stroke-width', sw);
-                rect.setAttribute('stroke-dasharray', (hs) + ' ' + (hs * 0.6));
-                rect.style.pointerEvents = 'none';
-                svg.appendChild(rect);
+                rect.setAttribute('stroke-dasharray', (hs * 0.9) + ' ' + (hs * 0.55));
+                overlay.appendChild(rect);
 
                 // axis: 'xy' (proportionnel), 'x' (largeur), 'y' (hauteur)
                 const handles = [
@@ -5533,8 +5582,10 @@
                             origPts: (h.points || []).map((p) => [p[0], p[1]])
                         };
                     });
-                    svg.appendChild(r);
+                    overlay.appendChild(r);
                 });
+
+                svgUi.appendChild(overlay);
             }
 
             function mqToggleHotspotTransform() {
