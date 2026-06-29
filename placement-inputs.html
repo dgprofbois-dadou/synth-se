@@ -4079,8 +4079,12 @@
                 };
 
                 state.boxes.push(b);
+                state.selectedHotspotId = null;
+                if (pGroup) pGroup.value = '';
                 render();
                 select(id);
+                if (pGroup) pGroup.value = '';
+                b.group = '';
                 saveLocal();
             }
 
@@ -4582,6 +4586,7 @@
                     blendMode: 'multiply'
                 };
                 if (lastHotspotStyle) Object.assign(h, lastHotspotStyle);
+                h.group = ''; // jamais hériter le groupe lien du précédent élément
                 state.hotspots.push(h);
                 state.selectedHotspotId = h.id;
                 lastHotspotStyle = extractHotspotStyle(h);
@@ -4606,9 +4611,9 @@
                 state.hotspotDraft = null;
                 if (typeof mqHsBanner === 'function') mqHsBanner('');
                 document.body.style.cursor = '';
-                saveLocal();
+                syncHotspotUI(); // vider hsGroup avant save (évite de recopier l'ancien groupe)
                 render();
-                syncHotspotUI();
+                saveLocal();
             }
 
             function mqFreehandTrack(x, y) {
@@ -4642,6 +4647,7 @@
                 state.selectedHotspotId = null;
                 state.selectedVertex = null;
                 document.body.style.cursor = hotspotDrawMode === 'freehand' ? 'crosshair' : '';
+                if (hsGroup) hsGroup.value = '';
                 if (typeof mqHsBanner === 'function') {
                     mqHsBanner(hotspotDrawMode === 'freehand'
                         ? '✏️ Clic au point de départ · suivez le contour · revenez au point vert pour fermer · Échap = annuler'
