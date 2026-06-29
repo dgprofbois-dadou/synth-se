@@ -1693,6 +1693,7 @@
         <button id="btnGenHTML" class="primary" style="font-weight:bold;">⚡ GÉNÉRER</button>
         <button id="btnAdd" type="button">+ Champ</button>
         <button id="btnHs" type="button">+ Hotspot</button>
+        <button id="btnHsFreehand" type="button" title="Dessiner un hotspot au crayon — revenir au point de départ pour fermer">✏️ Hotspot</button>
         <button id="btnIframe" type="button">+ Iframe</button>
 
 
@@ -2384,6 +2385,7 @@
             const pRows = $('pRows');
             const svg = $('hotspots');
             const btnHs = $('btnHs');
+            const btnHsFreehand = $('btnHsFreehand');
 
 
             const hsLabel = $('hsLabel');
@@ -2552,6 +2554,10 @@
                 }
             };
 
+            let drawingHotspot = false;
+            let hotspotDrawMode = 'points'; // 'points' | 'freehand'
+            let freehandTracing = false;
+
             // 🔧 DÉBOGAGE : Exposer state globalement pour accès depuis la console
             window.appState = state;
             let _saveCycle = 0;
@@ -2663,6 +2669,7 @@
                 btnFront.disabled = state.mode !== 'admin';
                 btnBack.disabled = state.mode !== 'admin';
                 btnHs.disabled = state.mode !== 'admin';
+                if (btnHsFreehand) btnHsFreehand.disabled = state.mode !== 'admin';
                 { const _bi = document.getElementById('btnIframe'); if (_bi) _bi.disabled = state.mode !== 'admin'; }
 
                 // propriétés actives uniquement en admin
@@ -3379,6 +3386,7 @@
                 btnFront.disabled = state.mode !== 'admin';
                 btnBack.disabled = state.mode !== 'admin';
                 btnHs.disabled = state.mode !== 'admin';
+                if (btnHsFreehand) btnHsFreehand.disabled = state.mode !== 'admin';
                 { const _bi = document.getElementById('btnIframe'); if (_bi) _bi.disabled = state.mode !== 'admin'; }
                 //btnHsDel.disabled = state.mode !== 'admin';
 
@@ -4469,9 +4477,153 @@
                 applyTransform();
             }, { passive: false });
 
+            function mqPolyPathLength(pts) {
+                let len = 0;
+                for (let i = 1; i < pts.length; i++) {
+                    const dx = pts[i][0] - pts[i - 1][0], dy = pts[i][1] - pts[i - 1][1];
+                    len += Math.hypot(dx, dy);
+                }
+                return len;
+            }
+
+            function mqSimplifyPolyline(pts, eps) {
+                if (pts.length <= 2) return pts.slice();
+                const tol = eps * eps;
+                function dist2(p, a, b) {
+                    const dx = b[0] - a[0], dy = b[1] - a[1];
+                    const len2 = dx * dx + dy * dy;
+                    if (len2 < 1e-8) {
+                        const ex = p[0] - a[0], ey = p[1] - a[1];
+                        return ex * ex + ey * ey;
+                    }
+                    let t = ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / len2;
+                    t = Math.max(0, Math.min(1, t));
+                    const px = a[0] + t * dx, py = a[1] + t * dy;
+                    const ex = p[0] - px, ey = p[1] - py;
+                    return ex * ex + ey * ey;
+                }
+                function rdp(arr, start, end, out) {
+                    let maxD = 0, idx = -1;
+                    for (let i = start + 1; i < end; i++) {
+                        const d = dist2(arr[i], arr[start], arr[end]);
+                        if (d > maxD) { maxD = d; idx = i; }
+                    }
+                    if (maxD > tol && idx >= 0) {
+                        rdp(arr, start, idx, out);
+                        rdp(arr, idx, end, out);
+                    } else {
+                        out.push(arr[start]);
+                    }
+                }
+                const out = [];
+                rdp(pts, 0, pts.length - 1, out);
+                out.push(pts[pts.length - 1]);
+                return out;
+            }
+
+            function mqCancelHotspotDraw() {
+                drawingHotspot = false;
+                freehandTracing = false;
+                hotspotDrawMode = 'points';
+                state.hotspotDraft = null;
+                if (typeof mqHsBanner === 'function') mqHsBanner('');
+                document.body.style.cursor = '';
+                render();
+            }
+
+            function mqCreateHotspotFromDraft(draftPoints) {
+                const h = {
+                    id: crypto.randomUUID(),
+                    points: draftPoints.slice(),
+                    label: 'Hotspot',
+                    fill: '#ffcc00',
+                    stroke: '#ff9900',
+                    strokeW: 2,
+                    alphaIdle: 0.05,
+                    alphaActive: 0.35,
+                    trigger: 'hover',
+                    tip: '',
+                    tipMs: 1500,
+                    tipRender: 'image',
+                    tipFontSize: 22,
+                    group: '',
+                    z: (state.hotspots.reduce((m, x) => Math.max(m, Number(x.z ?? 0)), -1) + 1),
+                    blendMode: 'multiply'
+                };
+                if (lastHotspotStyle) Object.assign(h, lastHotspotStyle);
+                state.hotspots.push(h);
+                state.selectedHotspotId = h.id;
+                lastHotspotStyle = extractHotspotStyle(h);
+                return h;
+            }
+
+            function mqFinishHotspotDraw() {
+                const draft = state.hotspotDraft;
+                if (!draft || draft.length < 3) {
+                    mqCancelHotspotDraw();
+                    return;
+                }
+                let pts = draft.slice();
+                if (hotspotDrawMode === 'freehand') {
+                    pts = mqSimplifyPolyline(pts, 3);
+                    if (pts.length < 3) pts = draft.slice();
+                }
+                mqCreateHotspotFromDraft(pts);
+                drawingHotspot = false;
+                freehandTracing = false;
+                hotspotDrawMode = 'points';
+                state.hotspotDraft = null;
+                if (typeof mqHsBanner === 'function') mqHsBanner('');
+                document.body.style.cursor = '';
+                saveLocal();
+                render();
+                syncHotspotUI();
+            }
+
+            function mqFreehandTrack(x, y) {
+                const draft = state.hotspotDraft;
+                if (!draft || !draft.length) return;
+                const rx = Math.round(x), ry = Math.round(y);
+                const last = draft[draft.length - 1];
+                const minDist = Math.max(3, 4 / (state.scale || 1));
+                const dx = rx - last[0], dy = ry - last[1];
+                if (dx * dx + dy * dy < minDist * minDist) return;
+                draft.push([rx, ry]);
+                const [sx, sy] = draft[0];
+                const closeR = Math.max(8, 14 / (state.scale || 1));
+                const distStart = Math.hypot(rx - sx, ry - sy);
+                const pathLen = mqPolyPathLength(draft);
+                const minPath = Math.max(24, 30 / (state.scale || 1));
+                if (draft.length >= 4 && pathLen >= minPath && distStart <= closeR) {
+                    mqFinishHotspotDraw();
+                    return;
+                }
+                render();
+            }
+
+            function mqStartHotspotDraw(mode) {
+                if (state.mode !== 'admin') return;
+                if (typeof mqCancelTools === 'function') mqCancelTools();
+                drawingHotspot = true;
+                hotspotDrawMode = mode === 'freehand' ? 'freehand' : 'points';
+                freehandTracing = false;
+                state.hotspotDraft = [];
+                state.selectedHotspotId = null;
+                state.selectedVertex = null;
+                document.body.style.cursor = hotspotDrawMode === 'freehand' ? 'crosshair' : '';
+                if (typeof mqHsBanner === 'function') {
+                    mqHsBanner(hotspotDrawMode === 'freehand'
+                        ? '✏️ Clic au point de départ · suivez le contour · revenez au point vert pour fermer · Échap = annuler'
+                        : '📍 Clic = point · double-clic = terminer · Échap = annuler le dernier point');
+                }
+                render();
+            }
+
             let panning = false;
             let lastX = 0, lastY = 0;
             viewport.addEventListener('pointerdown', (e) => {
+                // Pas de pan pendant le dessin de hotspot
+                if (drawingHotspot && state.mode === 'admin') return;
                 // BLOQUER LE PAN si Ctrl est enfoncé (pour manipulation des éléments DnD)
                 if (e.ctrlKey) return;
 
@@ -4608,6 +4760,11 @@
                 lastX = e.clientX; lastY = e.clientY;
                 state.tx += dx; state.ty += dy;
                 applyTransform();
+            });
+            window.addEventListener('pointermove', (e) => {
+                if (!freehandTracing || !drawingHotspot || hotspotDrawMode !== 'freehand' || state.mode !== 'admin') return;
+                const loc = stageToLocal(e.clientX, e.clientY);
+                mqFreehandTrack(loc.x, loc.y);
             });
             viewport.addEventListener('pointerup', () => {
                 if (state.draggingScale) {
@@ -5086,21 +5243,46 @@
 
                 // 1. DESSIN DU BROUILLON (Mode Admin)
                 if (state.mode === 'admin' && state.hotspotDraft?.length) {
-                    const d = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
-                    d.setAttribute('points', pointsToStr(state.hotspotDraft));
-                    d.setAttribute('fill', '#ffcc00');
-                    d.setAttribute('fill-opacity', '0.5');
-                    d.setAttribute('stroke', '#000');
-                    d.setAttribute('stroke-width', '2');
-                    d.setAttribute('stroke-dasharray', '5 5');
-                    svg.appendChild(d);
+                    const NS = 'http://www.w3.org/2000/svg';
+                    const isFreehand = hotspotDrawMode === 'freehand';
+                    const shape = document.createElementNS(NS, isFreehand && freehandTracing ? 'polyline' : 'polygon');
+                    shape.setAttribute('points', pointsToStr(state.hotspotDraft));
+                    shape.setAttribute('fill', isFreehand && freehandTracing ? 'none' : '#ffcc00');
+                    shape.setAttribute('fill-opacity', isFreehand && freehandTracing ? '0' : '0.5');
+                    shape.setAttribute('stroke', isFreehand ? '#2196f3' : '#000');
+                    shape.setAttribute('stroke-width', '2');
+                    shape.setAttribute('stroke-dasharray', isFreehand ? '6 4' : '5 5');
+                    if (isFreehand && freehandTracing) shape.setAttribute('stroke-linejoin', 'round');
+                    svg.appendChild(shape);
 
-                    state.hotspotDraft.forEach((pt) => {
-                        const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-                        c.setAttribute('cx', pt[0]); c.setAttribute('cy', pt[1]);
-                        c.setAttribute('r', '5'); c.setAttribute('fill', '#fff'); c.setAttribute('stroke', '#000');
-                        svg.appendChild(c);
-                    });
+                    if (isFreehand && freehandTracing) {
+                        const [sx, sy] = state.hotspotDraft[0];
+                        const closeR = Math.max(8, 14 / (state.scale || 1));
+                        const zone = document.createElementNS(NS, 'circle');
+                        zone.setAttribute('cx', sx); zone.setAttribute('cy', sy);
+                        zone.setAttribute('r', String(closeR));
+                        zone.setAttribute('fill', 'rgba(76,175,80,0.15)');
+                        zone.setAttribute('stroke', '#4caf50');
+                        zone.setAttribute('stroke-width', '2');
+                        zone.setAttribute('stroke-dasharray', '4 3');
+                        zone.style.pointerEvents = 'none';
+                        svg.appendChild(zone);
+                        const start = document.createElementNS(NS, 'circle');
+                        start.setAttribute('cx', sx); start.setAttribute('cy', sy);
+                        start.setAttribute('r', '6'); start.setAttribute('fill', '#4caf50');
+                        start.setAttribute('stroke', '#fff'); start.setAttribute('stroke-width', '2');
+                        start.style.pointerEvents = 'none';
+                        svg.appendChild(start);
+                    }
+
+                    if (!isFreehand || !freehandTracing) {
+                        state.hotspotDraft.forEach((pt) => {
+                            const c = document.createElementNS(NS, 'circle');
+                            c.setAttribute('cx', pt[0]); c.setAttribute('cy', pt[1]);
+                            c.setAttribute('r', '5'); c.setAttribute('fill', '#fff'); c.setAttribute('stroke', '#000');
+                            svg.appendChild(c);
+                        });
+                    }
                 }
 
                 // 2. DESSIN DES HOTSPOTS EXISTANTS (triés par profondeur z)
@@ -6157,12 +6339,16 @@
                         return;
                     }
                     if (drawingHotspot && state.hotspotDraft) {
-                        state.hotspotDraft.pop();
-                        if (state.hotspotDraft.length === 0) {
-                            drawingHotspot = false;
-                            state.hotspotDraft = null;
+                        if (hotspotDrawMode === 'freehand') {
+                            mqCancelHotspotDraw();
+                        } else {
+                            state.hotspotDraft.pop();
+                            if (state.hotspotDraft.length === 0) {
+                                drawingHotspot = false;
+                                state.hotspotDraft = null;
+                            }
+                            render();
                         }
-                        render();
                     } else {
                         state.selectedHotspotId = null;
                         state.selectedId = null;
@@ -6763,20 +6949,11 @@
             window.addEventListener('beforeunload', () => {
                 try { saveLocal(); } catch (e) { /* ignore */ }
             });
-            let drawingHotspot = false;
 
-            btnHs.addEventListener('click', () => {
-                if (state.mode !== 'admin') return;
-                drawingHotspot = true;
-                state.hotspotDraft = [];
-                state.selectedHotspotId = null;
-                render();
-            });
+            btnHs.addEventListener('click', () => mqStartHotspotDraw('points'));
+            if (btnHsFreehand) btnHsFreehand.addEventListener('click', () => mqStartHotspotDraw('freehand'));
 
-
-
-            // clic = ajoute un point, dblclic = termine
-            // Remplacez votre écouteur 'click' existant par ceci (ou fusionnez la logique)
+            // clic = point (mode points) ou départ du tracé crayon
             viewport.addEventListener('click', (e) => {
 
                 // A. CAS INSERTION POINT (Admin + Shift + Proche ligne)
@@ -6800,8 +6977,23 @@
                     return;
                 }
 
-                // B. MODE DESSIN (Votre code existant)
-                if (drawingHotspot && state.mode === 'admin') {
+                // B. MODE DESSIN CRAYON : premier clic = point de départ
+                if (drawingHotspot && hotspotDrawMode === 'freehand' && state.mode === 'admin') {
+                    if (e.target.closest && e.target.closest('.box')) return;
+                    if (!freehandTracing) {
+                        const { x, y } = stageToLocal(e.clientX, e.clientY);
+                        state.hotspotDraft = [[Math.round(x), Math.round(y)]];
+                        freehandTracing = true;
+                        if (typeof mqHsBanner === 'function') {
+                            mqHsBanner('✏️ Suivez le contour · revenez au point vert pour fermer · Échap = annuler');
+                        }
+                        render();
+                    }
+                    return;
+                }
+
+                // C. MODE DESSIN POINT PAR POINT
+                if (drawingHotspot && hotspotDrawMode === 'points' && state.mode === 'admin') {
                     if (e.target.closest && e.target.closest('.box')) return;
                     const { x, y } = stageToLocal(e.clientX, e.clientY);
                     state.hotspotDraft.push([Math.round(x), Math.round(y)]);
@@ -6811,54 +7003,9 @@
             });
 
             viewport.addEventListener('dblclick', (e) => {
-                if (!drawingHotspot || state.mode !== 'admin') return;
+                if (!drawingHotspot || hotspotDrawMode !== 'points' || state.mode !== 'admin') return;
                 e.preventDefault();
-
-                if ((state.hotspotDraft?.length || 0) < 3) {
-                    drawingHotspot = false;
-                    state.hotspotDraft = null;
-                    render();
-                    return;
-                }
-
-                const h = {
-                    id: crypto.randomUUID(),
-                    points: state.hotspotDraft.slice(),
-                    label: 'Hotspot',
-
-                    fill: '#ffcc00',
-                    stroke: '#ff9900',
-                    strokeW: 2,
-
-                    // --- C'EST ICI QUE VOUS CHANGEZ LA VALEUR PAR DÉFAUT ---
-                    alphaIdle: 0.05,        // 0.05 pour être visible au repos
-                    alphaActive: 0.35,      // Opacité quand survolé/activé
-
-                    trigger: 'hover',
-                    // BLINK REMOVED
-                    tip: '',
-                    tipMs: 1500,
-                    tipRender: 'image',
-                    tipFontSize: 22,
-                    group: '',
-                    z: (state.hotspots.reduce((m, x) => Math.max(m, Number(x.z ?? 0)), -1) + 1),
-
-                    // Nouveau défaut blend
-                    blendMode: 'multiply'
-                };
-
-                if (lastHotspotStyle) {
-                    Object.assign(h, lastHotspotStyle);
-                }
-
-                state.hotspots.push(h);
-                state.selectedHotspotId = h.id;
-                lastHotspotStyle = extractHotspotStyle(h);
-                drawingHotspot = false;
-                state.hotspotDraft = null;
-                saveLocal();
-                render();
-                syncHotspotUI();
+                mqFinishHotspotDraw();
             }, { passive: false });
 
             // Les handlers Export/Import/Copier/Télécharger sont définis plus bas
@@ -10068,7 +10215,7 @@
             stash.setAttribute('aria-hidden', 'true');
             document.body.appendChild(stash);
 
-            const stashIds = ['btnAdd', 'btnHs', 'btnIframe', 'btnDup', 'btnDel', 'btnFront', 'btnBack', 'btnGenHTML', 'btnSaveLocal', 'btnLoadLocal', 'btnFit', 'zoomSlider'];
+            const stashIds = ['btnAdd', 'btnHs', 'btnHsFreehand', 'btnIframe', 'btnDup', 'btnDel', 'btnFront', 'btnBack', 'btnGenHTML', 'btnSaveLocal', 'btnLoadLocal', 'btnFit', 'zoomSlider'];
             stashIds.forEach((sid) => {
                 const el = $(sid);
                 if (el && el.parentNode) stash.appendChild(el);
@@ -10172,6 +10319,7 @@
                 rail.setAttribute('aria-label', 'Outils');
                 rail.appendChild(mqRailBtn('mqRailAdd', '+ Champ', 'add-field', 'btnAdd'));
                 rail.appendChild(mqRailBtn('mqRailHs', '+ Hotspot', 'hotspot', 'btnHs'));
+                rail.appendChild(mqRailBtn('mqRailHsFreehand', '✏️ Hotspot', 'hotspot', 'btnHsFreehand'));
                 rail.appendChild(mqRailBtn('mqRailIframe', '+ Iframe', 'iframe', 'btnIframe'));
                 const s1 = el('div', 'mq-rail-sep');
                 rail.appendChild(s1);
@@ -10262,7 +10410,8 @@
             modal.innerHTML = '<h2>Raccourcis clavier</h2><div class="mq-kgrid">' +
                 '<div>V</div><div>Sélection / navigation</div>' +
                 '<div>F</div><div>Ajouter un champ</div>' +
-                '<div>H</div><div>Ajouter un hotspot</div>' +
+                '<div>H</div><div>Ajouter un hotspot (point par point)</div>' +
+                '<div>✏️</div><div>Hotspot au crayon (bouton barre d’outils)</div>' +
                 '<div>⌘T</div><div>Transformer un hotspot (poignées de taille)</div>' +
                 '<div>⌘D</div><div>Dupliquer</div>' +
                 '<div>⌫</div><div>Supprimer la sélection</div>' +
@@ -10551,6 +10700,7 @@
                     ctxMenu.appendChild(title);
                     mqAddMenuItem('➕ Ajouter un champ', () => mqProxyClick('btnAdd'), { kbd: 'F' });
                     mqAddMenuItem('✨ Ajouter un hotspot', () => mqProxyClick('btnHs'), { kbd: 'H' });
+                    mqAddMenuItem('✏️ Hotspot au crayon', () => mqProxyClick('btnHsFreehand'));
                     mqAddMenuItem('🔲 Ajouter une iframe', () => mqProxyClick('btnIframe'));
                     mqAddMenuSep();
                     mqAddMenuItem('🔍 Ajuster à l’écran', () => mqProxyClick('btnFit'));
