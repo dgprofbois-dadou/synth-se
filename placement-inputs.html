@@ -1981,7 +1981,7 @@
             <div class="row" style="align-items:center; gap:8px;">
                 <input id="pCopyToHsTip" type="checkbox" style="width:auto;">
                 <label for="pCopyToHsTip" style="font-size:11px; color:#555; cursor:pointer; width:auto;">
-                    Copier auto la reponse du champ vers l'infobulle (meme groupe)
+                    Copier auto la reponse du champ vers l'infobulle (si un seul hotspot dans le groupe)
                 </label>
             </div>
 
@@ -3974,9 +3974,9 @@
                     const group = (b.group || '').trim();
                     if (group) {
                         const tipText = (b.answer || '').trim() || group;
-                        for (const h of state.hotspots) {
-                            if ((h.group || '').trim() === group) h.tip = tipText;
-                        }
+                        const linkedHs = state.hotspots.filter(h => (h.group || '').trim() === group);
+                        // Auto-copie uniquement s'il n'y a qu'un seul hotspot dans le groupe
+                        if (linkedHs.length === 1) linkedHs[0].tip = tipText;
                     }
                 }
 
@@ -5642,6 +5642,16 @@
                 hsShadowBlur.value = h.shadowBlur ?? 0;
                 hsShadowColor.value = h.shadowColor ?? '#000000';
                 hsTipFont.value = h.tipFont ?? 'inherit';
+
+                const grp = (h.group || '').trim();
+                const linkedBox = grp ? state.boxes.find(b => (b.group || '').trim() === grp) : null;
+                const hsInGroup = grp ? state.hotspots.filter(x => (x.group || '').trim() === grp).length : 0;
+                const autoTipLocked = !!(linkedBox && linkedBox.copyToHotspotTip && hsInGroup === 1);
+                if (pCopyToHsTip) pCopyToHsTip.checked = !!(linkedBox && linkedBox.copyToHotspotTip);
+                if (hsTip) {
+                    hsTip.disabled = autoTipLocked;
+                    hsTip.style.opacity = autoTipLocked ? '0.6' : '1';
+                }
             }
 
             function extractHotspotStyle(h) {
@@ -5707,17 +5717,6 @@
                 h.group = (hsGroup.value || '').trim();
                 h.z = Number(hsZ?.value ?? h.z ?? 0);
                 h.tipPad = Math.max(0, Number(hsTipPad.value) || 10);
-
-                if (pCopyToHsTip && pCopyToHsTip.checked) {
-                    const autoTip = getAutoHotspotTipText(h.group);
-                    if (autoTip) {
-                        h.tip = autoTip;
-                        hsTip.value = autoTip;
-                        for (const hs of state.hotspots) {
-                            if ((hs.group || '').trim() === (h.group || '').trim()) hs.tip = autoTip;
-                        }
-                    }
-                }
 
                 h.shadowX = hsShadowX.value;
                 h.shadowY = hsShadowY.value;
@@ -5928,8 +5927,6 @@
                 const txt = prompt('Infobulle — texte à afficher :', h.tip || '');
                 if (txt === null) return;
                 h.tip = txt;
-                const grp = (h.group || '').trim();
-                if (grp) for (const hs of state.hotspots) if ((hs.group || '').trim() === grp) hs.tip = txt;
                 syncHotspotUI();
                 render();
                 scheduleSaveLocal();
