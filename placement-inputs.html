@@ -6350,14 +6350,35 @@
                 if (t.isContentEditable) return true;
                 return false;
             }
-            window.addEventListener('keydown', (e) => {
-
-                // Ctrl/Cmd+T : mode transform (poignées de redimensionnement du hotspot sélectionné)
-                if ((e.ctrlKey || e.metaKey) && (e.key === 't' || e.key === 'T') && state.mode === 'admin') {
-                    e.preventDefault();
-                    if (state.selectedHotspotId) mqToggleHotspotTransform();
+            function mqHandleHotspotTransformShortcut(e) {
+                if (state.mode !== 'admin' || mqIsTypingTarget(e.target)) return;
+                const keyT = e.code === 'KeyT' || e.key === 't' || e.key === 'T';
+                if (!keyT) return;
+                const ctrlT = (e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey;
+                const shiftT = e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey;
+                if (!ctrlT && !shiftT) return;
+                e.preventDefault();
+                e.stopPropagation();
+                if (state.selectedHotspotId) mqToggleHotspotTransform();
+            }
+            function mqHandleModeShortcuts(e) {
+                if (e.key === 'F1' || e.code === 'F1') {
+                    if (state.mode === 'admin' && !mqIsTypingTarget(e.target)) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        if (btnMode) btnMode.click();
+                    }
                     return;
                 }
+                if (e.key === 'Escape' && state.mode === 'student') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (btnMode) btnMode.click();
+                }
+            }
+            document.addEventListener('keydown', mqHandleHotspotTransformShortcut, true);
+            document.addEventListener('keydown', mqHandleModeShortcuts, true);
+            window.addEventListener('keydown', (e) => {
 
                 // --- PROTECTION CRITIQUE ---
                 // Si l'utilisateur tape du texte, on ne supprime pas la boîte !
@@ -6388,8 +6409,9 @@
                     }
                 }
 
-                // 1. Touche ÉCHAP : Annulation
+                // 1. Touche ÉCHAP : Annulation (admin) — le mode élève est géré en capture (mqHandleModeShortcuts)
                 if (e.key === 'Escape') {
+                    if (state.mode === 'student') return;
                     if (state.hsTransform) {
                         state.hsTransform = null;
                         if (typeof mqHsBanner === 'function') mqHsBanner('');
@@ -10470,15 +10492,17 @@
                 '<div>F</div><div>Ajouter un champ</div>' +
                 '<div>H</div><div>Ajouter un hotspot (point par point)</div>' +
                 '<div>✏️</div><div>Hotspot au crayon (bouton barre d’outils)</div>' +
-                '<div>⌘T</div><div>Transformer un hotspot (poignées de taille)</div>' +
+                '<div>Maj+T</div><div>Transformer un hotspot (Firefox — poignées de taille)</div>' +
+                '<div>Ctrl+T</div><div>Transformer un hotspot (Chrome / Edge)</div>' +
+                '<div>F1</div><div>Passer en mode élève (aperçu)</div>' +
                 '<div>⌘D</div><div>Dupliquer</div>' +
                 '<div>⌫</div><div>Supprimer la sélection</div>' +
                 '<div>⌘S</div><div>Enregistrer</div>' +
                 '<div>] / [</div><div>Devant / derrière</div>' +
                 '<div>⌘+ / ⌘-</div><div>Zoom</div>' +
-                '<div>Esc</div><div>Désélectionner / annuler</div>' +
+                '<div>Esc</div><div>Quitter le mode élève · ou annuler (admin)</div>' +
                 '<div>?</div><div>Ouvrir cette aide</div>' +
-                '</div><p class="mq-kfoot">Les raccourcis F, H et ⌘D sont actifs en mode admin (sauf dans un champ de saisie).</p>';
+                '</div><p class="mq-kfoot">Les raccourcis F, H et Ctrl+D sont actifs en mode admin (sauf dans un champ de saisie). Sous Firefox, Ctrl+T ouvre un onglet (raccourci protégé) : utilisez Maj+T pour transformer un hotspot.</p>';
             backdrop.appendChild(modal);
             document.body.appendChild(backdrop);
             function mqCloseShortcuts() { backdrop.classList.remove('mq-open'); }
@@ -10732,7 +10756,7 @@
                     mqAddMenuItem('💬 Infobulle…', () => window.mqHotspotEditTip && window.mqHotspotEditTip());
                     mqAddMenuItem('🖌️ Pinceau de style', () => window.mqStartHotspotBrush && window.mqStartHotspotBrush());
                     mqAddMenuItem('🧪 Pipette de style', () => window.mqStartHotspotPipette && window.mqStartHotspotPipette());
-                    mqAddMenuItem('↔️ Transformer (taille)', () => window.mqToggleHotspotTransform && window.mqToggleHotspotTransform(), { kbd: '⌘T' });
+                    mqAddMenuItem('↔️ Transformer (taille)', () => window.mqToggleHotspotTransform && window.mqToggleHotspotTransform(), { kbd: 'Maj+T' });
                     mqAddMenuItem('🔗 Lier (champ ou hotspot)', () => window.mqStartHotspotLink && window.mqStartHotspotLink());
                     mqAddMenuSep();
                     mqAddMenuItem('📋 Dupliquer', () => mqProxyClick('btnDup'), { kbd: '⌘D' });
