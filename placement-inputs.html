@@ -5241,7 +5241,7 @@
                         });
                     }
 
-                    // Boîte de transformation (Ctrl+T / T) : poignées de redimensionnement
+                    // Boîte de transformation (Ctrl+T) : poignées de redimensionnement
                     if (state.mode === 'admin' && h.id === state.selectedHotspotId && state.hsTransform && state.hsTransform.hsId === h.id) {
                         mqDrawTransformHandles(h);
                     }
@@ -5339,8 +5339,10 @@
                     r.setAttribute('stroke-width', sw);
                     r.style.cursor = hd.cur;
                     r.style.pointerEvents = 'all';
+                    r.classList.add('hs-transform-handle');
                     r.addEventListener('pointerdown', (e) => {
                         e.preventDefault(); e.stopPropagation();
+                        try { r.setPointerCapture(e.pointerId); } catch (_) { /* ignore */ }
                         state.draggingScale = {
                             hsId: h.id,
                             axis: hd.axis,
@@ -5351,6 +5353,16 @@
                     });
                     svg.appendChild(r);
                 });
+            }
+
+            function mqToggleHotspotTransform() {
+                if (state.mode !== 'admin' || !state.selectedHotspotId) return;
+                state.hsTransform = (state.hsTransform && state.hsTransform.hsId === state.selectedHotspotId)
+                    ? null : { hsId: state.selectedHotspotId };
+                mqHsBanner(state.hsTransform
+                    ? '↔️ Transform : coins = proportionnel · côtés = largeur/hauteur · Échap pour quitter'
+                    : '');
+                render();
             }
 
             function syncHotspotUI() {
@@ -6100,6 +6112,13 @@
             }
             window.addEventListener('keydown', (e) => {
 
+                // Ctrl/Cmd+T : mode transform (poignées de redimensionnement du hotspot sélectionné)
+                if ((e.ctrlKey || e.metaKey) && (e.key === 't' || e.key === 'T') && state.mode === 'admin') {
+                    e.preventDefault();
+                    if (state.selectedHotspotId) mqToggleHotspotTransform();
+                    return;
+                }
+
                 // --- PROTECTION CRITIQUE ---
                 // Si l'utilisateur tape du texte, on ne supprime pas la boîte !
                 if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
@@ -6127,22 +6146,6 @@
                         if (btnHs && !btnHs.disabled) btnHs.click();
                         return;
                     }
-                }
-
-                // 0. TRANSFORM (Ctrl+T ou T) : poignées de redimensionnement du hotspot sélectionné
-                if ((e.key === 't' || e.key === 'T') && state.mode === 'admin') {
-                    if (state.selectedHotspotId) {
-                        e.preventDefault();
-                        state.hsTransform = (state.hsTransform && state.hsTransform.hsId === state.selectedHotspotId)
-                            ? null : { hsId: state.selectedHotspotId };
-                        if (typeof mqHsBanner === 'function') {
-                            mqHsBanner(state.hsTransform
-                                ? '↔️ Transform : coins = proportionnel · côtés = largeur/hauteur · Échap pour quitter'
-                                : '');
-                        }
-                        render();
-                    }
-                    return;
                 }
 
                 // 1. Touche ÉCHAP : Annulation
@@ -10260,6 +10263,7 @@
                 '<div>V</div><div>Sélection / navigation</div>' +
                 '<div>F</div><div>Ajouter un champ</div>' +
                 '<div>H</div><div>Ajouter un hotspot</div>' +
+                '<div>⌘T</div><div>Transformer un hotspot (poignées de taille)</div>' +
                 '<div>⌘D</div><div>Dupliquer</div>' +
                 '<div>⌫</div><div>Supprimer la sélection</div>' +
                 '<div>⌘S</div><div>Enregistrer</div>' +
@@ -10521,6 +10525,7 @@
                     mqAddMenuItem('💬 Infobulle…', () => window.mqHotspotEditTip && window.mqHotspotEditTip());
                     mqAddMenuItem('🖌️ Pinceau de style', () => window.mqStartHotspotBrush && window.mqStartHotspotBrush());
                     mqAddMenuItem('🧪 Pipette de style', () => window.mqStartHotspotPipette && window.mqStartHotspotPipette());
+                    mqAddMenuItem('↔️ Transformer (taille)', () => mqToggleHotspotTransform(), { kbd: '⌘T' });
                     mqAddMenuItem('🔗 Lier (champ ou hotspot)', () => window.mqStartHotspotLink && window.mqStartHotspotLink());
                     mqAddMenuSep();
                     mqAddMenuItem('📋 Dupliquer', () => mqProxyClick('btnDup'), { kbd: '⌘D' });
