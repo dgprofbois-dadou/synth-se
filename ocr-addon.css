@@ -82,6 +82,11 @@
     opacity: 1;
 }
 
+.ocr-field input.ocr-field-mirror {
+    pointer-events: none;
+    cursor: inherit;
+}
+
 /* --- Barre d'outils --- */
 .ocr-toolbar {
     display: flex;
@@ -314,6 +319,10 @@
     border: 1px solid #d4d4d8;
     border-radius: 4px;
     font-size: 12px;
+    pointer-events: auto;
+    user-select: text;
+    cursor: text;
+    background: #fff;
 }
 
 .ocr-list-item input:focus {

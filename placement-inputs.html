@@ -2747,15 +2747,16 @@
                 <p class="mini">
                     Analyse <strong>tout le sous-cul</strong> (page 1 + page 2), pas seulement la zone
                     visible à l'écran. Résolution native · défilez le canvas après l'OCR pour voir tous les champs.
-                    Fiche à filigrane : bouton <strong>Fiche filigranée</strong> (contraste + seuil).
+                    Mode <strong>segments</strong> : entre ligne et mot — coupure si l'écart dépasse la valeur réglée.
+                    Fiche à filigrane : bouton <strong>Fiche filigranée</strong>.
                 </p>
                 <div id="mqOcrToolbarHost"></div>
                 <div class="mq-ocr-list-block">
                     <div class="mq-ocr-list-title">Textes reconnus</div>
                     <p class="mq-ocr-list-help">
-                        C'est ici que vous triez et supprimez : cliquez <strong>×</strong> pour retirer
-                        un texte (il ne reviendra pas au prochain OCR). <strong>Suppr</strong> hors
-                        champ texte = supprimer la ligne sélectionnée.
+                        Cliquez dans le champ pour <strong>corriger le texte</strong> · triez avec
+                        <strong>⋮⋮</strong> · retirez avec <strong>×</strong> (mémorisé pour les prochains OCR).
+                        <strong>Suppr</strong> hors champ = supprimer la ligne sélectionnée.
                     </p>
                     <div id="mqOcrListHost"></div>
                 </div>
@@ -6884,7 +6885,8 @@
                     listContainer: listHost,
                     toolbarContainer: toolbarHost,
                     language: 'fra',
-                    mode: 'lines',
+                    mode: 'segments',
+                    maxWordGap: 48,
                     minConfidence: 65,
                     minTextLength: 2,
                     createOverlayInputs: true,
@@ -7612,6 +7614,7 @@
             // --- GESTION CLAVIER (Déplacements, Suppression, Échap) ---
             function mqIsTypingTarget(t) {
                 if (!t || !t.tagName) return false;
+                if (t.closest && t.closest('.ocr-list-item')) return true;
                 const tag = t.tagName.toLowerCase();
                 if (tag === 'input' || tag === 'textarea' || tag === 'select') return true;
                 if (t.isContentEditable) return true;

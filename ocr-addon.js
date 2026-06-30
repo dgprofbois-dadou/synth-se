@@ -22,9 +22,11 @@
         toolbarContainer: null,
         toolbarContainerSelector: null,
         language: 'fra',
-        mode: 'lines',
+        mode: 'segments',
         minConfidence: 70,
         minTextLength: 2,
+        /** Écart horizontal max. (px image) entre mots sur une ligne — mode segments. 0 = auto. */
+        maxWordGap: 48,
         createOverlayInputs: true,
         createListInputs: true,
         useDisplayedImageCoordinates: true,
@@ -42,7 +44,8 @@
     /** Réglages recommandés pour certains types de documents. */
     const OCR_PRESETS = {
         'fiche-filigrane': {
-            mode: 'lines',
+            mode: 'segments',
+            maxWordGap: 55,
             minConfidence: 65,
             minTextLength: 3,
             preprocess: { grayscale: true, contrast: 1.35, threshold: 185 }
@@ -122,6 +125,31 @@
         if (confidence < state.minConfidence) return false;
         if (/^[^a-zA-Z0-9àâäéèêëïîôùûüçÀÂÄÉÈÊËÏÎÔÙÛÜÇ]+$/.test(t)) return false;
         return true;
+    }
+
+    /** Lit le texte courant depuis le DOM (liste prioritaire). */
+    function readFieldText(field) {
+        if (field.listEl) {
+            const li = field.listEl.querySelector('input.ocr-list-text, input');
+            if (li) return li.value;
+        }
+        if (field.el) {
+            const oi = field.el.querySelector('input');
+            if (oi && !oi.readOnly) return oi.value;
+        }
+        return field.text != null ? field.text : '';
+    }
+
+    /** Met à jour field.text depuis les inputs DOM. */
+    function syncFieldTextFromDom(field) {
+        field.text = readFieldText(field);
+        return field.text;
+    }
+
+    /** Champ de saisie OCR (liste ou overlay). */
+    function isOcrTextInput(el) {
+        if (!el || el.tagName !== 'INPUT') return false;
+        return !!(el.closest('.ocr-list-item') || el.closest('.ocr-field'));
     }
 
     /**
@@ -303,12 +331,131 @@
   /* Extraction des éléments OCR selon le mode                           */
   /* ------------------------------------------------------------------ */
 
+    function wordCenterY(w) {
+        return (w.bbox.y0 + w.bbox.y1) / 2;
+    }
+
+    function wordHeight(w) {
+        return w.bbox.y1 - w.bbox.y0;
+    }
+
+    function medianOf(nums) {
+        if (!nums.length) return 0;
+        const sorted = nums.slice().sort((a, b) => a - b);
+        return sorted[Math.floor(sorted.length / 2)];
+    }
+
     /**
-     * @param {object} data — résultat Tesseract data
-     * @param {string} mode — blocks | lines | words
+     * Regroupe les mots Tesseract en lignes visuelles (tolérance verticale).
+     * @param {object[]} words
+     * @returns {object[][]}
+     */
+    function groupWordsIntoLines(words) {
+        if (!words.length) return [];
+        const sorted = words.slice().sort((a, b) => wordCenterY(a) - wordCenterY(b) || a.bbox.x0 - b.bbox.x0);
+        const heights = sorted.map(wordHeight).filter((h) => h > 0);
+        const yTol = Math.max(8, medianOf(heights) * 0.55);
+
+        const lines = [];
+        let current = [sorted[0]];
+        let currentY = wordCenterY(sorted[0]);
+
+        for (let i = 1; i < sorted.length; i++) {
+            const w = sorted[i];
+            const cy = wordCenterY(w);
+            if (Math.abs(cy - currentY) <= yTol) {
+                current.push(w);
+                currentY = current.reduce((s, ww) => s + wordCenterY(ww), 0) / current.length;
+            } else {
+                lines.push(current);
+                current = [w];
+                currentY = cy;
+            }
+        }
+        lines.push(current);
+        return lines;
+    }
+
+    /**
+     * Fusionne les mots d'une ligne en segments selon l'écart horizontal max.
+     * @param {object[]} lineWords
+     * @param {number} maxGapPx — 0 = seuil auto par ligne
      * @returns {Array<{ text: string, confidence: number, bbox: object }>}
      */
-    function extractOcrItems(data, mode) {
+    function segmentWordsOnLine(lineWords, maxGapPx) {
+        if (!lineWords.length) return [];
+        const ordered = lineWords.slice().sort((a, b) => a.bbox.x0 - b.bbox.x0);
+
+        let gapLimit = maxGapPx;
+        if (!gapLimit || gapLimit <= 0) {
+            const widths = ordered.map((w) => w.bbox.x1 - w.bbox.x0).filter((w) => w > 0);
+            const medW = medianOf(widths) || 40;
+            gapLimit = clamp(medW * 0.45, 15, 100);
+        }
+
+        const segments = [];
+        let chunk = [ordered[0]];
+
+        function flush() {
+            if (!chunk.length) return;
+            const text = chunk.map((w) => w.text).join(' ');
+            let confWeighted = 0;
+            let confLen = 0;
+            chunk.forEach((w) => {
+                const len = (w.text || '').length || 1;
+                confWeighted += (w.confidence != null ? w.confidence : 0) * len;
+                confLen += len;
+            });
+            segments.push({
+                text: text,
+                confidence: confLen ? confWeighted / confLen : 0,
+                bbox: {
+                    x0: Math.min(...chunk.map((w) => w.bbox.x0)),
+                    y0: Math.min(...chunk.map((w) => w.bbox.y0)),
+                    x1: Math.max(...chunk.map((w) => w.bbox.x1)),
+                    y1: Math.max(...chunk.map((w) => w.bbox.y1))
+                }
+            });
+            chunk = [];
+        }
+
+        for (let i = 1; i < ordered.length; i++) {
+            const prev = ordered[i - 1];
+            const cur = ordered[i];
+            const gap = cur.bbox.x0 - prev.bbox.x1;
+            if (gap > gapLimit) {
+                flush();
+                chunk = [cur];
+            } else {
+                chunk.push(cur);
+            }
+        }
+        flush();
+        return segments;
+    }
+
+    /**
+     * Mode intermédiaire : découpe une ligne en morceaux selon les grands espaces.
+     * @param {object} data
+     * @param {number} maxGapPx
+     * @returns {Array<{ text: string, confidence: number, bbox: object }>}
+     */
+    function extractSegmentItems(data, maxGapPx) {
+        const words = (data.words || []).filter((w) => w && w.bbox && w.text);
+        const items = [];
+        groupWordsIntoLines(words).forEach((line) => {
+            segmentWordsOnLine(line, maxGapPx).forEach((seg) => items.push(seg));
+        });
+        return items;
+    }
+
+    /**
+     * @param {object} data — résultat Tesseract data
+     * @param {string} mode — blocks | lines | segments | words
+     * @param {number} [maxWordGap]
+     * @returns {Array<{ text: string, confidence: number, bbox: object }>}
+     */
+    function extractOcrItems(data, mode, maxWordGap) {
         const items = [];
 
         function pushItem(text, confidence, bbox) {
@@ -327,6 +474,13 @@
 
         if (mode === 'words' && Array.isArray(data.words)) {
             data.words.forEach((w) => pushItem(w.text, w.confidence, w.bbox));
+            return items;
+        }
+
+        if (mode === 'segments' && Array.isArray(data.words)) {
+            extractSegmentItems(data, maxWordGap).forEach((seg) => {
+                pushItem(seg.text, seg.confidence, seg.bbox);
+            });
             return items;
         }
 
@@ -412,7 +566,7 @@
             if (!panel) return null;
             const wrap = document.createElement('div');
             wrap.className = 'ocr-list-panel';
-            wrap.innerHTML = '<p class="ocr-list-hint">Supprimez avec <strong>×</strong> (mémorisé pour les prochains OCR) · glissez <strong>⋮⋮</strong> pour trier</p>';
+            wrap.innerHTML = '<p class="ocr-list-hint">Corrigez le texte dans chaque champ · <strong>×</strong> retire (mémorisé) · <strong>⋮⋮</strong> pour trier</p>';
             const items = document.createElement('div');
             items.className = 'ocr-list-items';
             const empty = document.createElement('div');
@@ -543,6 +697,12 @@
         input.style.padding = '0 2px';
         input.style.font = 'inherit';
         input.style.color = 'inherit';
+        if (state.listPrimary) {
+            input.readOnly = true;
+            input.tabIndex = -1;
+            input.className = 'ocr-field-mirror';
+            input.title = 'Corrigez le texte dans la liste « Textes reconnus »';
+        }
 
         const del = document.createElement('button');
         del.type = 'button';
@@ -568,28 +728,29 @@
 
         applyFieldGeometry(field);
 
-        input.addEventListener('input', () => {
-            field.text = input.value;
-            if (field.listEl) {
-                const li = field.listEl.querySelector('input');
-                if (li && li.value !== field.text) li.value = field.text;
-            }
-        });
-
         input.addEventListener('mousedown', (e) => e.stopPropagation());
         input.addEventListener('click', (e) => e.stopPropagation());
+        if (!state.listPrimary) {
+            input.addEventListener('input', () => {
+                field.text = input.value;
+                if (field.listEl) {
+                    const li = field.listEl.querySelector('input');
+                    if (li && li.value !== field.text) li.value = field.text;
+                }
+            });
+        }
 
         wrap.addEventListener('mousedown', (e) => {
             if (e.target === handle) return;
             if (e.target === del) return;
-            selectField(field.id);
+            selectField(field.id, !state.listPrimary && e.target === input);
             if (e.target === input) return;
             startDrag(field, e);
         });
 
         handle.addEventListener('mousedown', (e) => {
             e.stopPropagation();
-            selectField(field.id);
+            selectField(field.id, false);
             startResize(field, e);
         });
 
@@ -619,8 +780,13 @@
 
         const input = document.createElement('input');
         input.type = 'text';
+        input.className = 'ocr-list-text';
         input.value = field.text;
-        input.title = field.id + ' · confiance ' + Math.round(field.confidence) + '%';
+        input.readOnly = false;
+        input.disabled = false;
+        input.autocomplete = 'off';
+        input.spellcheck = true;
+        input.title = field.id + ' · confiance ' + Math.round(field.confidence) + '% · modifiez le texte ici';
 
         const del = document.createElement('button');
         del.type = 'button';
@@ -641,11 +807,25 @@
             }
         });
 
+        input.addEventListener('mousedown', (e) => e.stopPropagation());
+        input.addEventListener('pointerdown', (e) => e.stopPropagation());
+        input.addEventListener('click', (e) => e.stopPropagation());
+        input.addEventListener('keydown', (e) => e.stopPropagation());
+
         input.addEventListener('focus', () => selectField(field.id, false));
+
+        row.addEventListener('mousedown', (e) => {
+            if (e.target.closest('.ocr-list-del') || e.target.closest('.ocr-list-drag')) return;
+            if (e.target === input) return;
+            selectField(field.id, false);
+            input.focus();
+        });
 
         row.addEventListener('click', (e) => {
             if (e.target.closest('.ocr-list-del') || e.target.closest('.ocr-list-drag')) return;
+            if (e.target === input) return;
             selectField(field.id, false);
+            input.focus();
         });
 
         row.appendChild(grip);
@@ -720,7 +900,7 @@
      * @param {boolean} [focusOverlay=true]
      */
     function selectField(id, focusOverlay) {
-        if (focusOverlay === undefined) focusOverlay = true;
+        if (focusOverlay === undefined) focusOverlay = !state.listPrimary;
         state.selectedId = id;
         state.fields.forEach((f) => {
             const sel = f.id === id;
@@ -731,7 +911,7 @@
             const f = state.fields.find((x) => x.id === id);
             if (f && f.el) {
                 const inp = f.el.querySelector('input');
-                if (inp) inp.focus();
+                if (inp && !inp.readOnly) inp.focus();
             }
         }
     }
@@ -871,6 +1051,12 @@
         if (mc) mc.value = state.minConfidence;
         const ml = bar.querySelector('[data-control="minTextLength"]');
         if (ml) ml.value = state.minTextLength;
+        const mg = bar.querySelector('[data-control="maxWordGap"]');
+        if (mg) mg.value = state.maxWordGap != null ? state.maxWordGap : 48;
+        const gapWrap = bar.querySelector('[data-control="maxWordGap-wrap"]');
+        if (gapWrap) {
+            gapWrap.style.display = state.mode === 'segments' ? '' : 'none';
+        }
         const pp = state.preprocess || {};
         const ct = bar.querySelector('[data-control="contrast"]');
         if (ct) ct.value = pp.contrast != null ? pp.contrast : 1.2;
@@ -900,9 +1086,13 @@
             '  <label>Mode',
             '    <select data-control="mode">',
             '      <option value="blocks">blocks</option>',
-            '      <option value="lines" selected>lines</option>',
+            '      <option value="lines">lines</option>',
+            '      <option value="segments" selected>segments</option>',
             '      <option value="words">words</option>',
             '    </select>',
+            '  </label>',
+            '  <label data-control="maxWordGap-wrap" title="Coupure si l\'écart entre deux mots dépasse cette valeur (px image). 0 = auto.">Écart max.',
+            '    <input type="number" data-control="maxWordGap" min="0" max="500" step="1" value="48">',
             '  </label>',
             '  <label>Confiance min.',
             '    <input type="number" data-control="minConfidence" min="0" max="100" value="70">',
@@ -918,7 +1108,7 @@
             '  <label title="Binarisation anti-filigrane (vide = désactivé)">Seuil filigrane',
             '    <input type="number" data-control="threshold" min="120" max="245" step="1" placeholder="off">',
             '  </label>',
-            '  <button type="button" class="ocr-btn-preset" data-action="preset-watermark" title="Contraste 1,35 · seuil 185 · lignes · conf. 65">Fiche filigranée</button>',
+            '  <button type="button" class="ocr-btn-preset" data-action="preset-watermark" title="Segments · écart 55 · contraste 1,35 · seuil 185">Fiche filigranée</button>',
             '</div>',
             '<div class="ocr-progress" title="Progression OCR"><div class="ocr-progress-bar"></div></div>',
             '<span class="ocr-progress-text">Prêt</span>'
@@ -939,12 +1129,17 @@
 
         bar.querySelector('[data-control="mode"]').addEventListener('change', (e) => {
             state.mode = e.target.value;
+            syncToolbarControls();
         });
         bar.querySelector('[data-control="minConfidence"]').addEventListener('change', (e) => {
             OCRAddon.setFilter({ minConfidence: Number(e.target.value) });
         });
         bar.querySelector('[data-control="minTextLength"]').addEventListener('change', (e) => {
             OCRAddon.setFilter({ minTextLength: Number(e.target.value) });
+        });
+        bar.querySelector('[data-control="maxWordGap"]').addEventListener('change', (e) => {
+            const v = Number(e.target.value);
+            OCRAddon.setFilter({ maxWordGap: Number.isFinite(v) && v >= 0 ? Math.round(v) : 48 });
         });
         bar.querySelector('[data-control="contrast"]').addEventListener('change', (e) => {
             const v = Number(e.target.value);
@@ -1004,10 +1199,10 @@
     function onKeyDown(e) {
         if (!state || !state.selectedId) return;
 
+        const ae = document.activeElement;
+        if (isOcrTextInput(ae)) return;
+
         if (e.key === 'Delete' || e.key === 'Backspace') {
-            const ae = document.activeElement;
-            if (ae && ae.closest && ae.closest('.ocr-list-item')) return;
-            if (ae && ae.closest && ae.closest('.ocr-field input') && ae.value) return;
             if (isTypingInOtherInput(e.target)) return;
             e.preventDefault();
             OCRAddon.deleteField(state.selectedId);
@@ -1029,7 +1224,7 @@
         if (!target) return false;
         const tag = target.tagName;
         if (tag === 'INPUT' || tag === 'TEXTAREA' || target.isContentEditable) {
-            return !target.closest('.ocr-field') && !target.closest('.ocr-list-item');
+            return !isOcrTextInput(target);
         }
         return false;
     }
@@ -1062,9 +1257,10 @@
             overlayContainer: resolveElement(opts.overlayContainer) || resolveElement(opts.overlayContainerSelector),
             listContainer: resolveElement(opts.listContainer) || resolveElement(opts.listContainerSelector),
             language: opts.language,
-            mode: opts.mode || 'lines',
+            mode: opts.mode || 'segments',
             minConfidence: opts.minConfidence,
             minTextLength: opts.minTextLength,
+            maxWordGap: opts.maxWordGap != null ? opts.maxWordGap : 48,
             createOverlayInputs: opts.createOverlayInputs,
             createListInputs: opts.createListInputs,
             useDisplayedImageCoordinates: opts.useDisplayedImageCoordinates,
@@ -1167,7 +1363,7 @@
             updateProgress(0.05, 'Analyse en cours…');
             const { data } = await worker.recognize(canvas);
 
-            const rawItems = extractOcrItems(data, state.mode);
+            const rawItems = extractOcrItems(data, state.mode, state.maxWordGap);
             const appendMode = state.fields.length > 0;
             if (!appendMode) {
                 state.fields.slice().forEach((f) => removeFieldById(f.id, true));
@@ -1320,12 +1516,13 @@
 
     /**
      * Met à jour les filtres (appliqués au prochain runOCR).
-     * @param {{ minConfidence?: number, minTextLength?: number }} options
+     * @param {{ minConfidence?: number, minTextLength?: number, maxWordGap?: number }} options
      */
     OCRAddon.setFilter = function (options) {
         if (!state) return;
         if (options.minConfidence != null) state.minConfidence = options.minConfidence;
         if (options.minTextLength != null) state.minTextLength = options.minTextLength;
+        if (options.maxWordGap != null) state.maxWordGap = options.maxWordGap;
         syncToolbarControls();
     };
 
@@ -1355,7 +1552,8 @@
         if (preset.mode) state.mode = preset.mode;
         OCRAddon.setFilter({
             minConfidence: preset.minConfidence != null ? preset.minConfidence : state.minConfidence,
-            minTextLength: preset.minTextLength != null ? preset.minTextLength : state.minTextLength
+            minTextLength: preset.minTextLength != null ? preset.minTextLength : state.minTextLength,
+            maxWordGap: preset.maxWordGap != null ? preset.maxWordGap : state.maxWordGap
         });
         if (preset.preprocess) {
             OCRAddon.setPreprocess(preset.preprocess);
@@ -1369,7 +1567,9 @@
      */
     OCRAddon.getFields = function () {
         if (!state) return [];
-        return state.fields.map((f) => ({
+        return state.fields.map((f) => {
+            syncFieldTextFromDom(f);
+            return {
             id: f.id,
             text: f.text,
             confidence: f.confidence,
@@ -1381,7 +1581,8 @@
             originalY: f.originalY,
             originalWidth: f.originalWidth,
             originalHeight: f.originalHeight
-        }));
+        };
+        });
     };
 
     /**
