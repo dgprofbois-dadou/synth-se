@@ -1526,8 +1526,49 @@
         }
 
         #left #mqOcrListHost {
-            max-height: 200px;
+            max-height: 280px;
             overflow-y: auto;
+        }
+
+        #left .mq-ocr-list-block {
+            border: 1px solid #e4e4e7;
+            border-radius: 8px;
+            background: #fafafa;
+            padding: 10px;
+        }
+
+        #left .mq-ocr-list-title {
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: #3f3f46;
+            margin-bottom: 6px;
+        }
+
+        #left .mq-ocr-list-help {
+            margin: 0 0 8px;
+            font-size: 11px;
+            line-height: 1.45;
+            color: #52525b;
+        }
+
+        #left .mq-ocr-list-help strong {
+            color: #dc2626;
+        }
+
+        #left #mqOcrListHost .ocr-list-panel {
+            margin: 0;
+        }
+
+        #left #mqOcrListHost .ocr-list-items {
+            max-height: none;
+        }
+
+        #left #mqOcrListHost .ocr-list-del {
+            width: 26px;
+            height: 26px;
+            font-size: 17px;
         }
 
         #btnOcrApplyBoxes {
@@ -2704,11 +2745,18 @@
             <h3>Reconnaissance OCR</h3>
             <div class="mq-ocr-panel">
                 <p class="mini">
-                    Détecte le texte sur les images de fond du canvas, place des champs
-                    éditables en surimpression, puis créez les champs texte définitifs sur le canvas.
+                    Détecte le texte sur les images de fond, puis affinez la liste ci-dessous
+                    avant de créer les champs sur le canvas.
                 </p>
                 <div id="mqOcrToolbarHost"></div>
-                <div id="mqOcrListHost"></div>
+                <div class="mq-ocr-list-block">
+                    <div class="mq-ocr-list-title">Textes reconnus</div>
+                    <p class="mq-ocr-list-help">
+                        C'est ici que vous triez et supprimez : cliquez <strong>×</strong> pour retirer
+                        un texte OCR non souhaité (il disparaît aussi sur l'image).
+                    </p>
+                    <div id="mqOcrListHost"></div>
+                </div>
                 <button id="btnOcrApplyBoxes" type="button">✅ Créer les champs texte sur le canvas</button>
             </div>
 
@@ -6771,6 +6819,7 @@
                     minTextLength: 2,
                     createOverlayInputs: true,
                     createListInputs: true,
+                    listPrimary: true,
                     useDisplayedImageCoordinates: false,
                     getOcrCanvas: mqOcrBuildCompositeCanvas,
                     observeResizeElement: stage,

@@ -35,7 +35,8 @@
         },
         getOcrCanvas: null,
         observeResizeElement: null,
-        beforeRunOCR: null
+        beforeRunOCR: null,
+        listPrimary: false
     };
 
     let state = null;
@@ -390,6 +391,7 @@
 
         state.fields.push(field);
         refreshListLabels();
+        updateListEmptyState();
         return field;
     }
 
@@ -400,9 +402,14 @@
             if (!panel) return null;
             const wrap = document.createElement('div');
             wrap.className = 'ocr-list-panel';
-            wrap.innerHTML = '<h4>Textes reconnus</h4><p class="ocr-list-hint">Glisser ⋮⋮ pour trier · × pour supprimer</p>';
+            wrap.innerHTML = '<p class="ocr-list-hint">Supprimez les textes inutiles avec <strong>×</strong> · glissez <strong>⋮⋮</strong> pour trier</p>';
             const items = document.createElement('div');
             items.className = 'ocr-list-items';
+            const empty = document.createElement('div');
+            empty.className = 'ocr-list-empty';
+            empty.textContent = 'Aucun texte pour l\'instant. Lancez l\'OCR, puis retirez ici ce qui ne vous intéresse pas.';
+            items.appendChild(empty);
+            state.listEmptyEl = empty;
             wrap.appendChild(items);
             panel.appendChild(wrap);
             state.listPanel = wrap;
@@ -410,6 +417,16 @@
             wireListReorder(items);
         }
         return state.listItemsHost;
+    }
+
+    /** Affiche ou masque le message « liste vide ». */
+    function updateListEmptyState() {
+        if (!state.listEmptyEl) return;
+        const hasItems = state.fields.length > 0;
+        state.listEmptyEl.style.display = hasItems ? 'none' : '';
+        if (state.listItemsHost) {
+            state.listItemsHost.classList.toggle('has-items', hasItems);
+        }
     }
 
     /** Réordonne state.fields selon l'ordre DOM de la liste. */
@@ -522,10 +539,14 @@
         del.className = 'ocr-field-delete';
         del.title = 'Supprimer';
         del.textContent = '×';
-        del.addEventListener('click', (e) => {
-            e.stopPropagation();
-            OCRAddon.deleteField(field.id);
-        });
+        if (!state.listPrimary) {
+            del.addEventListener('click', (e) => {
+                e.stopPropagation();
+                OCRAddon.deleteField(field.id);
+            });
+        } else {
+            del.style.display = 'none';
+        }
 
         const handle = document.createElement('div');
         handle.className = 'ocr-field-resize';
@@ -586,19 +607,16 @@
         index.className = 'ocr-list-index';
         index.textContent = '?';
 
-        const idLab = document.createElement('label');
-        idLab.className = 'ocr-list-id';
-        idLab.textContent = field.id;
-        idLab.title = 'Confiance : ' + Math.round(field.confidence) + '%';
-
         const input = document.createElement('input');
         input.type = 'text';
         input.value = field.text;
+        input.title = field.id + ' · confiance ' + Math.round(field.confidence) + '%';
 
         const del = document.createElement('button');
         del.type = 'button';
         del.className = 'ocr-list-del';
-        del.title = 'Supprimer ce texte';
+        del.title = 'Retirer ce texte de la liste';
+        del.setAttribute('aria-label', 'Supprimer ce texte');
         del.textContent = '×';
         del.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -615,9 +633,13 @@
 
         input.addEventListener('focus', () => selectField(field.id, false));
 
+        row.addEventListener('click', (e) => {
+            if (e.target.closest('.ocr-list-del') || e.target.closest('.ocr-list-drag')) return;
+            selectField(field.id, false);
+        });
+
         row.appendChild(grip);
         row.appendChild(index);
-        row.appendChild(idLab);
         row.appendChild(input);
         row.appendChild(del);
         return row;
@@ -725,6 +747,7 @@
         state.fields.splice(idx, 1);
         if (state.selectedId === id) state.selectedId = null;
         refreshListLabels();
+        updateListEmptyState();
     }
 
     /**
@@ -941,7 +964,8 @@
             running: false,
             getOcrCanvas: typeof opts.getOcrCanvas === 'function' ? opts.getOcrCanvas : null,
             observeResizeElement: resolveElement(opts.observeResizeElement),
-            beforeRunOCR: typeof opts.beforeRunOCR === 'function' ? opts.beforeRunOCR : null
+            beforeRunOCR: typeof opts.beforeRunOCR === 'function' ? opts.beforeRunOCR : null,
+            listPrimary: !!opts.listPrimary
         };
 
         if (!state.imageElement && !state.getOcrCanvas) {
@@ -1070,7 +1094,9 @@
             state.listPanel.remove();
             state.listPanel = null;
             state.listItemsHost = null;
+            state.listEmptyEl = null;
         }
+        updateListEmptyState();
     };
 
     /**

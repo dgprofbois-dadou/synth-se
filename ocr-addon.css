@@ -190,9 +190,30 @@
 
 .ocr-list-hint {
     margin: 0 0 8px;
-    font-size: 10px;
+    font-size: 11px;
+    color: #52525b;
+    line-height: 1.4;
+}
+
+.ocr-list-hint strong {
+    color: #dc2626;
+    font-weight: 700;
+}
+
+.ocr-list-empty {
+    padding: 10px 8px;
+    font-size: 11px;
     color: #a1a1aa;
-    line-height: 1.35;
+    font-style: italic;
+    line-height: 1.45;
+    text-align: center;
+    border: 1px dashed #e4e4e7;
+    border-radius: 6px;
+    background: #fafafa;
+}
+
+.ocr-list-items.has-items .ocr-list-empty {
+    display: none;
 }
 
 .ocr-list-items {
@@ -287,23 +308,33 @@
 
 .ocr-list-del {
     flex-shrink: 0;
-    width: 20px;
-    height: 20px;
+    width: 24px;
+    height: 24px;
     padding: 0;
-    border: 1px solid #fecaca;
-    border-radius: 50%;
-    background: #fff;
+    border: 1px solid #fca5a5;
+    border-radius: 6px;
+    background: #fff5f5;
     color: #dc2626;
-    font-size: 13px;
-    line-height: 16px;
+    font-size: 16px;
+    font-weight: 700;
+    line-height: 20px;
     text-align: center;
     cursor: pointer;
-    transition: background 0.12s, color 0.12s;
+    transition: background 0.12s, color 0.12s, border-color 0.12s;
 }
 
 .ocr-list-del:hover {
     background: #dc2626;
     color: #fff;
+    border-color: #dc2626;
+}
+
+.ocr-list-item.is-active {
+    border-color: #bfdbfe;
+    background: #f8fafc;
+}
+
+.ocr-list-item.is-active .ocr-list-del {
     border-color: #dc2626;
 }
 
