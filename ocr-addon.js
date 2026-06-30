@@ -33,11 +33,20 @@
             contrast: 1.2,
             threshold: null
         },
-        getOcrCanvas: null,
         observeResizeElement: null,
         beforeRunOCR: null,
         listPrimary: false,
         mapOcrBbox: null
+    };
+
+    /** Réglages recommandés pour certains types de documents. */
+    const OCR_PRESETS = {
+        'fiche-filigrane': {
+            mode: 'lines',
+            minConfidence: 65,
+            minTextLength: 3,
+            preprocess: { grayscale: true, contrast: 1.35, threshold: 185 }
+        }
     };
 
     let state = null;
@@ -403,7 +412,7 @@
             if (!panel) return null;
             const wrap = document.createElement('div');
             wrap.className = 'ocr-list-panel';
-            wrap.innerHTML = '<p class="ocr-list-hint">Supprimez les textes inutiles avec <strong>×</strong> · glissez <strong>⋮⋮</strong> pour trier</p>';
+            wrap.innerHTML = '<p class="ocr-list-hint">Supprimez avec <strong>×</strong> (mémorisé pour les prochains OCR) · glissez <strong>⋮⋮</strong> pour trier</p>';
             const items = document.createElement('div');
             items.className = 'ocr-list-items';
             const empty = document.createElement('div');
@@ -735,14 +744,77 @@
         });
     }
 
+    /** Empreinte zone + texte pour mémoriser une suppression manuelle. */
+    function fieldToPurgedEntry(field) {
+        return {
+            text: sanitizeText(field.text).toLowerCase(),
+            cx: field.originalX + field.originalWidth / 2,
+            cy: field.originalY + field.originalHeight / 2,
+            w: field.originalWidth,
+            h: field.originalHeight
+        };
+    }
+
+    function bboxToPurgedEntry(text, bbox) {
+        return {
+            text: sanitizeText(text).toLowerCase(),
+            cx: (bbox.x0 + bbox.x1) / 2,
+            cy: (bbox.y0 + bbox.y1) / 2,
+            w: bbox.x1 - bbox.x0,
+            h: bbox.y1 - bbox.y0
+        };
+    }
+
+    function recordPurgedField(field) {
+        if (!state || !field) return;
+        if (!state.purgedItems) state.purgedItems = [];
+        state.purgedItems.push(fieldToPurgedEntry(field));
+    }
+
+    /**
+     * Vérifie si une détection OCR correspond à un texte supprimé manuellement.
+     * @param {string} text
+     * @param {{ x0: number, y0: number, x1: number, y1: number }} bbox
+     */
+    function isPurgedDetection(text, bbox) {
+        if (!state.purgedItems || !state.purgedItems.length) return false;
+        const cur = bboxToPurgedEntry(text, bbox);
+        return state.purgedItems.some((p) => {
+            const dist = Math.hypot(p.cx - cur.cx, p.cy - cur.cy);
+            const tol = Math.max(24, Math.min(p.w, cur.w) * 0.45);
+            if (dist > tol) return false;
+            if (!p.text && !cur.text) return true;
+            if (!p.text || !cur.text) return dist < tol * 0.65;
+            return p.text === cur.text
+                || p.text.includes(cur.text)
+                || cur.text.includes(p.text);
+        });
+    }
+
+    /** Évite les doublons lors d'un second passage OCR. */
+    function overlapsExistingField(bbox) {
+        const cx = (bbox.x0 + bbox.x1) / 2;
+        const cy = (bbox.y0 + bbox.y1) / 2;
+        const w = bbox.x1 - bbox.x0;
+        const h = bbox.y1 - bbox.y0;
+        return state.fields.some((f) => {
+            const fcx = f.originalX + f.originalWidth / 2;
+            const fcy = f.originalY + f.originalHeight / 2;
+            const dist = Math.hypot(fcx - cx, fcy - cy);
+            const tol = Math.max(20, Math.min(f.originalWidth, w) * 0.4);
+            return dist < tol;
+        });
+    }
+
     /**
      * Supprime un champ par id.
      * @param {string} id
      */
-    function removeFieldById(id) {
+    function removeFieldById(id, skipPurgeRecord) {
         const idx = state.fields.findIndex((f) => f.id === id);
         if (idx === -1) return;
         const field = state.fields[idx];
+        if (!skipPurgeRecord) recordPurgedField(field);
         if (field.el) field.el.remove();
         if (field.listEl) field.listEl.remove();
         state.fields.splice(idx, 1);
@@ -788,6 +860,25 @@
     }
 
     /**
+     * Synchronise les contrôles de la barre d'outils avec l'état courant.
+     */
+    function syncToolbarControls() {
+        if (!state || !state.toolbar) return;
+        const bar = state.toolbar;
+        const modeSel = bar.querySelector('[data-control="mode"]');
+        if (modeSel) modeSel.value = state.mode;
+        const mc = bar.querySelector('[data-control="minConfidence"]');
+        if (mc) mc.value = state.minConfidence;
+        const ml = bar.querySelector('[data-control="minTextLength"]');
+        if (ml) ml.value = state.minTextLength;
+        const pp = state.preprocess || {};
+        const ct = bar.querySelector('[data-control="contrast"]');
+        if (ct) ct.value = pp.contrast != null ? pp.contrast : 1.2;
+        const th = bar.querySelector('[data-control="threshold"]');
+        if (th) th.value = pp.threshold != null && pp.threshold !== '' ? pp.threshold : '';
+    }
+
+    /**
      * Construit et injecte la barre d'outils dans le conteneur fourni.
      * @param {HTMLElement} container
      */
@@ -820,6 +911,15 @@
             '    <input type="number" data-control="minTextLength" min="1" max="50" value="2">',
             '  </label>',
             '</div>',
+            '<div class="ocr-toolbar-group ocr-toolbar-pre">',
+            '  <label>Contraste',
+            '    <input type="number" data-control="contrast" min="0.8" max="2" step="0.05" value="1.2">',
+            '  </label>',
+            '  <label title="Binarisation anti-filigrane (vide = désactivé)">Seuil filigrane',
+            '    <input type="number" data-control="threshold" min="120" max="245" step="1" placeholder="off">',
+            '  </label>',
+            '  <button type="button" class="ocr-btn-preset" data-action="preset-watermark" title="Contraste 1,35 · seuil 185 · lignes · conf. 65">Fiche filigranée</button>',
+            '</div>',
             '<div class="ocr-progress" title="Progression OCR"><div class="ocr-progress-bar"></div></div>',
             '<span class="ocr-progress-text">Prêt</span>'
         ].join('');
@@ -846,11 +946,22 @@
         bar.querySelector('[data-control="minTextLength"]').addEventListener('change', (e) => {
             OCRAddon.setFilter({ minTextLength: Number(e.target.value) });
         });
+        bar.querySelector('[data-control="contrast"]').addEventListener('change', (e) => {
+            const v = Number(e.target.value);
+            OCRAddon.setPreprocess({ contrast: Number.isFinite(v) && v > 0 ? v : 1.2 });
+        });
+        bar.querySelector('[data-control="threshold"]').addEventListener('change', (e) => {
+            const raw = String(e.target.value).trim();
+            const v = raw === '' ? null : Number(raw);
+            OCRAddon.setPreprocess({
+                threshold: v != null && Number.isFinite(v) ? Math.round(v) : null
+            });
+        });
+        bar.querySelector('[data-action="preset-watermark"]').addEventListener('click', () => {
+            OCRAddon.applyPreset('fiche-filigrane');
+        });
 
-        const modeSel = bar.querySelector('[data-control="mode"]');
-        modeSel.value = state.mode;
-        bar.querySelector('[data-control="minConfidence"]').value = state.minConfidence;
-        bar.querySelector('[data-control="minTextLength"]').value = state.minTextLength;
+        syncToolbarControls();
 
         container.appendChild(bar);
         state.toolbar = bar;
@@ -892,16 +1003,18 @@
 
     function onKeyDown(e) {
         if (!state || !state.selectedId) return;
-        if (isTypingInOtherInput(e.target)) return;
 
         if (e.key === 'Delete' || e.key === 'Backspace') {
-            if (e.target && e.target.closest && e.target.closest('.ocr-field input')) {
-                if (e.key === 'Backspace' && e.target.value) return;
-            }
+            const ae = document.activeElement;
+            if (ae && ae.closest && ae.closest('.ocr-list-item')) return;
+            if (ae && ae.closest && ae.closest('.ocr-field input') && ae.value) return;
+            if (isTypingInOtherInput(e.target)) return;
             e.preventDefault();
             OCRAddon.deleteField(state.selectedId);
             return;
         }
+        if (isTypingInOtherInput(e.target)) return;
+
         if (e.key === 'Escape') {
             deselectAll();
             return;
@@ -963,6 +1076,7 @@
             listPanel: null,
             listItemsHost: null,
             running: false,
+            purgedItems: [],
             getOcrCanvas: typeof opts.getOcrCanvas === 'function' ? opts.getOcrCanvas : null,
             observeResizeElement: resolveElement(opts.observeResizeElement),
             beforeRunOCR: typeof opts.beforeRunOCR === 'function' ? opts.beforeRunOCR : null,
@@ -1054,15 +1168,35 @@
             const { data } = await worker.recognize(canvas);
 
             const rawItems = extractOcrItems(data, state.mode);
-            OCRAddon.clear(false);
+            const appendMode = state.fields.length > 0;
+            if (!appendMode) {
+                state.fields.slice().forEach((f) => removeFieldById(f.id, true));
+                if (state.listPanel) {
+                    state.listPanel.remove();
+                    state.listPanel = null;
+                    state.listItemsHost = null;
+                    state.listEmptyEl = null;
+                }
+                updateListEmptyState();
+            }
 
             const created = [];
+            let skippedPurged = 0;
+            let skippedDup = 0;
             rawItems.forEach((item) => {
                 if (!passesFilter(item.text, item.confidence)) return;
                 let bbox = item.bbox;
                 if (state.mapOcrBbox) {
                     const mapped = state.mapOcrBbox(bbox);
                     if (mapped) bbox = mapped;
+                }
+                if (isPurgedDetection(item.text, bbox)) {
+                    skippedPurged += 1;
+                    return;
+                }
+                if (appendMode && overlapsExistingField(bbox)) {
+                    skippedDup += 1;
+                    return;
                 }
                 const w = bbox.x1 - bbox.x0;
                 const h = bbox.y1 - bbox.y0;
@@ -1077,7 +1211,13 @@
                 created.push(field);
             });
 
-            updateProgress(1, created.length + ' champ(s) créé(s)');
+            let msg = created.length + ' champ(s) créé(s)';
+            if (skippedPurged) msg += ' · ' + skippedPurged + ' ignoré(s) (purge)';
+            if (skippedDup) msg += ' · ' + skippedDup + ' doublon(s)';
+            if (appendMode && !created.length && !skippedPurged) {
+                msg = 'Aucun nouveau texte détecté';
+            }
+            updateProgress(1, msg);
             return created;
         } catch (err) {
             updateProgress(0, 'Erreur');
@@ -1097,7 +1237,8 @@
     OCRAddon.clear = function (resetProgress) {
         if (!state) return;
         if (resetProgress !== false) updateProgress(0, 'Prêt');
-        state.fields.slice().forEach((f) => removeFieldById(f.id));
+        state.purgedItems = [];
+        state.fields.slice().forEach((f) => removeFieldById(f.id, true));
         if (state.listPanel) {
             state.listPanel.remove();
             state.listPanel = null;
@@ -1185,12 +1326,41 @@
         if (!state) return;
         if (options.minConfidence != null) state.minConfidence = options.minConfidence;
         if (options.minTextLength != null) state.minTextLength = options.minTextLength;
-        if (state.toolbar) {
-            const mc = state.toolbar.querySelector('[data-control="minConfidence"]');
-            const ml = state.toolbar.querySelector('[data-control="minTextLength"]');
-            if (mc) mc.value = state.minConfidence;
-            if (ml) ml.value = state.minTextLength;
+        syncToolbarControls();
+    };
+
+    /**
+     * Met à jour le prétraitement image (appliqué au prochain runOCR).
+     * @param {{ grayscale?: boolean, contrast?: number, threshold?: number|null }} options
+     */
+    OCRAddon.setPreprocess = function (options) {
+        if (!state) return;
+        if (!state.preprocess) state.preprocess = Object.assign({}, DEFAULTS.preprocess);
+        if (options.grayscale != null) state.preprocess.grayscale = !!options.grayscale;
+        if (options.contrast != null) state.preprocess.contrast = options.contrast;
+        if (Object.prototype.hasOwnProperty.call(options, 'threshold')) {
+            state.preprocess.threshold = options.threshold;
         }
+        syncToolbarControls();
+    };
+
+    /**
+     * Applique un jeu de réglages prédéfini (filtres + prétraitement).
+     * @param {string} name — ex. « fiche-filigrane »
+     */
+    OCRAddon.applyPreset = function (name) {
+        if (!state) return;
+        const preset = OCR_PRESETS[name];
+        if (!preset) return;
+        if (preset.mode) state.mode = preset.mode;
+        OCRAddon.setFilter({
+            minConfidence: preset.minConfidence != null ? preset.minConfidence : state.minConfidence,
+            minTextLength: preset.minTextLength != null ? preset.minTextLength : state.minTextLength
+        });
+        if (preset.preprocess) {
+            OCRAddon.setPreprocess(preset.preprocess);
+        }
+        syncToolbarControls();
     };
 
     /**
@@ -1240,7 +1410,23 @@
      */
     OCRAddon.deleteField = function (id) {
         if (!state) return;
-        removeFieldById(id);
+        removeFieldById(id, false);
+    };
+
+    /**
+     * Réinitialise uniquement la liste des textes purgés (sans effacer les champs).
+     */
+    OCRAddon.clearPurged = function () {
+        if (!state) return;
+        state.purgedItems = [];
+    };
+
+    /**
+     * Nombre de zones exclues manuellement des prochains OCR.
+     */
+    OCRAddon.getPurgedCount = function () {
+        if (!state || !state.purgedItems) return 0;
+        return state.purgedItems.length;
     };
 
     /**

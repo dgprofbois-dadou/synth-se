@@ -146,6 +146,27 @@
     background: #1d4ed8;
 }
 
+.ocr-toolbar button.ocr-btn-preset {
+    background: #f0fdf4;
+    border-color: #86efac;
+    color: #166534;
+    font-size: 11px;
+    white-space: nowrap;
+}
+
+.ocr-toolbar button.ocr-btn-preset:hover {
+    background: #dcfce7;
+    border-color: #4ade80;
+}
+
+.ocr-toolbar-pre label {
+    font-size: 11px;
+}
+
+.ocr-toolbar-pre input[type="number"] {
+    width: 4.5em;
+}
+
 .ocr-toolbar button:disabled {
     opacity: 0.55;
     cursor: not-allowed;
