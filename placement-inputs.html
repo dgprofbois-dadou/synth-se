@@ -2073,7 +2073,7 @@
             <div style="margin-bottom:12px;">
                 <button id="btnCopyHsTip" type="button"
                     style="width:100%; background:#fff8e1; border:1px solid #ffc107; color:#e65100; border-radius:6px; padding:8px;"
-                    title="Copier l'infobulle puis cliquer les hotspots à remplir — Échap pour terminer">
+                    title="Copier l'infobulle puis cliquer les hotspots à remplir — Échap / clic droit pour terminer">
                     💬 Copier infobulle (pinceau)
                 </button>
             </div>
@@ -5789,6 +5789,12 @@
                 mqHsBanner('');
                 document.body.style.cursor = '';
             }
+            function mqToolsActive() {
+                return !!(mqHsBrushStyle || mqHsTipBrush || mqHsLinkGroup || mqHsPipetteTarget
+                    || mqBoxBrushStyle || mqBoxPipetteTarget || mqDndAlignTarget || mqDndSizeBrush || mqDndSizePipetteTarget);
+            }
+            window.mqCancelTools = mqCancelTools;
+            window.mqToolsActive = mqToolsActive;
             const mqCancelHsTools = mqCancelTools; // alias
 
             // ----- Outil d'alignement des zones DnD -----
@@ -5819,7 +5825,7 @@
                 mqCancelTools();
                 mqDndSel = keep;
                 mqDndAlignTarget = keep;
-                mqHsBanner('🎯 Aligner : cliquez la zone de RÉFÉRENCE — Maj = horizontal, Alt = vertical, Échap pour annuler');
+                mqHsBanner('🎯 Aligner : cliquez la zone de RÉFÉRENCE — Maj = horizontal, Alt = vertical — Échap / clic droit pour annuler');
                 document.body.style.cursor = 'crosshair';
             };
             function mqDndAlign(targetSel, refSel, forceH, forceV) {
@@ -5898,7 +5904,7 @@
                 mqCancelTools();
                 mqDndSel = keep;
                 mqDndSizeBrush = { width: z.obj.width, height: z.obj.height };
-                mqHsBanner('🖌️ Pinceau de taille : cliquez les zones à dimensionner — Échap pour terminer');
+                mqHsBanner('🖌️ Pinceau de taille : cliquez les zones à dimensionner — Échap / clic droit pour terminer');
                 document.body.style.cursor = 'copy';
             };
             window.mqStartDndSizePipette = function () {
@@ -5908,7 +5914,7 @@
                 mqCancelTools();
                 mqDndSel = keep;
                 mqDndSizePipetteTarget = keep;
-                mqHsBanner('🧪 Pipette de taille : cliquez la zone dont COPIER la taille — Échap pour annuler');
+                mqHsBanner('🧪 Pipette de taille : cliquez la zone dont COPIER la taille — Échap / clic droit pour annuler');
                 document.body.style.cursor = 'crosshair';
             };
 
@@ -5916,7 +5922,7 @@
             function mqLinkFeedback(msg) {
                 mqHsBanner(msg);
                 setTimeout(() => {
-                    if (mqHsLinkGroup) mqHsBanner('🔗 Lien « ' + mqHsLinkGroup + ' » : cliquez un champ ou un hotspot à lier — Échap pour terminer');
+                    if (mqHsLinkGroup) mqHsBanner('🔗 Lien « ' + mqHsLinkGroup + ' » : cliquez un champ ou un hotspot à lier — Échap / clic droit pour terminer');
                 }, 1000);
             }
 
@@ -5939,7 +5945,7 @@
                 mqCancelTools();
                 mqHsTipBrush = extractHotspotTip(h);
                 hotspotTipClipboard = mqHsTipBrush;
-                mqHsBanner('💬 Infobulle : cliquez les hotspots à remplir — Échap pour terminer');
+                mqHsBanner('💬 Infobulle : cliquez les hotspots à remplir — Échap / clic droit pour terminer');
                 document.body.style.cursor = 'copy';
             };
 
@@ -5949,7 +5955,7 @@
                 if (!h) { alert('Sélectionnez d\'abord un hotspot source.'); return; }
                 mqCancelTools();
                 mqHsBrushStyle = extractHotspotStyle(h);
-                mqHsBanner('🖌️ Pinceau : cliquez les hotspots à styliser — Échap pour terminer');
+                mqHsBanner('🖌️ Pinceau : cliquez les hotspots à styliser — Échap / clic droit pour terminer');
                 document.body.style.cursor = 'copy';
             };
 
@@ -5959,7 +5965,7 @@
                 if (!h) { alert('Sélectionnez d\'abord le hotspot à modifier.'); return; }
                 mqCancelTools();
                 mqHsPipetteTarget = h.id;
-                mqHsBanner('🧪 Pipette : cliquez le hotspot dont COPIER le style — Échap pour annuler');
+                mqHsBanner('🧪 Pipette : cliquez le hotspot dont COPIER le style — Échap / clic droit pour annuler');
                 document.body.style.cursor = 'crosshair';
             };
 
@@ -5977,7 +5983,7 @@
                 }
                 mqCancelTools();
                 mqHsLinkGroup = grp;
-                mqHsBanner('🔗 Lien « ' + grp + ' » : cliquez un champ ou un hotspot à lier — Échap pour terminer');
+                mqHsBanner('🔗 Lien « ' + grp + ' » : cliquez un champ ou un hotspot à lier — Échap / clic droit pour terminer');
                 document.body.style.cursor = 'crosshair';
             };
 
@@ -5987,7 +5993,7 @@
                 if (!b || b.kind === 'iframe') { alert('Sélectionnez d\'abord un champ source.'); return; }
                 mqCancelTools();
                 mqBoxBrushStyle = extractBoxStyle(b);
-                mqHsBanner('🖌️ Pinceau : cliquez les champs à styliser — Échap pour terminer');
+                mqHsBanner('🖌️ Pinceau : cliquez les champs à styliser — Échap / clic droit pour terminer');
                 document.body.style.cursor = 'copy';
             };
 
@@ -5997,7 +6003,7 @@
                 if (!b || b.kind === 'iframe') { alert('Sélectionnez d\'abord le champ à modifier.'); return; }
                 mqCancelTools();
                 mqBoxPipetteTarget = b.id;
-                mqHsBanner('🧪 Pipette : cliquez le champ dont COPIER le style — Échap pour annuler');
+                mqHsBanner('🧪 Pipette : cliquez le champ dont COPIER le style — Échap / clic droit pour annuler');
                 document.body.style.cursor = 'crosshair';
             };
 
@@ -6015,7 +6021,7 @@
                 }
                 mqCancelTools();
                 mqHsLinkGroup = grp;
-                mqHsBanner('🔗 Lien « ' + grp + ' » : cliquez un champ ou un hotspot à lier — Échap pour terminer');
+                mqHsBanner('🔗 Lien « ' + grp + ' » : cliquez un champ ou un hotspot à lier — Échap / clic droit pour terminer');
                 document.body.style.cursor = 'crosshair';
             };
 
@@ -6035,6 +6041,11 @@
             // Interception des clics quand un outil est actif (phase capture)
             viewport.addEventListener('pointerdown', function (e) {
                 if (state.mode !== 'admin') return;
+                // Clic droit : quitter le mode outil sans appliquer l'action (le menu contextuel s'ouvre ensuite)
+                if (e.button === 2) {
+                    if (mqToolsActive()) mqCancelTools();
+                    return;
+                }
                 if (!mqHsBrushStyle && !mqHsTipBrush && !mqHsLinkGroup && !mqHsPipetteTarget && !mqBoxBrushStyle && !mqBoxPipetteTarget && !mqDndAlignTarget && !mqDndSizeBrush && !mqDndSizePipetteTarget) return;
 
                 // --- Pinceau de taille DnD : appliquer la taille capturée aux zones cliquées ---
