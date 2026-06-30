@@ -1220,7 +1220,7 @@
         #left .mq-lib-item {
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 10px;
             padding: 8px 10px;
             border: 1px solid var(--mq-border, #ddd);
             border-radius: 8px;
@@ -1243,25 +1243,34 @@
             opacity: .55;
         }
 
-        #left .mq-lib-item-icon {
+        #left .mq-lib-preview {
             flex-shrink: 0;
-            width: 28px;
-            height: 28px;
+            width: 76px;
+            height: 44px;
             border-radius: 6px;
+            background: #f4f4f5;
+            border: 1px solid #e4e4e7;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 14px;
+            overflow: hidden;
+            position: relative;
         }
 
-        #left .mq-lib-item-icon.is-box {
-            background: #dbeafe;
-            color: #1d4ed8;
+        #left .mq-lib-preview-box {
+            box-sizing: border-box;
+            max-width: 68px;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+            overflow: hidden;
+            line-height: 1.2;
         }
 
-        #left .mq-lib-item-icon.is-hotspot {
-            background: #ffedd5;
-            color: #c2410c;
+        #left .mq-lib-preview-hs {
+            width: 56px;
+            height: 32px;
+            box-sizing: border-box;
+            border-radius: 4px;
         }
 
         #left .mq-lib-item-body {
@@ -6083,6 +6092,66 @@
                 mqFlashBox(b.id);
                 if (window.mqToast) window.mqToast('Champ créé avec le modèle « ' + entry.name + ' »');
             }
+            function mqLibBuildBoxPreview(d) {
+                const wrap = document.createElement('div');
+                wrap.className = 'mq-lib-preview';
+                const inner = document.createElement('div');
+                inner.className = 'mq-lib-preview-box';
+                const scale = 0.42;
+                const bw = Math.max(52, Math.min(68, Math.round((d.w || 160) * scale)));
+                const bh = Math.max(20, Math.min(36, Math.round((d.h || 34) * scale)));
+                inner.style.width = bw + 'px';
+                inner.style.height = bh + 'px';
+                inner.style.borderRadius = Math.max(2, Math.round((d.radius ?? 8) * scale)) + 'px';
+                inner.style.borderWidth = Math.max(1, Math.min(2, d.borderW ?? 2)) + 'px';
+                inner.style.borderStyle = 'solid';
+                inner.style.borderColor = d.borderColor ?? '#666666';
+                try {
+                    inner.style.background = rgba(d.bgColor ?? '#ffffff', d.bgAlpha ?? 0.96);
+                } catch (_) {
+                    inner.style.background = '#fff';
+                }
+                inner.style.fontFamily = d.font ?? 'system-ui, sans-serif';
+                inner.style.fontSize = Math.max(7, Math.min(11, Math.round((d.fontSize || 16) * scale))) + 'px';
+                inner.style.fontWeight = String(d.weight ?? 400);
+                inner.style.color = '#333';
+                inner.style.display = 'flex';
+                inner.style.alignItems = 'center';
+                inner.style.padding = '0 5px';
+                const label = (d.placeholder || d.answer || '_______').trim();
+                inner.textContent = label.slice(0, 14) || '_______';
+                inner.title = label;
+                wrap.appendChild(inner);
+                return wrap;
+            }
+            function mqLibBuildHotspotPreview(d) {
+                const wrap = document.createElement('div');
+                wrap.className = 'mq-lib-preview';
+                const rect = document.createElement('div');
+                rect.className = 'mq-lib-preview-hs';
+                const fill = d.fill ?? '#ffcc00';
+                const stroke = d.stroke ?? '#ff9900';
+                const alpha = (d.alphaIdle != null) ? d.alphaIdle : 0.35;
+                const blend = d.blendMode ?? 'multiply';
+                rect.style.background = fill;
+                rect.style.opacity = String(Math.max(0.2, Math.min(1, alpha + 0.15)));
+                rect.style.mixBlendMode = blend;
+                rect.style.border = Math.max(1, Math.min(3, d.strokeW ?? 2)) + 'px solid ' + stroke;
+                const sx = Number(d.shadowX) || 0;
+                const sy = Number(d.shadowY) || 0;
+                const blur = Number(d.shadowBlur) || 0;
+                if (blur > 0 || sx || sy) {
+                    rect.style.boxShadow = sx + 'px ' + sy + 'px ' + blur + 'px ' + (d.shadowColor ?? 'rgba(0,0,0,.35)');
+                }
+                const tip = (d.tip || d.label || '').trim();
+                if (tip) wrap.title = tip;
+                wrap.appendChild(rect);
+                return wrap;
+            }
+            function mqLibBuildPreview(entry) {
+                const d = entry.data || {};
+                return entry.kind === 'box' ? mqLibBuildBoxPreview(d) : mqLibBuildHotspotPreview(d);
+            }
             function mqLibRenderList() {
                 const host = document.getElementById('mqLibList');
                 if (!host) return;
@@ -6098,9 +6167,7 @@
                     row.draggable = true;
                     row.title = 'Glisser sur un élément du canvas · double-clic = appliquer à la sélection';
                     row.dataset.libId = entry.id;
-                    const icon = document.createElement('div');
-                    icon.className = 'mq-lib-item-icon ' + (entry.kind === 'box' ? 'is-box' : 'is-hotspot');
-                    icon.textContent = entry.kind === 'box' ? 'T' : '◆';
+                    const preview = mqLibBuildPreview(entry);
                     const body = document.createElement('div');
                     body.className = 'mq-lib-item-body';
                     const nameEl = document.createElement('div');
@@ -6108,7 +6175,12 @@
                     nameEl.textContent = entry.name;
                     const meta = document.createElement('div');
                     meta.className = 'mq-lib-item-meta';
-                    meta.textContent = (entry.kind === 'box' ? 'Champ texte' : 'Hotspot') + ' · ' + (entry.createdAt || '').slice(0, 10);
+                    const hint = entry.kind === 'box'
+                        ? ((entry.data && (entry.data.placeholder || entry.data.answer)) || '').trim()
+                        : ((entry.data && (entry.data.tip || entry.data.label)) || '').trim();
+                    meta.textContent = (entry.kind === 'box' ? 'Champ texte' : 'Hotspot')
+                        + (hint ? ' · ' + hint.slice(0, 22) + (hint.length > 22 ? '…' : '') : '')
+                        + ' · ' + (entry.createdAt || '').slice(0, 10);
                     body.appendChild(nameEl);
                     body.appendChild(meta);
                     const del = document.createElement('button');
@@ -6122,7 +6194,7 @@
                         mqLibSave(mqLibLoad().filter(x => x.id !== entry.id));
                         mqLibRenderList();
                     });
-                    row.appendChild(icon);
+                    row.appendChild(preview);
                     row.appendChild(body);
                     row.appendChild(del);
                     row.addEventListener('dragstart', (e) => {
