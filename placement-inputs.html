@@ -6422,6 +6422,7 @@
                 if (t.isContentEditable) return true;
                 return false;
             }
+            window.mqIsTypingTarget = mqIsTypingTarget;
             function mqHandleHotspotTransformShortcut(e) {
                 if (state.mode !== 'admin' || mqIsTypingTarget(e.target)) return;
                 const keyT = e.code === 'KeyT' || e.key === 't' || e.key === 'T';
@@ -10098,6 +10099,15 @@
             if (document.body.classList.contains('mq-ui-ready')) return;
 
             const $ = (id) => document.getElementById(id);
+
+            function mqIsTypingTarget(t) {
+                if (typeof window.mqIsTypingTarget === 'function') return window.mqIsTypingTarget(t);
+                if (!t || !t.tagName) return false;
+                const tag = t.tagName.toLowerCase();
+                if (tag === 'input' || tag === 'textarea' || tag === 'select') return true;
+                if (t.isContentEditable) return true;
+                return false;
+            }
 
             function mqTabForH3(text) {
                 const t = (text || '').trim();
