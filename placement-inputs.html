@@ -4364,6 +4364,14 @@
                 const b = getSelected();
                 if (!b) return;
 
+                const prevFs = b.fontSize;
+                const prevFont = b.font;
+                const prevWeight = b.weight;
+                const prevPad = b.pad;
+                const prevAnswer = b.answer;
+                const prevMultiline = b.multiline;
+                const prevRows = b.rows;
+
                 b.group = pGroup.value || '';
                 b.copyToHotspotTip = !!(pCopyToHsTip && pCopyToHsTip.checked);
                 if (hsTip) {
@@ -4433,6 +4441,22 @@
                         const linkedHs = state.hotspots.filter(h => (h.group || '').trim() === group);
                         // Auto-copie uniquement s'il n'y a qu'un seul hotspot dans le groupe
                         if (linkedHs.length === 1) linkedHs[0].tip = tipText;
+                    }
+                }
+
+                if (b.kind !== 'iframe') {
+                    const fontChanged = prevFs !== b.fontSize || prevFont !== b.font
+                        || prevWeight !== b.weight || prevPad !== b.pad;
+                    const contentChanged = prevAnswer !== b.answer
+                        || prevMultiline !== b.multiline || prevRows !== b.rows;
+                    if (fontChanged || contentChanged) {
+                        mqAutoFitBoxDimensions(b, {
+                            prevFontSize: prevFs,
+                            scaleWidthIfNoAnswer: fontChanged
+                        });
+                        if (pW) pW.value = b.w;
+                        if (pH) pH.value = b.h;
+                        if (pPhSize) pPhSize.value = b.phSize;
                     }
                 }
 
@@ -6299,9 +6323,48 @@
                 if (measured != null) b.w = Math.max(40, Math.min(2400, measured));
             }
 
+            /** Hauteur minimale selon la taille de police (et lignes si multiligne). */
+            function mqFitBoxHeightToFont(b) {
+                if (!b || b.kind === 'iframe') return;
+                const fs = Math.max(8, Number(b.fontSize || 16));
+                const pad = Number(b.pad != null ? b.pad : 4) * 2;
+                const border = Number(b.borderW != null ? b.borderW : 2) * 2;
+                const lineH = fs * 1.35;
+                if (b.multiline) {
+                    const rows = Math.max(1, Number(b.rows || 2));
+                    b.h = Math.max(24, Math.ceil(lineH * rows + pad + border));
+                } else {
+                    b.h = Math.max(24, Math.ceil(lineH + pad + border));
+                }
+                b.phSize = Math.max(6, Math.round(fs * 0.9));
+            }
+
+            /**
+             * Recalcule w/h après changement de police ou de réponse.
+             * @param {object} b
+             * @param {{ prevFontSize?: number, scaleWidthIfNoAnswer?: boolean }} [opts]
+             */
+            function mqAutoFitBoxDimensions(b, opts) {
+                if (!b || b.kind === 'iframe') return;
+                opts = opts || {};
+                mqFitBoxHeightToFont(b);
+                const ans = (b.answer || '').trim();
+                if (ans) {
+                    mqFitBoxWidthToAnswer(b);
+                } else if (opts.scaleWidthIfNoAnswer && opts.prevFontSize) {
+                    const fs = Math.max(8, Number(b.fontSize || 16));
+                    const prev = Math.max(8, Number(opts.prevFontSize));
+                    if (prev !== fs) {
+                        const ratio = fs / prev;
+                        b.w = Math.max(40, Math.min(2400, Math.round(b.w * ratio)));
+                    }
+                }
+            }
+
             function mqLibFitBoxAfterPreset(b, entryData) {
                 const ans = (b.answer || '').trim();
                 const widthRef = (entryData && entryData._widthRef) ? String(entryData._widthRef).trim() : '';
+                mqFitBoxHeightToFont(b);
                 mqFitBoxWidthToAnswer(b, ans || widthRef || null);
             }
 
@@ -7277,6 +7340,7 @@
                 if (txt === null) return;
                 b.answer = txt;
                 if (b.hintSameAsAnswer) b.hint = txt;
+                mqAutoFitBoxDimensions(b);
                 if (state.selectedId === b.id) syncPropsFromSelected();
                 render();
                 scheduleSaveLocal();
