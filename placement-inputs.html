@@ -1230,23 +1230,6 @@
             transition: box-shadow .15s, border-color .15s;
         }
 
-        #left .mq-lib-item--box {
-            flex-direction: column;
-            align-items: stretch;
-            gap: 8px;
-            padding: 10px;
-        }
-
-        #left .mq-lib-item--box .mq-lib-item-footer {
-            display: flex;
-            align-items: flex-start;
-            gap: 8px;
-        }
-
-        #left .mq-lib-item--box .mq-lib-item-body {
-            flex: 1;
-        }
-
         #left .mq-lib-item:hover {
             border-color: #a78bfa;
             box-shadow: 0 2px 8px rgba(124, 58, 237, .12);
@@ -1274,11 +1257,61 @@
             position: relative;
         }
 
-        #left .mq-lib-preview--box {
+        #left .mq-lib-preview--thumb .mq-lib-preview-box {
+            box-sizing: border-box;
+            width: 64px;
+            height: 28px;
+            display: flex;
+            align-items: center;
+            padding: 0 5px;
+            overflow: hidden;
+            line-height: 1.2;
+        }
+
+        #left .mq-lib-preview--thumb .mq-lib-preview-ph {
+            display: block;
             width: 100%;
-            height: auto;
-            min-height: 78px;
-            padding: 10px 10px 8px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            font-size: 9px;
+        }
+
+        #mqLibHoverPop {
+            position: fixed;
+            z-index: 100000;
+            width: 252px;
+            padding: 10px 12px;
+            background: #fff;
+            border: 1px solid #d4d4d8;
+            border-radius: 10px;
+            box-shadow: 0 10px 32px rgba(0, 0, 0, .16);
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+            transition: opacity .12s ease;
+        }
+
+        #mqLibHoverPop.mq-open {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        #mqLibHoverPop .mq-lib-hover-pop-title {
+            font-size: 11px;
+            font-weight: 700;
+            color: #3b3b3b;
+            margin-bottom: 8px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        #mqLibHoverPop .mq-lib-preview--detail {
+            width: 100%;
+            min-height: 88px;
+            padding: 10px;
+            border-radius: 8px;
             background:
                 linear-gradient(45deg, #ececec 25%, transparent 25%),
                 linear-gradient(-45deg, #ececec 25%, transparent 25%),
@@ -1287,31 +1320,29 @@
             background-size: 10px 10px;
             background-position: 0 0, 0 5px, 5px -5px, -5px 0;
             background-color: #f8f8f8;
+            border: 1px solid #e4e4e7;
+            display: flex;
             flex-direction: column;
-            align-items: stretch;
-            justify-content: flex-start;
             gap: 6px;
         }
 
-        #left .mq-lib-preview-box-scene {
+        #mqLibHoverPop .mq-lib-preview-box-scene {
             display: flex;
             justify-content: center;
             align-items: center;
-            min-height: 40px;
+            min-height: 44px;
         }
 
-        #left .mq-lib-preview-box {
+        #mqLibHoverPop .mq-lib-preview-box {
             box-sizing: border-box;
             width: 100%;
-            max-width: 100%;
-            min-height: 30px;
             display: flex;
             align-items: center;
             overflow: hidden;
             line-height: 1.25;
         }
 
-        #left .mq-lib-preview-ph {
+        #mqLibHoverPop .mq-lib-preview-ph {
             display: block;
             width: 100%;
             overflow: hidden;
@@ -1319,21 +1350,20 @@
             white-space: nowrap;
         }
 
-        #left .mq-lib-preview-swatches {
+        #mqLibHoverPop .mq-lib-preview-swatches {
             display: flex;
-            gap: 4px;
+            gap: 5px;
             align-items: center;
             justify-content: center;
             flex-wrap: wrap;
         }
 
-        #left .mq-lib-preview-swatch {
-            width: 14px;
-            height: 14px;
+        #mqLibHoverPop .mq-lib-preview-swatch {
+            width: 16px;
+            height: 16px;
             border-radius: 3px;
             border: 1px solid rgba(0, 0, 0, .15);
             flex-shrink: 0;
-            box-sizing: border-box;
         }
 
         #left .mq-lib-preview-hs {
@@ -2552,8 +2582,8 @@
             <div class="mq-lib-panel">
                 <p class="mini" style="margin:0; color:#666; line-height:1.4;">
                     Enregistrez la configuration d'un champ texte ou d'un hotspot sélectionné,
-                    puis glissez l'entrée sur un élément du canvas pour appliquer les réglages
-                    (position et forme conservées).
+                    puis glissez l'entrée sur un élément du canvas. Survolez un champ texte
+                    enregistré pour voir l'aperçu détaillé.
                 </p>
                 <div class="mq-lib-save-row">
                     <button id="btnLibSave" type="button">➕ Enregistrer la sélection</button>
@@ -6162,9 +6192,87 @@
                 mqFlashBox(b.id);
                 if (window.mqToast) window.mqToast('Champ créé avec le modèle « ' + entry.name + ' »');
             }
-            function mqLibBuildBoxPreview(d) {
+            let _mqLibHoverTimer = null;
+            let _mqLibHoverHideTimer = null;
+            function mqLibEnsureHoverPop() {
+                let pop = document.getElementById('mqLibHoverPop');
+                if (!pop) {
+                    pop = document.createElement('div');
+                    pop.id = 'mqLibHoverPop';
+                    pop.setAttribute('aria-hidden', 'true');
+                    document.body.appendChild(pop);
+                }
+                return pop;
+            }
+            function mqLibHideHoverPreview() {
+                clearTimeout(_mqLibHoverHideTimer);
+                _mqLibHoverHideTimer = setTimeout(() => {
+                    const pop = document.getElementById('mqLibHoverPop');
+                    if (pop) pop.classList.remove('mq-open');
+                }, 80);
+            }
+            function mqLibShowHoverPreview(entry, anchor) {
+                if (!entry || entry.kind !== 'box' || !anchor) return;
+                clearTimeout(_mqLibHoverHideTimer);
+                clearTimeout(_mqLibHoverTimer);
+                const pop = mqLibEnsureHoverPop();
+                pop.innerHTML = '';
+                const title = document.createElement('div');
+                title.className = 'mq-lib-hover-pop-title';
+                title.textContent = entry.name;
+                pop.appendChild(title);
+                pop.appendChild(mqLibBuildBoxPreviewDetail(entry.data || {}));
+                const r = anchor.getBoundingClientRect();
+                const pw = 252;
+                let left = r.right + 10;
+                let top = r.top - 4;
+                if (left + pw > window.innerWidth - 10) left = Math.max(10, r.left - pw - 10);
+                if (top + 130 > window.innerHeight - 10) top = window.innerHeight - 140;
+                if (top < 10) top = 10;
+                pop.style.left = left + 'px';
+                pop.style.top = top + 'px';
+                pop.classList.add('mq-open');
+            }
+            function mqLibWireBoxHover(row, entry) {
+                row.addEventListener('mouseenter', () => {
+                    if (row.classList.contains('is-dragging')) return;
+                    clearTimeout(_mqLibHoverHideTimer);
+                    clearTimeout(_mqLibHoverTimer);
+                    _mqLibHoverTimer = setTimeout(() => mqLibShowHoverPreview(entry, row), 280);
+                });
+                row.addEventListener('mouseleave', () => {
+                    clearTimeout(_mqLibHoverTimer);
+                    mqLibHideHoverPreview();
+                });
+            }
+            function mqLibBuildBoxThumb(d) {
                 const wrap = document.createElement('div');
-                wrap.className = 'mq-lib-preview mq-lib-preview--box';
+                wrap.className = 'mq-lib-preview mq-lib-preview--thumb';
+                const inner = document.createElement('div');
+                inner.className = 'mq-lib-preview-box';
+                inner.style.borderRadius = Math.max(2, Math.round((d.radius ?? 8) * 0.45)) + 'px';
+                const borderW = Math.max(1, Math.min(2, Number(d.borderW) || 2));
+                inner.style.border = borderW + 'px solid ' + (d.borderColor ?? '#666666');
+                try {
+                    inner.style.background = rgba(d.bgColor ?? '#ffffff', d.bgAlpha ?? 0.96);
+                } catch (_) {
+                    inner.style.background = '#fff';
+                }
+                inner.style.fontFamily = d.font ?? 'system-ui, sans-serif';
+                inner.style.fontWeight = String(d.weight ?? 400);
+                const ph = document.createElement('span');
+                ph.className = 'mq-lib-preview-ph';
+                const label = (d.placeholder || '_______').trim() || '_______';
+                ph.textContent = label.slice(0, 10);
+                ph.style.color = d.phColor ?? '#b5b5b5';
+                ph.style.opacity = String(d.phOpacity ?? 1);
+                inner.appendChild(ph);
+                wrap.appendChild(inner);
+                return wrap;
+            }
+            function mqLibBuildBoxPreviewDetail(d) {
+                const wrap = document.createElement('div');
+                wrap.className = 'mq-lib-preview--detail';
                 const scene = document.createElement('div');
                 scene.className = 'mq-lib-preview-box-scene';
                 const inner = document.createElement('div');
@@ -6173,11 +6281,9 @@
                 const fw = Number(d.w) || 160;
                 const fh = Number(d.h) || 34;
                 const aspect = fw / Math.max(fh, 1);
-                const previewW = 100;
-                let previewH = Math.round(previewW / aspect);
-                previewH = Math.max(d.multiline ? 44 : 30, Math.min(d.multiline ? 56 : 40, previewH));
+                let previewH = Math.round(220 / aspect);
+                previewH = Math.max(d.multiline ? 48 : 34, Math.min(d.multiline ? 64 : 48, previewH));
 
-                inner.style.width = '100%';
                 inner.style.minHeight = previewH + 'px';
                 inner.style.height = previewH + 'px';
                 inner.style.borderRadius = (d.radius ?? 8) + 'px';
@@ -6189,7 +6295,7 @@
                     inner.style.background = '#fff';
                 }
                 inner.style.fontFamily = d.font ?? 'system-ui, sans-serif';
-                const fs = Math.max(11, Math.min(15, Number(d.fontSize) || 16));
+                const fs = Math.max(11, Math.min(16, Number(d.fontSize) || 16));
                 inner.style.fontSize = fs + 'px';
                 inner.style.fontWeight = String(d.weight ?? 400);
                 inner.style.padding = (d.pad ?? 4) + 'px';
@@ -6204,7 +6310,6 @@
                 if (d.phFont && d.phFont !== 'inherit') ph.style.fontFamily = d.phFont;
                 if (d.phWeight && d.phWeight !== 'inherit') ph.style.fontWeight = String(d.phWeight);
                 if (d.phStyle && d.phStyle !== 'normal') ph.style.fontStyle = d.phStyle;
-                ph.title = label;
                 inner.appendChild(ph);
                 scene.appendChild(inner);
 
@@ -6226,7 +6331,6 @@
 
                 wrap.appendChild(scene);
                 wrap.appendChild(swatches);
-                wrap.title = label + ' · ' + fs + 'px · bordure ' + borderW + 'px · rayon ' + (d.radius ?? 8) + 'px';
                 return wrap;
             }
             function mqLibBuildHotspotPreview(d) {
@@ -6255,9 +6359,11 @@
             }
             function mqLibBuildPreview(entry) {
                 const d = entry.data || {};
-                return entry.kind === 'box' ? mqLibBuildBoxPreview(d) : mqLibBuildHotspotPreview(d);
+                return entry.kind === 'box' ? mqLibBuildBoxThumb(d) : mqLibBuildHotspotPreview(d);
             }
             function mqLibRenderList() {
+                mqLibHideHoverPreview();
+                clearTimeout(_mqLibHoverTimer);
                 const host = document.getElementById('mqLibList');
                 if (!host) return;
                 const list = mqLibLoad();
@@ -6268,9 +6374,11 @@
                 }
                 list.forEach(entry => {
                     const row = document.createElement('div');
-                    row.className = 'mq-lib-item' + (entry.kind === 'box' ? ' mq-lib-item--box' : ' mq-lib-item--hs');
+                    row.className = 'mq-lib-item';
                     row.draggable = true;
-                    row.title = 'Glisser sur un élément du canvas · double-clic = appliquer à la sélection';
+                    row.title = entry.kind === 'box'
+                        ? 'Survoler pour l\'aperçu · glisser pour appliquer · double-clic sur la sélection'
+                        : 'Glisser sur un élément du canvas · double-clic = appliquer à la sélection';
                     row.dataset.libId = entry.id;
                     const preview = mqLibBuildPreview(entry);
                     const body = document.createElement('div');
@@ -6283,19 +6391,9 @@
                     const hint = entry.kind === 'box'
                         ? ((entry.data && (entry.data.placeholder || entry.data.answer)) || '').trim()
                         : ((entry.data && (entry.data.tip || entry.data.label)) || '').trim();
-                    if (entry.kind === 'box' && entry.data) {
-                        const dd = entry.data;
-                        meta.textContent = [
-                            hint ? '« ' + hint.slice(0, 20) + (hint.length > 20 ? '…' : '') + ' »' : null,
-                            (dd.fontSize || 16) + 'px',
-                            'bord. ' + (dd.borderW ?? 2) + 'px',
-                            'rayon ' + (dd.radius ?? 8)
-                        ].filter(Boolean).join(' · ');
-                    } else {
-                        meta.textContent = (entry.kind === 'box' ? 'Champ texte' : 'Hotspot')
-                            + (hint ? ' · ' + hint.slice(0, 22) + (hint.length > 22 ? '…' : '') : '')
-                            + ' · ' + (entry.createdAt || '').slice(0, 10);
-                    }
+                    meta.textContent = (entry.kind === 'box' ? 'Champ texte' : 'Hotspot')
+                        + (hint ? ' · ' + hint.slice(0, 22) + (hint.length > 22 ? '…' : '') : '')
+                        + ' · ' + (entry.createdAt || '').slice(0, 10);
                     body.appendChild(nameEl);
                     body.appendChild(meta);
                     const del = document.createElement('button');
@@ -6310,17 +6408,12 @@
                         mqLibRenderList();
                     });
                     row.appendChild(preview);
-                    if (entry.kind === 'box') {
-                        const foot = document.createElement('div');
-                        foot.className = 'mq-lib-item-footer';
-                        foot.appendChild(body);
-                        foot.appendChild(del);
-                        row.appendChild(foot);
-                    } else {
-                        row.appendChild(body);
-                        row.appendChild(del);
-                    }
+                    row.appendChild(body);
+                    row.appendChild(del);
+                    if (entry.kind === 'box') mqLibWireBoxHover(row, entry);
                     row.addEventListener('dragstart', (e) => {
+                        mqLibHideHoverPreview();
+                        clearTimeout(_mqLibHoverTimer);
                         e.dataTransfer.setData(MQ_LIB_DND_TYPE, entry.id);
                         e.dataTransfer.effectAllowed = 'copy';
                         row.classList.add('is-dragging');
@@ -6331,6 +6424,11 @@
                 });
             }
             function mqLibInitDropTargets() {
+                const libList = document.getElementById('mqLibList');
+                if (libList) libList.addEventListener('scroll', () => {
+                    mqLibHideHoverPreview();
+                    clearTimeout(_mqLibHoverTimer);
+                }, { passive: true });
                 if (!viewport) return;
                 let libDragDepth = 0;
                 function clearDropHighlights() {
