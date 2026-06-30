@@ -1212,9 +1212,52 @@
         #mqLibList {
             display: flex;
             flex-direction: column;
-            gap: 6px;
+            gap: 4px;
             max-height: 420px;
             overflow-y: auto;
+        }
+
+        #left .mq-lib-section {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            margin-bottom: 10px;
+        }
+
+        #left .mq-lib-section:last-child {
+            margin-bottom: 0;
+        }
+
+        #left .mq-lib-section-title {
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: .04em;
+            color: #666;
+            padding: 4px 2px 2px;
+            border-bottom: 1px solid #e8e8e8;
+            margin-bottom: 2px;
+        }
+
+        #left .mq-lib-section-title.is-box {
+            color: #1d4ed8;
+        }
+
+        #left .mq-lib-section-title.is-hotspot {
+            color: #c2410c;
+        }
+
+        #left .mq-lib-section-empty {
+            font-size: 10px;
+            color: #aaa;
+            font-style: italic;
+            padding: 4px 2px 6px;
+        }
+
+        #left .mq-lib-section-items {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
         }
 
         #left .mq-lib-item {
@@ -6361,6 +6404,75 @@
                 const d = entry.data || {};
                 return entry.kind === 'box' ? mqLibBuildBoxThumb(d) : mqLibBuildHotspotPreview(d);
             }
+            function mqLibRenderEntryRow(entry) {
+                const row = document.createElement('div');
+                row.className = 'mq-lib-item';
+                row.draggable = true;
+                row.title = entry.kind === 'box'
+                    ? 'Survoler pour l\'aperçu · glisser pour appliquer · double-clic sur la sélection'
+                    : 'Glisser sur un élément du canvas · double-clic = appliquer à la sélection';
+                row.dataset.libId = entry.id;
+                const preview = mqLibBuildPreview(entry);
+                const body = document.createElement('div');
+                body.className = 'mq-lib-item-body';
+                const nameEl = document.createElement('div');
+                nameEl.className = 'mq-lib-item-name';
+                nameEl.textContent = entry.name;
+                const meta = document.createElement('div');
+                meta.className = 'mq-lib-item-meta';
+                const hint = entry.kind === 'box'
+                    ? ((entry.data && (entry.data.placeholder || entry.data.answer)) || '').trim()
+                    : ((entry.data && (entry.data.tip || entry.data.label)) || '').trim();
+                meta.textContent = (hint ? hint.slice(0, 28) + (hint.length > 28 ? '…' : '') : 'Sans texte')
+                    + ' · ' + (entry.createdAt || '').slice(0, 10);
+                body.appendChild(nameEl);
+                body.appendChild(meta);
+                const del = document.createElement('button');
+                del.type = 'button';
+                del.className = 'mq-lib-item-del';
+                del.title = 'Supprimer';
+                del.textContent = '×';
+                del.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    if (!confirm('Supprimer le modèle « ' + entry.name + ' » ?')) return;
+                    mqLibSave(mqLibLoad().filter(x => x.id !== entry.id));
+                    mqLibRenderList();
+                });
+                row.appendChild(preview);
+                row.appendChild(body);
+                row.appendChild(del);
+                if (entry.kind === 'box') mqLibWireBoxHover(row, entry);
+                row.addEventListener('dragstart', (e) => {
+                    mqLibHideHoverPreview();
+                    clearTimeout(_mqLibHoverTimer);
+                    e.dataTransfer.setData(MQ_LIB_DND_TYPE, entry.id);
+                    e.dataTransfer.effectAllowed = 'copy';
+                    row.classList.add('is-dragging');
+                });
+                row.addEventListener('dragend', () => row.classList.remove('is-dragging'));
+                row.addEventListener('dblclick', () => mqLibApplyToSelection(entry));
+                return row;
+            }
+            function mqLibRenderSection(host, title, cssKind, entries) {
+                const section = document.createElement('div');
+                section.className = 'mq-lib-section';
+                const heading = document.createElement('div');
+                heading.className = 'mq-lib-section-title is-' + cssKind;
+                heading.textContent = title + (entries.length ? ' (' + entries.length + ')' : '');
+                section.appendChild(heading);
+                const items = document.createElement('div');
+                items.className = 'mq-lib-section-items';
+                if (!entries.length) {
+                    const empty = document.createElement('div');
+                    empty.className = 'mq-lib-section-empty';
+                    empty.textContent = 'Aucun modèle';
+                    items.appendChild(empty);
+                } else {
+                    entries.forEach(entry => items.appendChild(mqLibRenderEntryRow(entry)));
+                }
+                section.appendChild(items);
+                host.appendChild(section);
+            }
             function mqLibRenderList() {
                 mqLibHideHoverPreview();
                 clearTimeout(_mqLibHoverTimer);
@@ -6372,56 +6484,10 @@
                     host.innerHTML = '<div class="mq-lib-empty">Aucun modèle enregistré.</div>';
                     return;
                 }
-                list.forEach(entry => {
-                    const row = document.createElement('div');
-                    row.className = 'mq-lib-item';
-                    row.draggable = true;
-                    row.title = entry.kind === 'box'
-                        ? 'Survoler pour l\'aperçu · glisser pour appliquer · double-clic sur la sélection'
-                        : 'Glisser sur un élément du canvas · double-clic = appliquer à la sélection';
-                    row.dataset.libId = entry.id;
-                    const preview = mqLibBuildPreview(entry);
-                    const body = document.createElement('div');
-                    body.className = 'mq-lib-item-body';
-                    const nameEl = document.createElement('div');
-                    nameEl.className = 'mq-lib-item-name';
-                    nameEl.textContent = entry.name;
-                    const meta = document.createElement('div');
-                    meta.className = 'mq-lib-item-meta';
-                    const hint = entry.kind === 'box'
-                        ? ((entry.data && (entry.data.placeholder || entry.data.answer)) || '').trim()
-                        : ((entry.data && (entry.data.tip || entry.data.label)) || '').trim();
-                    meta.textContent = (entry.kind === 'box' ? 'Champ texte' : 'Hotspot')
-                        + (hint ? ' · ' + hint.slice(0, 22) + (hint.length > 22 ? '…' : '') : '')
-                        + ' · ' + (entry.createdAt || '').slice(0, 10);
-                    body.appendChild(nameEl);
-                    body.appendChild(meta);
-                    const del = document.createElement('button');
-                    del.type = 'button';
-                    del.className = 'mq-lib-item-del';
-                    del.title = 'Supprimer';
-                    del.textContent = '×';
-                    del.addEventListener('click', (e) => {
-                        e.stopPropagation();
-                        if (!confirm('Supprimer le modèle « ' + entry.name + ' » ?')) return;
-                        mqLibSave(mqLibLoad().filter(x => x.id !== entry.id));
-                        mqLibRenderList();
-                    });
-                    row.appendChild(preview);
-                    row.appendChild(body);
-                    row.appendChild(del);
-                    if (entry.kind === 'box') mqLibWireBoxHover(row, entry);
-                    row.addEventListener('dragstart', (e) => {
-                        mqLibHideHoverPreview();
-                        clearTimeout(_mqLibHoverTimer);
-                        e.dataTransfer.setData(MQ_LIB_DND_TYPE, entry.id);
-                        e.dataTransfer.effectAllowed = 'copy';
-                        row.classList.add('is-dragging');
-                    });
-                    row.addEventListener('dragend', () => row.classList.remove('is-dragging'));
-                    row.addEventListener('dblclick', () => mqLibApplyToSelection(entry));
-                    host.appendChild(row);
-                });
+                const boxes = list.filter(e => e.kind === 'box');
+                const hotspots = list.filter(e => e.kind === 'hotspot');
+                mqLibRenderSection(host, 'Champs texte', 'box', boxes);
+                mqLibRenderSection(host, 'Hotspots', 'hotspot', hotspots);
             }
             function mqLibInitDropTargets() {
                 const libList = document.getElementById('mqLibList');
