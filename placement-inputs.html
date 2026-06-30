@@ -2763,9 +2763,9 @@
             <h3>Bibliothèque</h3>
             <div class="mq-lib-panel">
                 <p class="mini" style="margin:0; color:#666; line-height:1.4;">
-                    Enregistrez la configuration d'un champ texte ou d'un hotspot sélectionné,
-                    puis glissez l'entrée sur un élément du canvas. Survolez un champ texte
-                    enregistré pour voir l'aperçu détaillé.
+                    Enregistrez le <strong>style</strong> d'un champ (taille, couleurs, police…)
+                    sans la réponse ni l'infobulle. Glissez le modèle sur un champ existant
+                    ou sur le canvas pour en créer un nouveau.
                 </p>
                 <div class="mq-lib-save-row">
                     <button id="btnLibSave" type="button">➕ Enregistrer la sélection</button>
@@ -6206,12 +6206,14 @@
             const MQ_LIB_STORAGE_KEY = 'mq_config_library_v1';
             const MQ_LIB_DND_TYPE = 'application/x-mq-lib';
             const MQ_BOX_PRESET_KEYS = [
-                'w', 'h', 'answer', 'placeholder', 'hintSameAsAnswer', 'hint', 'multiline', 'rows',
+                'w', 'h', 'placeholder', 'multiline', 'rows',
                 'font', 'fontSize', 'weight', 'pad', 'bgColor', 'bgAlpha', 'borderColor', 'borderW', 'radius',
                 'phColor', 'phOpacity', 'phSize', 'phFont', 'phWeight', 'phStyle',
                 'fillTyping', 'fillWrong', 'fillOk',
-                'hintRender', 'hintFontSize', 'hintFont', 'hintPad', 'hintMs', 'copyToHotspotTip'
+                'hintRender', 'hintFontSize', 'hintFont', 'hintPad', 'hintMs'
             ];
+            /** Contenu pédagogique : jamais copié ni enregistré dans la bibliothèque. */
+            const MQ_BOX_LIB_CONTENT_KEYS = ['answer', 'hint', 'hintSameAsAnswer', 'copyToHotspotTip'];
             const MQ_HOTSPOT_PRESET_KEYS = [
                 'label', 'fill', 'blendMode', 'stroke', 'strokeW', 'alphaIdle', 'alphaActive',
                 'shadowX', 'shadowY', 'shadowBlur', 'shadowColor', 'trigger',
@@ -6222,7 +6224,13 @@
                 try {
                     const raw = localStorage.getItem(MQ_LIB_STORAGE_KEY);
                     const arr = raw ? JSON.parse(raw) : [];
-                    return Array.isArray(arr) ? arr : [];
+                    if (!Array.isArray(arr)) return [];
+                    return arr.map((entry) => {
+                        if (entry.kind !== 'box' || !entry.data) return entry;
+                        const data = Object.assign({}, entry.data);
+                        MQ_BOX_LIB_CONTENT_KEYS.forEach((k) => { delete data[k]; });
+                        return Object.assign({}, entry, { data });
+                    });
                 } catch (_) { return []; }
             }
             function mqLibSave(list) {
@@ -6242,8 +6250,9 @@
             }
             function mqLibApplyBoxPreset(b, data) {
                 if (!b || !data || b.kind === 'iframe') return false;
-                MQ_BOX_PRESET_KEYS.forEach(k => { if (data[k] !== undefined) b[k] = data[k]; });
-                if (b.hintSameAsAnswer) b.hint = b.answer ?? '';
+                MQ_BOX_PRESET_KEYS.forEach(k => {
+                    if (data[k] !== undefined) b[k] = data[k];
+                });
                 return true;
             }
             function mqLibApplyHotspotPreset(h, data) {
@@ -6567,9 +6576,11 @@
                 const meta = document.createElement('div');
                 meta.className = 'mq-lib-item-meta';
                 const hint = entry.kind === 'box'
-                    ? ((entry.data && (entry.data.placeholder || entry.data.answer)) || '').trim()
+                    ? ((entry.data && entry.data.placeholder) || '').trim()
                     : ((entry.data && (entry.data.tip || entry.data.label)) || '').trim();
-                meta.textContent = (hint ? hint.slice(0, 28) + (hint.length > 28 ? '…' : '') : 'Sans texte')
+                meta.textContent = (entry.kind === 'box'
+                    ? (hint ? hint.slice(0, 28) + (hint.length > 28 ? '…' : '') : 'Style uniquement')
+                    : (hint ? hint.slice(0, 28) + (hint.length > 28 ? '…' : '') : 'Sans texte'))
                     + ' · ' + (entry.createdAt || '').slice(0, 10);
                 body.appendChild(nameEl);
                 body.appendChild(meta);
