@@ -2747,16 +2747,16 @@
                 <p class="mini">
                     Analyse <strong>tout le sous-cul</strong> (page 1 + page 2), pas seulement la zone
                     visible à l'écran. Résolution native · défilez le canvas après l'OCR pour voir tous les champs.
-                    Mode <strong>segments</strong> : entre ligne et mot — coupure si l'écart dépasse la valeur réglée.
-                    Fiche à filigrane : bouton <strong>Fiche filigranée</strong>.
+                    Mode <strong>segments</strong> ou <strong>lines</strong> : réduisez <strong>Écart mots (px)</strong>
+                    si deux mots trop éloignés sont fusionnés (essayez 20–30).
                 </p>
                 <div id="mqOcrToolbarHost"></div>
                 <div class="mq-ocr-list-block">
                     <div class="mq-ocr-list-title">Textes reconnus</div>
                     <p class="mq-ocr-list-help">
-                        Cliquez dans le champ pour <strong>corriger le texte</strong> · triez avec
-                        <strong>⋮⋮</strong> · retirez avec <strong>×</strong> (mémorisé pour les prochains OCR).
-                        <strong>Suppr</strong> hors champ = supprimer la ligne sélectionnée.
+                        Cliquez dans le champ pour <strong>corriger le texte</strong> ·
+                        <strong>Entrée</strong> coupe en deux lignes à la position du curseur ·
+                        triez avec <strong>⋮⋮</strong> · retirez avec <strong>×</strong>.
                     </p>
                     <div id="mqOcrListHost"></div>
                 </div>
@@ -6886,7 +6886,7 @@
                     toolbarContainer: toolbarHost,
                     language: 'fra',
                     mode: 'segments',
-                    maxWordGap: 48,
+                    maxWordGap: 35,
                     minConfidence: 65,
                     minTextLength: 2,
                     createOverlayInputs: true,

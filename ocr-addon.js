@@ -26,7 +26,7 @@
         minConfidence: 70,
         minTextLength: 2,
         /** Écart horizontal max. (px image) entre mots sur une ligne — mode segments. 0 = auto. */
-        maxWordGap: 48,
+        maxWordGap: 35,
         createOverlayInputs: true,
         createListInputs: true,
         useDisplayedImageCoordinates: true,
@@ -45,7 +45,7 @@
     const OCR_PRESETS = {
         'fiche-filigrane': {
             mode: 'segments',
-            maxWordGap: 55,
+            maxWordGap: 40,
             minConfidence: 65,
             minTextLength: 3,
             preprocess: { grayscale: true, contrast: 1.35, threshold: 185 }
@@ -345,8 +345,14 @@
         return sorted[Math.floor(sorted.length / 2)];
     }
 
+    function wordCenterInBbox(w, bbox) {
+        if (!w || !w.bbox || !bbox) return false;
+        const cx = (w.bbox.x0 + w.bbox.x1) / 2;
+        const cy = (w.bbox.y0 + w.bbox.y1) / 2;
+        return cx >= bbox.x0 && cx <= bbox.x1 && cy >= bbox.y0 && cy <= bbox.y1;
+    }
+
     /**
-     * Regroupe les mots Tesseract en lignes visuelles (tolérance verticale).
      * @param {object[]} words
      * @returns {object[][]}
      */
@@ -484,8 +490,26 @@
             return items;
         }
 
-        if (mode === 'lines' && Array.isArray(data.lines)) {
-            data.lines.forEach((ln) => pushItem(ln.text, ln.confidence, ln.bbox));
+        if (mode === 'lines') {
+            if (Array.isArray(data.lines) && Array.isArray(data.words) && data.words.length) {
+                data.lines.forEach((ln) => {
+                    if (!ln.bbox) return;
+                    const wordsInLine = data.words.filter((w) => w && w.bbox && w.text && wordCenterInBbox(w, ln.bbox));
+                    if (wordsInLine.length > 1) {
+                        segmentWordsOnLine(wordsInLine, maxWordGap).forEach((seg) => {
+                            pushItem(seg.text, seg.confidence, seg.bbox);
+                        });
+                    } else if (wordsInLine.length === 1) {
+                        pushItem(wordsInLine[0].text, wordsInLine[0].confidence, wordsInLine[0].bbox);
+                    } else {
+                        pushItem(ln.text, ln.confidence, ln.bbox);
+                    }
+                });
+                return items;
+            }
+            if (Array.isArray(data.lines)) {
+                data.lines.forEach((ln) => pushItem(ln.text, ln.confidence, ln.bbox));
+            }
             return items;
         }
 
@@ -513,9 +537,10 @@
     /**
      * Crée un objet champ et son DOM overlay + entrée liste.
      * @param {object} spec
+     * @param {string} [insertAfterId] — insère après ce champ dans la liste
      * @returns {object}
      */
-    function createField(spec) {
+    function createField(spec, insertAfterId) {
         const bbox = {
             x0: spec.originalX,
             y0: spec.originalY,
@@ -549,14 +574,76 @@
             const listHost = ensureListHost();
             if (listHost) {
                 field.listEl = buildListInput(field);
-                listHost.appendChild(field.listEl);
             }
         }
 
-        state.fields.push(field);
+        const insertIdx = insertAfterId
+            ? state.fields.findIndex((f) => f.id === insertAfterId)
+            : -1;
+        if (insertIdx >= 0) {
+            state.fields.splice(insertIdx + 1, 0, field);
+            if (field.listEl && state.listItemsHost) {
+                const anchor = state.fields[insertIdx].listEl;
+                if (anchor) anchor.insertAdjacentElement('afterend', field.listEl);
+                else state.listItemsHost.appendChild(field.listEl);
+            }
+        } else {
+            state.fields.push(field);
+            if (field.listEl && state.listItemsHost) {
+                state.listItemsHost.appendChild(field.listEl);
+            }
+        }
         refreshListLabels();
         updateListEmptyState();
         return field;
+    }
+
+    /**
+     * Coupe un champ en deux à la position du curseur (Entrée dans la liste).
+     * @param {object} field
+     * @param {HTMLInputElement} input
+     * @returns {boolean}
+     */
+    function splitFieldAtCursor(field, input) {
+        const pos = typeof input.selectionStart === 'number' ? input.selectionStart : input.value.length;
+        const full = input.value;
+        if (pos <= 0 || pos >= full.length) return false;
+
+        const left = full.slice(0, pos).trimEnd();
+        const right = full.slice(pos).trimStart();
+        if (!left || !right) return false;
+
+        const totalLen = left.length + right.length;
+        const ratio = left.length / totalLen;
+        const origTotalW = field.originalWidth;
+        const splitW = Math.max(8, origTotalW * ratio);
+        const newW = Math.max(8, origTotalW - splitW);
+
+        field.text = left;
+        input.value = left;
+        if (field.el) {
+            const oi = field.el.querySelector('input');
+            if (oi) oi.value = left;
+        }
+        field.originalWidth = splitW;
+        syncDisplayFromOriginal(field);
+
+        const newField = createField({
+            text: right,
+            confidence: field.confidence,
+            originalX: field.originalX + splitW,
+            originalY: field.originalY,
+            originalWidth: newW,
+            originalHeight: field.originalHeight
+        }, field.id);
+
+        selectField(newField.id, false);
+        const newInput = newField.listEl && newField.listEl.querySelector('input');
+        if (newInput) {
+            newInput.focus();
+            try { newInput.setSelectionRange(0, 0); } catch (err) { /* ignore */ }
+        }
+        return true;
     }
 
     /** Conteneur liste (créé à la volée si absent). */
@@ -566,7 +653,7 @@
             if (!panel) return null;
             const wrap = document.createElement('div');
             wrap.className = 'ocr-list-panel';
-            wrap.innerHTML = '<p class="ocr-list-hint">Corrigez le texte dans chaque champ · <strong>×</strong> retire (mémorisé) · <strong>⋮⋮</strong> pour trier</p>';
+            wrap.innerHTML = '<p class="ocr-list-hint">Corrigez le texte ici · <strong>Entrée</strong> coupe en deux · <strong>×</strong> retire · <strong>⋮⋮</strong> trier</p>';
             const items = document.createElement('div');
             items.className = 'ocr-list-items';
             const empty = document.createElement('div');
@@ -810,7 +897,15 @@
         input.addEventListener('mousedown', (e) => e.stopPropagation());
         input.addEventListener('pointerdown', (e) => e.stopPropagation());
         input.addEventListener('click', (e) => e.stopPropagation());
-        input.addEventListener('keydown', (e) => e.stopPropagation());
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                e.stopPropagation();
+                splitFieldAtCursor(field, input);
+                return;
+            }
+            e.stopPropagation();
+        });
 
         input.addEventListener('focus', () => selectField(field.id, false));
 
@@ -1052,10 +1147,10 @@
         const ml = bar.querySelector('[data-control="minTextLength"]');
         if (ml) ml.value = state.minTextLength;
         const mg = bar.querySelector('[data-control="maxWordGap"]');
-        if (mg) mg.value = state.maxWordGap != null ? state.maxWordGap : 48;
+        if (mg) mg.value = state.maxWordGap != null ? state.maxWordGap : 35;
         const gapWrap = bar.querySelector('[data-control="maxWordGap-wrap"]');
         if (gapWrap) {
-            gapWrap.style.display = state.mode === 'segments' ? '' : 'none';
+            gapWrap.style.display = (state.mode === 'segments' || state.mode === 'lines') ? '' : 'none';
         }
         const pp = state.preprocess || {};
         const ct = bar.querySelector('[data-control="contrast"]');
@@ -1091,8 +1186,8 @@
             '      <option value="words">words</option>',
             '    </select>',
             '  </label>',
-            '  <label data-control="maxWordGap-wrap" title="Coupure si l\'écart entre deux mots dépasse cette valeur (px image). 0 = auto.">Écart max.',
-            '    <input type="number" data-control="maxWordGap" min="0" max="500" step="1" value="48">',
+            '  <label data-control="maxWordGap-wrap" title="Coupure si l\'écart horizontal entre deux mots dépasse cette valeur (px image). Plus bas = moins de fusion. 0 = auto.">Écart mots (px)',
+            '    <input type="number" data-control="maxWordGap" min="0" max="500" step="1" value="35">',
             '  </label>',
             '  <label>Confiance min.',
             '    <input type="number" data-control="minConfidence" min="0" max="100" value="70">',
@@ -1139,7 +1234,7 @@
         });
         bar.querySelector('[data-control="maxWordGap"]').addEventListener('change', (e) => {
             const v = Number(e.target.value);
-            OCRAddon.setFilter({ maxWordGap: Number.isFinite(v) && v >= 0 ? Math.round(v) : 48 });
+            OCRAddon.setFilter({ maxWordGap: Number.isFinite(v) && v >= 0 ? Math.round(v) : 35 });
         });
         bar.querySelector('[data-control="contrast"]').addEventListener('change', (e) => {
             const v = Number(e.target.value);
@@ -1260,7 +1355,7 @@
             mode: opts.mode || 'segments',
             minConfidence: opts.minConfidence,
             minTextLength: opts.minTextLength,
-            maxWordGap: opts.maxWordGap != null ? opts.maxWordGap : 48,
+            maxWordGap: opts.maxWordGap != null ? opts.maxWordGap : 35,
             createOverlayInputs: opts.createOverlayInputs,
             createListInputs: opts.createListInputs,
             useDisplayedImageCoordinates: opts.useDisplayedImageCoordinates,
