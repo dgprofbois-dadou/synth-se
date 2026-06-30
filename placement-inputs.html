@@ -7089,6 +7089,22 @@
                 document.body.style.cursor = 'crosshair';
             };
 
+            window.mqBreakHotspotLink = function () {
+                const h = getSelectedHotspot();
+                if (!h) return;
+                if (!(h.group || '').trim()) {
+                    if (window.mqToast) window.mqToast('Ce hotspot n\'est pas lié.', { warn: true });
+                    return;
+                }
+                mqCancelTools();
+                h.group = '';
+                if (state.selectedHotspotId === h.id && hsGroup) hsGroup.value = '';
+                syncHotspotUI();
+                render();
+                scheduleSaveLocal();
+                if (window.mqToast) window.mqToast('Lien rompu.');
+            };
+
             // 4) Pinceau champ : capture CE style, puis on peint les champs cliqués
             window.mqStartBoxBrush = function () {
                 const b = getSelected();
@@ -7125,6 +7141,22 @@
                 mqHsLinkGroup = grp;
                 mqHsBanner('🔗 Lien « ' + grp + ' » : cliquez un champ ou un hotspot à lier — Échap / clic droit pour terminer');
                 document.body.style.cursor = 'crosshair';
+            };
+
+            window.mqBreakBoxLink = function () {
+                const b = getSelected();
+                if (!b || b.kind === 'iframe') return;
+                if (!(b.group || '').trim()) {
+                    if (window.mqToast) window.mqToast('Ce champ n\'est pas lié.', { warn: true });
+                    return;
+                }
+                mqCancelTools();
+                b.group = '';
+                if (state.selectedId === b.id && pGroup) pGroup.value = '';
+                syncPropsFromSelected();
+                render();
+                scheduleSaveLocal();
+                if (window.mqToast) window.mqToast('Lien rompu.');
             };
 
             // Réponse attendue du champ (édition rapide)
@@ -12105,6 +12137,10 @@
                     mqAddMenuItem('🖌️ Pinceau de style', () => window.mqStartBoxBrush && window.mqStartBoxBrush());
                     mqAddMenuItem('🧪 Pipette de style', () => window.mqStartBoxPipette && window.mqStartBoxPipette());
                     mqAddMenuItem('🔗 Lier (champ ou hotspot)', () => window.mqStartBoxLink && window.mqStartBoxLink());
+                    const ctxBoxBreak = mqAddMenuItem('✂️ Rompre', () => window.mqBreakBoxLink && window.mqBreakBoxLink());
+                    const boxData = window.appState && window.appState.selectedId
+                        ? window.appState.boxes.find(x => x.id === window.appState.selectedId) : null;
+                    ctxBoxBreak.disabled = !(boxData && boxData.kind !== 'iframe' && (boxData.group || '').trim());
                     mqAddMenuItem('🎨 Copier le style', () => mqProxyClick('btnCopyBoxStyle'));
                     const pasteBtn = mqAddMenuItem('🖌️ Coller le style', () => mqProxyClick('btnPasteBoxStyle'));
                     const pasteSrc = $('btnPasteBoxStyle');
@@ -12121,6 +12157,10 @@
                     mqAddMenuItem('🧪 Pipette de style', () => window.mqStartHotspotPipette && window.mqStartHotspotPipette());
                     mqAddMenuItem('↔️ Transformer (taille)', () => window.mqToggleHotspotTransform && window.mqToggleHotspotTransform(), { kbd: 'Maj+T' });
                     mqAddMenuItem('🔗 Lier (champ ou hotspot)', () => window.mqStartHotspotLink && window.mqStartHotspotLink());
+                    const ctxHsBreak = mqAddMenuItem('✂️ Rompre', () => window.mqBreakHotspotLink && window.mqBreakHotspotLink());
+                    const hsData = window.appState && window.appState.selectedHotspotId
+                        ? window.appState.hotspots.find(x => x.id === window.appState.selectedHotspotId) : null;
+                    ctxHsBreak.disabled = !(hsData && (hsData.group || '').trim());
                     mqAddMenuSep();
                     mqAddMenuItem('📋 Dupliquer', () => mqProxyClick('btnDup'), { kbd: '⌘D' });
                     mqAddMenuItem('🎨 Copier le style', () => mqProxyClick('btnCopyStyle'));
