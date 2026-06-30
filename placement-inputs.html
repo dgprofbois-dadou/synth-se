@@ -1178,6 +1178,146 @@
             color: #0f766e;
         }
 
+        #left .mq-tab[data-tab="library"].is-active {
+            border-bottom-color: #7c3aed;
+            color: #6d28d9;
+        }
+
+        #left .mq-lib-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        #left .mq-lib-save-row {
+            display: flex;
+            gap: 6px;
+        }
+
+        #left #btnLibSave {
+            flex: 1;
+            font-weight: 600;
+            background: linear-gradient(145deg, #ede9fe, #ddd6fe);
+            border: 1px solid #a78bfa;
+            color: #5b21b6;
+            border-radius: 8px;
+            padding: 9px 10px;
+            cursor: pointer;
+        }
+
+        #left #btnLibSave:hover {
+            background: #ddd6fe;
+        }
+
+        #mqLibList {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            max-height: 420px;
+            overflow-y: auto;
+        }
+
+        #left .mq-lib-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 10px;
+            border: 1px solid var(--mq-border, #ddd);
+            border-radius: 8px;
+            background: #fff;
+            cursor: grab;
+            user-select: none;
+            transition: box-shadow .15s, border-color .15s;
+        }
+
+        #left .mq-lib-item:hover {
+            border-color: #a78bfa;
+            box-shadow: 0 2px 8px rgba(124, 58, 237, .12);
+        }
+
+        #left .mq-lib-item:active {
+            cursor: grabbing;
+        }
+
+        #left .mq-lib-item.is-dragging {
+            opacity: .55;
+        }
+
+        #left .mq-lib-item-icon {
+            flex-shrink: 0;
+            width: 28px;
+            height: 28px;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+        }
+
+        #left .mq-lib-item-icon.is-box {
+            background: #dbeafe;
+            color: #1d4ed8;
+        }
+
+        #left .mq-lib-item-icon.is-hotspot {
+            background: #ffedd5;
+            color: #c2410c;
+        }
+
+        #left .mq-lib-item-body {
+            flex: 1;
+            min-width: 0;
+        }
+
+        #left .mq-lib-item-name {
+            font-size: 12px;
+            font-weight: 600;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        #left .mq-lib-item-meta {
+            font-size: 10px;
+            color: #888;
+        }
+
+        #left .mq-lib-item-del {
+            flex-shrink: 0;
+            border: 0;
+            background: transparent;
+            color: #bbb;
+            cursor: pointer;
+            padding: 4px 6px;
+            border-radius: 4px;
+            font-size: 14px;
+            line-height: 1;
+        }
+
+        #left .mq-lib-item-del:hover {
+            color: #dc2626;
+            background: #fee2e2;
+        }
+
+        #left .mq-lib-empty {
+            font-size: 11px;
+            color: #999;
+            text-align: center;
+            padding: 16px 8px;
+            border: 1px dashed #ddd;
+            border-radius: 8px;
+        }
+
+        .box.mq-lib-drop-target,
+        .hotspot-group.mq-lib-drop-target {
+            outline: 3px dashed #7c3aed !important;
+            outline-offset: 2px;
+        }
+
+        #viewport.mq-lib-drag-over {
+            cursor: copy;
+        }
+
         #left .mq-tabs .mq-tab {
             font-size: 11px;
             padding: 10px 2px 11px;
@@ -2327,6 +2467,21 @@
             <div class="row" style="gap:8px; margin-bottom:15px;">
                 <button id="btnAddDndGame" type="button" style="flex:1; font-weight:bold;">➕ Ajouter un jeu</button>
                 <button id="btnRemoveDndGame" type="button" style="flex:1; display:none;">➖ Retirer le dernier</button>
+            </div>
+
+            <h3>Bibliothèque</h3>
+            <div class="mq-lib-panel">
+                <p class="mini" style="margin:0; color:#666; line-height:1.4;">
+                    Enregistrez la configuration d'un champ texte ou d'un hotspot sélectionné,
+                    puis glissez l'entrée sur un élément du canvas pour appliquer les réglages
+                    (position et forme conservées).
+                </p>
+                <div class="mq-lib-save-row">
+                    <button id="btnLibSave" type="button">➕ Enregistrer la sélection</button>
+                </div>
+                <div id="mqLibList">
+                    <div class="mq-lib-empty">Aucun modèle enregistré.</div>
+                </div>
             </div>
 
             <h3>Import / Export</h3>
@@ -5749,6 +5904,292 @@
             function extractBoxStyle(b) { const o = {}; MQ_BOX_STYLE_KEYS.forEach(k => o[k] = b[k]); return o; }
             function applyBoxStyle(b, s) { MQ_BOX_STYLE_KEYS.forEach(k => { if (s[k] !== undefined) b[k] = s[k]; }); }
 
+            // ─── Bibliothèque de configurations (champs / hotspots) ───
+            const MQ_LIB_STORAGE_KEY = 'mq_config_library_v1';
+            const MQ_LIB_DND_TYPE = 'application/x-mq-lib';
+            const MQ_BOX_PRESET_KEYS = [
+                'w', 'h', 'answer', 'placeholder', 'hintSameAsAnswer', 'hint', 'multiline', 'rows',
+                'font', 'fontSize', 'weight', 'pad', 'bgColor', 'bgAlpha', 'borderColor', 'borderW', 'radius',
+                'phColor', 'phOpacity', 'phSize', 'phFont', 'phWeight', 'phStyle',
+                'fillTyping', 'fillWrong', 'fillOk',
+                'hintRender', 'hintFontSize', 'hintFont', 'hintPad', 'hintMs', 'copyToHotspotTip'
+            ];
+            const MQ_HOTSPOT_PRESET_KEYS = [
+                'label', 'fill', 'blendMode', 'stroke', 'strokeW', 'alphaIdle', 'alphaActive',
+                'shadowX', 'shadowY', 'shadowBlur', 'shadowColor', 'trigger',
+                'tip', 'tipMs', 'tipRender', 'tipFontSize', 'tipPad', 'tipFont'
+            ];
+
+            function mqLibLoad() {
+                try {
+                    const raw = localStorage.getItem(MQ_LIB_STORAGE_KEY);
+                    const arr = raw ? JSON.parse(raw) : [];
+                    return Array.isArray(arr) ? arr : [];
+                } catch (_) { return []; }
+            }
+            function mqLibSave(list) {
+                try { localStorage.setItem(MQ_LIB_STORAGE_KEY, JSON.stringify(list)); } catch (e) { console.warn('mqLibSave', e); }
+            }
+            function mqLibExtractBoxPreset(b) {
+                if (!b || b.kind === 'iframe') return null;
+                const o = {};
+                MQ_BOX_PRESET_KEYS.forEach(k => { if (b[k] !== undefined) o[k] = b[k]; });
+                return o;
+            }
+            function mqLibExtractHotspotPreset(h) {
+                if (!h) return null;
+                const o = {};
+                MQ_HOTSPOT_PRESET_KEYS.forEach(k => { if (h[k] !== undefined) o[k] = h[k]; });
+                return o;
+            }
+            function mqLibApplyBoxPreset(b, data) {
+                if (!b || !data || b.kind === 'iframe') return false;
+                MQ_BOX_PRESET_KEYS.forEach(k => { if (data[k] !== undefined) b[k] = data[k]; });
+                if (b.hintSameAsAnswer) b.hint = b.answer ?? '';
+                return true;
+            }
+            function mqLibApplyHotspotPreset(h, data) {
+                if (!h || !data) return false;
+                MQ_HOTSPOT_PRESET_KEYS.forEach(k => { if (data[k] !== undefined) h[k] = data[k]; });
+                return true;
+            }
+            function mqLibDefaultName(kind) {
+                const n = mqLibLoad().filter(x => x.kind === kind).length + 1;
+                return (kind === 'box' ? 'Champ texte' : 'Hotspot') + ' ' + n;
+            }
+            function mqLibSaveFromSelection() {
+                if (state.mode !== 'admin') return;
+                flushProjectStateBeforeSave();
+                let entry = null;
+                const b = getSelected();
+                if (b && b.kind !== 'iframe') {
+                    const data = mqLibExtractBoxPreset(b);
+                    if (!data) return;
+                    const name = prompt('Nom du modèle (champ texte) :', mqLibDefaultName('box'));
+                    if (name === null || !name.trim()) return;
+                    entry = { id: crypto.randomUUID(), kind: 'box', name: name.trim(), createdAt: new Date().toISOString(), data };
+                } else {
+                    const h = getSelectedHotspot();
+                    if (!h) {
+                        alert('Sélectionnez un champ texte ou un hotspot à enregistrer.');
+                        return;
+                    }
+                    const data = mqLibExtractHotspotPreset(h);
+                    const name = prompt('Nom du modèle (hotspot) :', mqLibDefaultName('hotspot'));
+                    if (name === null || !name.trim()) return;
+                    entry = { id: crypto.randomUUID(), kind: 'hotspot', name: name.trim(), createdAt: new Date().toISOString(), data };
+                }
+                const list = mqLibLoad();
+                list.unshift(entry);
+                mqLibSave(list);
+                mqLibRenderList();
+                if (window.mqToast) window.mqToast('Modèle « ' + entry.name + ' » enregistré');
+                if (typeof window.mqSetInspectorTab === 'function') window.mqSetInspectorTab('library');
+            }
+            function mqLibApplyEntry(entry, targetKind, targetId) {
+                if (!entry || entry.kind !== targetKind) {
+                    if (window.mqToast) window.mqToast('Ce modèle est pour un ' + (entry.kind === 'box' ? 'champ texte' : 'hotspot'), { warn: true });
+                    return false;
+                }
+                if (targetKind === 'box') {
+                    const b = state.boxes.find(x => x.id === targetId);
+                    if (!b || b.kind === 'iframe') return false;
+                    mqLibApplyBoxPreset(b, entry.data);
+                    select(b.id);
+                    syncPropsFromSelected();
+                } else {
+                    const h = state.hotspots.find(x => x.id === targetId);
+                    if (!h) return false;
+                    mqLibApplyHotspotPreset(h, entry.data);
+                    state.selectedHotspotId = h.id;
+                    state.selectedId = null;
+                    syncHotspotUI();
+                }
+                render();
+                saveLocal();
+                if (targetKind === 'box') mqFlashBox(targetId);
+                else mqFlashHotspot(targetId);
+                if (window.mqToast) window.mqToast('Modèle « ' + entry.name + ' » appliqué');
+                return true;
+            }
+            function mqLibApplyToSelection(entry) {
+                if (entry.kind === 'box') {
+                    const b = getSelected();
+                    if (!b || b.kind === 'iframe') {
+                        alert('Sélectionnez un champ texte de destination.');
+                        return;
+                    }
+                    mqLibApplyEntry(entry, 'box', b.id);
+                } else {
+                    const h = getSelectedHotspot();
+                    if (!h) {
+                        alert('Sélectionnez un hotspot de destination.');
+                        return;
+                    }
+                    mqLibApplyEntry(entry, 'hotspot', h.id);
+                }
+            }
+            function mqLibCreateBoxAt(clientX, clientY, entry) {
+                const { x, y } = stageToLocal(clientX, clientY);
+                const id = crypto.randomUUID();
+                const maxZ = state.boxes.reduce((m, b) => Math.max(m, b.z || 0), 0);
+                const b = {
+                    id,
+                    x: Math.round(x - 80),
+                    y: Math.round(y - 17),
+                    w: 160,
+                    h: 34,
+                    z: maxZ + 1,
+                    group: '',
+                    copyToHotspotTip: false,
+                    answer: '',
+                    placeholder: state.defaults.placeholder,
+                    hintSameAsAnswer: true,
+                    font: state.defaults.font,
+                    fontSize: state.defaults.fontSize,
+                    weight: state.defaults.weight,
+                    pad: state.defaults.pad,
+                    bgColor: '#ffffff',
+                    bgAlpha: 0.96,
+                    borderColor: '#666666',
+                    borderW: 2,
+                    radius: 8,
+                    phColor: '#b5b5b5',
+                    phOpacity: 1,
+                    fillTyping: '#ffe0b2',
+                    fillWrong: '#ffcdd2',
+                    fillOk: '#c8e6c9',
+                    hint: '',
+                    hintMs: 2500,
+                    hintRender: 'image',
+                    hintFontSize: 24,
+                    hintFont: 'inherit',
+                    studentValue: '',
+                    ok: false,
+                    multiline: false,
+                    rows: 2,
+                    phSize: Math.max(10, Math.round(state.defaults.fontSize * 0.9)),
+                    phFont: 'inherit',
+                    phWeight: 'inherit',
+                    phStyle: 'normal',
+                    locked: false
+                };
+                mqLibApplyBoxPreset(b, entry.data);
+                state.boxes.push(b);
+                state.selectedHotspotId = null;
+                render();
+                select(b.id);
+                saveLocal();
+                mqFlashBox(b.id);
+                if (window.mqToast) window.mqToast('Champ créé avec le modèle « ' + entry.name + ' »');
+            }
+            function mqLibRenderList() {
+                const host = document.getElementById('mqLibList');
+                if (!host) return;
+                const list = mqLibLoad();
+                host.innerHTML = '';
+                if (!list.length) {
+                    host.innerHTML = '<div class="mq-lib-empty">Aucun modèle enregistré.</div>';
+                    return;
+                }
+                list.forEach(entry => {
+                    const row = document.createElement('div');
+                    row.className = 'mq-lib-item';
+                    row.draggable = true;
+                    row.title = 'Glisser sur un élément du canvas · double-clic = appliquer à la sélection';
+                    row.dataset.libId = entry.id;
+                    const icon = document.createElement('div');
+                    icon.className = 'mq-lib-item-icon ' + (entry.kind === 'box' ? 'is-box' : 'is-hotspot');
+                    icon.textContent = entry.kind === 'box' ? 'T' : '◆';
+                    const body = document.createElement('div');
+                    body.className = 'mq-lib-item-body';
+                    const nameEl = document.createElement('div');
+                    nameEl.className = 'mq-lib-item-name';
+                    nameEl.textContent = entry.name;
+                    const meta = document.createElement('div');
+                    meta.className = 'mq-lib-item-meta';
+                    meta.textContent = (entry.kind === 'box' ? 'Champ texte' : 'Hotspot') + ' · ' + (entry.createdAt || '').slice(0, 10);
+                    body.appendChild(nameEl);
+                    body.appendChild(meta);
+                    const del = document.createElement('button');
+                    del.type = 'button';
+                    del.className = 'mq-lib-item-del';
+                    del.title = 'Supprimer';
+                    del.textContent = '×';
+                    del.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        if (!confirm('Supprimer le modèle « ' + entry.name + ' » ?')) return;
+                        mqLibSave(mqLibLoad().filter(x => x.id !== entry.id));
+                        mqLibRenderList();
+                    });
+                    row.appendChild(icon);
+                    row.appendChild(body);
+                    row.appendChild(del);
+                    row.addEventListener('dragstart', (e) => {
+                        e.dataTransfer.setData(MQ_LIB_DND_TYPE, entry.id);
+                        e.dataTransfer.effectAllowed = 'copy';
+                        row.classList.add('is-dragging');
+                    });
+                    row.addEventListener('dragend', () => row.classList.remove('is-dragging'));
+                    row.addEventListener('dblclick', () => mqLibApplyToSelection(entry));
+                    host.appendChild(row);
+                });
+            }
+            function mqLibInitDropTargets() {
+                if (!viewport) return;
+                let libDragDepth = 0;
+                function clearDropHighlights() {
+                    stage.querySelectorAll('.mq-lib-drop-target').forEach(el => el.classList.remove('mq-lib-drop-target'));
+                }
+                viewport.addEventListener('dragenter', (e) => {
+                    if (!e.dataTransfer.types.includes(MQ_LIB_DND_TYPE)) return;
+                    libDragDepth++;
+                    viewport.classList.add('mq-lib-drag-over');
+                });
+                viewport.addEventListener('dragleave', (e) => {
+                    if (!e.dataTransfer.types.includes(MQ_LIB_DND_TYPE)) return;
+                    libDragDepth = Math.max(0, libDragDepth - 1);
+                    if (libDragDepth === 0) {
+                        viewport.classList.remove('mq-lib-drag-over');
+                        clearDropHighlights();
+                    }
+                });
+                viewport.addEventListener('dragover', (e) => {
+                    if (!e.dataTransfer.types.includes(MQ_LIB_DND_TYPE)) return;
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'copy';
+                    clearDropHighlights();
+                    const boxEl = e.target.closest && e.target.closest('.box');
+                    const hsEl = e.target.closest && e.target.closest('.hotspot-group');
+                    if (boxEl) boxEl.classList.add('mq-lib-drop-target');
+                    else if (hsEl) hsEl.classList.add('mq-lib-drop-target');
+                });
+                viewport.addEventListener('drop', (e) => {
+                    if (!e.dataTransfer.types.includes(MQ_LIB_DND_TYPE)) return;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    libDragDepth = 0;
+                    viewport.classList.remove('mq-lib-drag-over');
+                    clearDropHighlights();
+                    const libId = e.dataTransfer.getData(MQ_LIB_DND_TYPE);
+                    const entry = mqLibLoad().find(x => x.id === libId);
+                    if (!entry) return;
+                    const boxEl = e.target.closest && e.target.closest('.box');
+                    const hsEl = e.target.closest && e.target.closest('.hotspot-group');
+                    if (boxEl && entry.kind === 'box') {
+                        mqLibApplyEntry(entry, 'box', boxEl.dataset.id);
+                    } else if (hsEl && entry.kind === 'hotspot') {
+                        mqLibApplyEntry(entry, 'hotspot', hsEl.dataset.hsid);
+                    } else if (entry.kind === 'box') {
+                        mqLibCreateBoxAt(e.clientX, e.clientY, entry);
+                    } else {
+                        if (window.mqToast) window.mqToast('Déposez ce modèle hotspot sur un hotspot existant (créez-le d\'abord avec H)', { warn: true });
+                    }
+                });
+            }
+            window.mqLibSaveFromSelection = mqLibSaveFromSelection;
+            window.mqLibRenderList = mqLibRenderList;
+
             // Flash visuel sur l'élément cliqué (hotspot SVG ou champ) pour confirmer la prise en compte
             function mqFlashEl(el) {
                 if (!el) return;
@@ -8970,6 +9411,9 @@
 
             if ($('btnUndo')) $('btnUndo').addEventListener('click', () => mqUndo());
             if ($('btnRedo')) $('btnRedo').addEventListener('click', () => mqRedo());
+            if ($('btnLibSave')) $('btnLibSave').addEventListener('click', () => mqLibSaveFromSelection());
+            mqLibRenderList();
+            mqLibInitDropTargets();
             // --- GESTION COPIER / COLLER DE STYLE ---
 
             // 1. Fonction Copier
@@ -10124,6 +10568,7 @@
                     'Hotspot sélectionné': 'hotspot',
                     'Infobulle (hotspot)': 'hotspot',
                     '🎮 Jeux Drag & Drop': 'dnd',
+                    'Bibliothèque': 'library',
                     'Import / Export': 'io'
                 };
                 return map[t] || 'text';
@@ -10271,7 +10716,7 @@
             function mqBuildInspectorTabs() {
                 const left = $('left');
                 if (!left) return;
-                if (left.dataset.mqTabsVersion === '4') {
+                if (left.dataset.mqTabsVersion === '5') {
                     mqEnhanceDndPanels();
                     return;
                 }
@@ -10301,6 +10746,7 @@
                     { id: 'hotspot', label: 'Hotspot' },
                     { id: 'iframe', label: 'Iframe' },
                     { id: 'dnd', label: 'DnD' },
+                    { id: 'library', label: 'Biblio.' },
                     { id: 'io', label: 'Import' }
                 ];
                 const tabButtons = {};
@@ -10342,6 +10788,7 @@
                 const tabMigrate = {
                     design: 'text', donnees: 'text', action: 'dnd',
                     hotspot: 'hotspot', text: 'text', dnd: 'dnd', io: 'io',
+                    library: 'library',
                     import: 'io', export: 'io'
                 };
                 let initial = 'text';
@@ -10352,8 +10799,9 @@
                 } catch (e) { /* */ }
                 if (!tabButtons[initial]) initial = 'text';
                 setTab(initial);
-                left.dataset.mqTabsVersion = '4';
+                left.dataset.mqTabsVersion = '5';
                 mqEnhanceDndPanels();
+                if (typeof window.mqLibRenderList === 'function') window.mqLibRenderList();
             }
 
             function mqSvgIcon(name) {
