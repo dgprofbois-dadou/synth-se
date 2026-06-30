@@ -2767,8 +2767,8 @@
             <div class="mq-lib-panel">
                 <p class="mini" style="margin:0; color:#666; line-height:1.4;">
                     Enregistrez le <strong>style</strong> d'un champ (taille, couleurs, police…)
-                    sans la réponse ni l'infobulle. Glissez le modèle sur un champ existant
-                    ou sur le canvas pour en créer un nouveau.
+                    sans la réponse ni l'infobulle. Au dépôt, la <strong>largeur</strong> s'adapte à la
+                    réponse du champ cible ou à la réponse du modèle enregistré (réf. interne).
                 </p>
                 <div class="mq-lib-save-row">
                     <button id="btnLibSave" type="button">➕ Enregistrer la sélection</button>
@@ -6243,6 +6243,8 @@
                 if (!b || b.kind === 'iframe') return null;
                 const o = {};
                 MQ_BOX_PRESET_KEYS.forEach(k => { if (b[k] !== undefined) o[k] = b[k]; });
+                const ans = (b.answer || '').trim();
+                if (ans) o._widthRef = ans;
                 return o;
             }
             function mqLibExtractHotspotPreset(h) {
@@ -6263,6 +6265,46 @@
                 MQ_HOTSPOT_PRESET_KEYS.forEach(k => { if (data[k] !== undefined) h[k] = data[k]; });
                 return true;
             }
+
+            /** Largeur (px) nécessaire pour afficher un texte avec le style du champ. */
+            function mqMeasureBoxTextWidth(b, text) {
+                const raw = (text != null ? text : b.answer || '').trim();
+                if (!raw) return null;
+                const fs = Math.max(10, Number(b.fontSize || 16));
+                const fw = String(b.weight != null ? b.weight : 400);
+                const ff = (b.font && b.font !== 'inherit')
+                    ? b.font
+                    : 'system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif';
+                const pad = Number(b.pad != null ? b.pad : 4) * 2;
+                const border = Number(b.borderW != null ? b.borderW : 2) * 2;
+                const slack = 10;
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                ctx.font = fw + ' ' + fs + 'px ' + ff;
+                let textW = 0;
+                if (b.multiline) {
+                    raw.split('\n').forEach((line) => {
+                        textW = Math.max(textW, ctx.measureText(line).width);
+                    });
+                } else {
+                    textW = ctx.measureText(raw).width;
+                }
+                return Math.ceil(textW + pad + border + slack);
+            }
+
+            /** Ajuste la largeur du champ à la réponse attendue (ou texte de référence). */
+            function mqFitBoxWidthToAnswer(b, textOverride) {
+                if (!b || b.kind === 'iframe') return;
+                const measured = mqMeasureBoxTextWidth(b, textOverride);
+                if (measured != null) b.w = Math.max(40, Math.min(2400, measured));
+            }
+
+            function mqLibFitBoxAfterPreset(b, entryData) {
+                const ans = (b.answer || '').trim();
+                const widthRef = (entryData && entryData._widthRef) ? String(entryData._widthRef).trim() : '';
+                mqFitBoxWidthToAnswer(b, ans || widthRef || null);
+            }
+
             function mqLibDefaultName(kind) {
                 const n = mqLibLoad().filter(x => x.kind === kind).length + 1;
                 return (kind === 'box' ? 'Champ texte' : 'Hotspot') + ' ' + n;
@@ -6305,6 +6347,7 @@
                     const b = state.boxes.find(x => x.id === targetId);
                     if (!b || b.kind === 'iframe') return false;
                     mqLibApplyBoxPreset(b, entry.data);
+                    mqLibFitBoxAfterPreset(b, entry.data);
                     select(b.id);
                     syncPropsFromSelected();
                 } else {
@@ -6343,12 +6386,13 @@
                 const { x, y } = stageToLocal(clientX, clientY);
                 const id = crypto.randomUUID();
                 const maxZ = state.boxes.reduce((m, b) => Math.max(m, b.z || 0), 0);
+                const presetH = (entry.data && entry.data.h != null) ? entry.data.h : 34;
                 const b = {
                     id,
                     x: Math.round(x - 80),
-                    y: Math.round(y - 17),
+                    y: Math.round(y - presetH / 2),
                     w: 160,
-                    h: 34,
+                    h: presetH,
                     z: maxZ + 1,
                     group: '',
                     copyToHotspotTip: false,
@@ -6385,6 +6429,9 @@
                     locked: false
                 };
                 mqLibApplyBoxPreset(b, entry.data);
+                mqLibFitBoxAfterPreset(b, entry.data);
+                b.x = Math.round(x - b.w / 2);
+                b.y = Math.round(y - b.h / 2);
                 state.boxes.push(b);
                 state.selectedHotspotId = null;
                 render();
