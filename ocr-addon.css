@@ -1,0 +1,245 @@
+/**
+ * OCR Addon — styles overlay, champs, barre d'outils et liste
+ */
+
+/* --- Conteneur overlay (dans l'app hôte) --- */
+.ocr-field {
+    position: absolute;
+    box-sizing: border-box;
+    margin: 0;
+    padding: 2px 4px;
+    font-size: 12px;
+    line-height: 1.2;
+    border: 1px solid rgba(37, 99, 235, 0.55);
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.88);
+    color: #111;
+    pointer-events: auto;
+    cursor: move;
+    resize: none;
+    overflow: hidden;
+    z-index: 10;
+    transition: border-color 0.12s, box-shadow 0.12s;
+}
+
+.ocr-field:hover {
+    border-color: rgba(37, 99, 235, 0.85);
+    box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.25);
+}
+
+.ocr-field.ocr-selected {
+    border-color: #2563eb;
+    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.35);
+    z-index: 20;
+}
+
+.ocr-field-delete {
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    border: 1px solid #dc2626;
+    border-radius: 50%;
+    background: #fff;
+    color: #dc2626;
+    font-size: 12px;
+    line-height: 14px;
+    text-align: center;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.12s;
+    z-index: 2;
+}
+
+.ocr-field:hover .ocr-field-delete,
+.ocr-field.ocr-selected .ocr-field-delete {
+    opacity: 1;
+}
+
+.ocr-field-delete:hover {
+    background: #dc2626;
+    color: #fff;
+}
+
+.ocr-field-resize {
+    position: absolute;
+    right: -4px;
+    bottom: -4px;
+    width: 10px;
+    height: 10px;
+    background: #2563eb;
+    border: 1px solid #fff;
+    border-radius: 2px;
+    cursor: nwse-resize;
+    opacity: 0;
+    z-index: 2;
+}
+
+.ocr-field:hover .ocr-field-resize,
+.ocr-field.ocr-selected .ocr-field-resize {
+    opacity: 1;
+}
+
+/* --- Barre d'outils --- */
+.ocr-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    margin-bottom: 12px;
+    border: 1px solid #e4e4e7;
+    border-radius: 8px;
+    background: #fafafa;
+    font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+    font-size: 13px;
+}
+
+.ocr-toolbar-group {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+}
+
+.ocr-toolbar label {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: #444;
+    white-space: nowrap;
+}
+
+.ocr-toolbar select,
+.ocr-toolbar input[type="number"] {
+    padding: 4px 6px;
+    border: 1px solid #d4d4d8;
+    border-radius: 4px;
+    font-size: 12px;
+    background: #fff;
+}
+
+.ocr-toolbar button {
+    padding: 6px 10px;
+    border: 1px solid #d4d4d8;
+    border-radius: 6px;
+    background: #fff;
+    color: #18181b;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.ocr-toolbar button:hover {
+    background: #f4f4f5;
+    border-color: #a1a1aa;
+}
+
+.ocr-toolbar button.ocr-btn-primary {
+    background: #2563eb;
+    border-color: #2563eb;
+    color: #fff;
+}
+
+.ocr-toolbar button.ocr-btn-primary:hover {
+    background: #1d4ed8;
+}
+
+.ocr-toolbar button:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+.ocr-progress {
+    flex: 1 1 120px;
+    min-width: 100px;
+    height: 8px;
+    border-radius: 4px;
+    background: #e4e4e7;
+    overflow: hidden;
+}
+
+.ocr-progress-bar {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, #2563eb, #7c3aed);
+    transition: width 0.15s ease;
+}
+
+.ocr-progress-text {
+    font-size: 11px;
+    color: #71717a;
+    min-width: 72px;
+}
+
+/* --- Liste latérale des textes --- */
+.ocr-list-panel {
+    font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+    font-size: 13px;
+}
+
+.ocr-list-panel h4 {
+    margin: 0 0 8px;
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #52525b;
+}
+
+.ocr-list-items {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 320px;
+    overflow-y: auto;
+}
+
+.ocr-list-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.ocr-list-item label {
+    flex-shrink: 0;
+    width: 52px;
+    font-size: 10px;
+    color: #71717a;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.ocr-list-item input {
+    flex: 1;
+    padding: 4px 6px;
+    border: 1px solid #d4d4d8;
+    border-radius: 4px;
+    font-size: 12px;
+}
+
+.ocr-list-item input:focus {
+    outline: none;
+    border-color: #2563eb;
+    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
+}
+
+.ocr-list-item.is-active input {
+    border-color: #2563eb;
+    background: #eff6ff;
+}
+
+/* --- État chargement --- */
+.ocr-running .ocr-toolbar button.ocr-btn-primary {
+    pointer-events: none;
+}
+
+.ocr-overlay-busy::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: rgba(255, 255, 255, 0.35);
+    pointer-events: none;
+    z-index: 5;
+}

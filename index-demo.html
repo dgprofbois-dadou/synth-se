@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OCR Addon — Démo</title>
+    <link rel="stylesheet" href="ocr-addon.css">
+    <style>
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+            background: #f4f4f5;
+            color: #18181b;
+        }
+
+        .demo-wrap {
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        h1 {
+            font-size: 1.35rem;
+            margin: 0 0 6px;
+        }
+
+        .demo-intro {
+            font-size: 13px;
+            color: #52525b;
+            margin-bottom: 16px;
+            line-height: 1.5;
+        }
+
+        .demo-layout {
+            display: grid;
+            grid-template-columns: 1fr 280px;
+            gap: 16px;
+            align-items: start;
+        }
+
+        @media (max-width: 900px) {
+            .demo-layout {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Intégration minimale (comme dans une app existante) */
+        #viewer {
+            position: relative;
+            border: 1px solid #d4d4d8;
+            border-radius: 8px;
+            overflow: hidden;
+            background: #fff;
+        }
+
+        #imageExercice {
+            display: block;
+            width: 100%;
+            height: auto;
+        }
+
+        #zoneOverlay {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+        }
+
+        .demo-side {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .demo-card {
+            background: #fff;
+            border: 1px solid #e4e4e7;
+            border-radius: 8px;
+            padding: 12px;
+        }
+
+        .demo-card h2 {
+            font-size: 13px;
+            margin: 0 0 8px;
+            color: #3f3f46;
+        }
+
+        .demo-hint {
+            font-size: 11px;
+            color: #71717a;
+            line-height: 1.45;
+        }
+
+        .demo-hint kbd {
+            padding: 1px 5px;
+            border: 1px solid #d4d4d8;
+            border-radius: 3px;
+            background: #fafafa;
+            font-size: 10px;
+        }
+
+        #ocrListHost {
+            min-height: 80px;
+        }
+    </style>
+</head>
+<body>
+    <div class="demo-wrap">
+        <h1>OCR Addon — démonstration</h1>
+        <p class="demo-intro">
+            Addon autonome (HTML/CSS/JS + Tesseract.js) intégrable dans une application où l'image est déjà chargée.
+            L'image ci-dessous est générée localement pour la démo (aucun import fichier requis).
+        </p>
+
+        <div id="ocrToolbarHost"></div>
+
+        <div class="demo-layout">
+            <div id="viewer">
+                <img id="imageExercice" alt="Exercice de démonstration">
+                <div id="zoneOverlay"></div>
+            </div>
+
+            <div class="demo-side">
+                <div class="demo-card">
+                    <h2>Liste des textes</h2>
+                    <div id="ocrListHost"></div>
+                </div>
+                <div class="demo-card">
+                    <h2>Raccourcis</h2>
+                    <p class="demo-hint">
+                        Champ sélectionné : <kbd>Suppr</kbd> supprimer ·
+                        <kbd>Ctrl+D</kbd> dupliquer · <kbd>Échap</kbd> désélectionner.<br>
+                        Glisser le champ pour déplacer · poignée bleue pour redimensionner.
+                    </p>
+                </div>
+                <div class="demo-card">
+                    <h2>Zoom / pan simulé</h2>
+                    <p class="demo-hint" style="margin-bottom:8px">Test de <code>OCRAddon.setTransform</code> :</p>
+                    <label style="font-size:12px;display:block;margin-bottom:6px">
+                        Échelle <input type="range" id="zoomRange" min="50" max="150" value="100">
+                        <span id="zoomVal">100%</span>
+                    </label>
+                    <button type="button" id="btnResetTransform" style="font-size:12px;padding:4px 8px">Réinitialiser</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tesseract.js (requis) -->
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+    <script src="ocr-addon.js"></script>
+    <script>
+        const img = document.getElementById('imageExercice');
+        img.src = (function buildDemoImage() {
+            const w = 900, h = 520;
+            const canvas = document.createElement('canvas');
+            canvas.width = w;
+            canvas.height = h;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, w, h);
+            ctx.strokeStyle = '#e4e4e7';
+            for (let x = 0; x < w; x += 30) {
+                ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
+            }
+            for (let y = 0; y < h; y += 30) {
+                ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+            }
+            ctx.fillStyle = '#111827';
+            ctx.font = 'bold 28px Georgia, serif';
+            ctx.fillText('Exercice de chimie — Feuille A3', 48, 72);
+            ctx.font = '22px Arial, sans-serif';
+            ctx.fillText('1. Nommer les molécules ci-dessous :', 48, 130);
+            ctx.font = '18px Arial, sans-serif';
+            ctx.fillText('a) Eau : H2O', 72, 190);
+            ctx.fillText('b) Dioxyde de carbone : CO2', 72, 230);
+            ctx.fillText('c) Methane : CH4', 72, 270);
+            ctx.font = '20px Arial, sans-serif';
+            ctx.fillText('2. Completer le tableau :', 48, 340);
+            ctx.strokeStyle = '#374151';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(72, 360, 360, 100);
+            ctx.beginPath();
+            ctx.moveTo(72, 410); ctx.lineTo(432, 410);
+            ctx.moveTo(252, 360); ctx.lineTo(252, 460);
+            ctx.stroke();
+            ctx.font = '16px Arial, sans-serif';
+            ctx.fillText('Element', 120, 392);
+            ctx.fillText('Symbole', 300, 392);
+            ctx.fillText('Carbone', 100, 438);
+            ctx.fillText('C', 310, 438);
+            return canvas.toDataURL('image/png');
+        })();
+
+        img.addEventListener('load', function initOcr() {
+            OCRAddon.init({
+                imageElement: img,
+                overlayContainer: document.getElementById('zoneOverlay'),
+                listContainer: document.getElementById('ocrListHost'),
+                toolbarContainer: document.getElementById('ocrToolbarHost'),
+                language: 'fra',
+                mode: 'lines',
+                minConfidence: 60,
+                minTextLength: 2,
+                createOverlayInputs: true,
+                createListInputs: true,
+                useDisplayedImageCoordinates: true,
+                preprocess: {
+                    grayscale: true,
+                    contrast: 1.2,
+                    threshold: null
+                }
+            });
+        }, { once: true });
+
+        const zoomRange = document.getElementById('zoomRange');
+        const zoomVal = document.getElementById('zoomVal');
+        zoomRange.addEventListener('input', function () {
+            const pct = Number(zoomRange.value);
+            zoomVal.textContent = pct + '%';
+            const scale = pct / 100;
+            OCRAddon.setTransform({ scale: scale, translateX: 0, translateY: 0 });
+        });
+        document.getElementById('btnResetTransform').addEventListener('click', function () {
+            zoomRange.value = 100;
+            zoomVal.textContent = '100%';
+            OCRAddon.setTransform({ scale: 1, translateX: 0, translateY: 0 });
+        });
+    </script>
+</body>
+</html>
