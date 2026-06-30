@@ -2745,8 +2745,8 @@
             <h3>Reconnaissance OCR</h3>
             <div class="mq-ocr-panel">
                 <p class="mini">
-                    Détecte le texte sur les images de fond, puis affinez la liste ci-dessous
-                    avant de créer les champs sur le canvas.
+                    Analyse <strong>tout le sous-cul</strong> (page 1 + page 2), pas seulement la zone
+                    visible à l'écran. Résolution native · défilez le canvas après l'OCR pour voir tous les champs.
                 </p>
                 <div id="mqOcrToolbarHost"></div>
                 <div class="mq-ocr-list-block">
@@ -6708,43 +6708,100 @@
 
             // ─── OCR Addon (reconnaissance texte sur images de fond) ───
             let _mqOcrReady = false;
+            let _mqOcrLayoutMap = null;
 
-            function mqOcrBuildCompositeCanvas() {
+            function mqOcrComputeImageLayouts(allImgs) {
                 updateStageSize();
-                const allImgs = Array.from(stage.querySelectorAll('img.bg'));
-                const totalW = parseFloat(stage.style.width) || 4800;
-                const totalH = parseFloat(stage.style.height) || 3400;
-                const canvas = document.createElement('canvas');
-                canvas.width = totalW;
-                canvas.height = totalH;
-                const ctx = canvas.getContext('2d');
-                ctx.fillStyle = '#ffffff';
-                ctx.fillRect(0, 0, totalW, totalH);
-                if (!allImgs.length) return canvas;
+                const stageW = parseFloat(stage.style.width) || 4800;
+                const stageH = parseFloat(stage.style.height) || 3400;
+                const layouts = [];
 
                 if (state.layout === 'column') {
-                    const maxW = Math.max(...allImgs.map((i) => mqImgDim(i)), totalW);
-                    let y = 0;
+                    const maxW = Math.max(...allImgs.map((i) => mqImgDim(i)), stageW);
+                    let stageY = 0;
+                    let ocrY = 0;
+                    let ocrH = 0;
                     allImgs.forEach((img) => {
                         const nw = mqImgDim(img) || maxW;
                         const nh = mqImgDimH(img);
-                        const drawW = maxW;
-                        const drawH = Math.round(nh * (maxW / (nw || 1)));
-                        ctx.drawImage(img, 0, y, drawW, drawH);
-                        y += drawH;
+                        const stageDrawW = maxW;
+                        const stageDrawH = Math.round(nh * (maxW / (nw || 1)));
+                        layouts.push({
+                            stageX: 0, stageY, stageW: stageDrawW, stageH: stageDrawH,
+                            ocrX: 0, ocrY, ocrW: nw, ocrH: nh
+                        });
+                        stageY += stageDrawH;
+                        ocrY += nh;
+                        ocrH += nh;
                     });
-                } else {
-                    const maxH = Math.max(...allImgs.map((i) => mqImgDimH(i)), totalH);
-                    let x = 0;
-                    allImgs.forEach((img) => {
-                        const nw = mqImgDim(img);
-                        const nh = mqImgDimH(img) || maxH;
-                        const drawH = maxH;
-                        const drawW = Math.round(nw * (maxH / (nh || 1)));
-                        ctx.drawImage(img, x, 0, drawW, drawH);
-                        x += drawW;
-                    });
+                    return { layouts, ocrCanvasW: maxW, ocrCanvasH: ocrH, stageW, stageH };
                 }
+
+                const maxH = Math.max(...allImgs.map((i) => mqImgDimH(i)), stageH);
+                let stageX = 0;
+                let ocrX = 0;
+                let ocrW = 0;
+                allImgs.forEach((img) => {
+                    const nw = mqImgDim(img);
+                    const nh = mqImgDimH(img) || maxH;
+                    const stageDrawH = maxH;
+                    const stageDrawW = Math.round(nw * (maxH / (nh || 1)));
+                    layouts.push({
+                        stageX, stageY: 0, stageW: stageDrawW, stageH: stageDrawH,
+                        ocrX, ocrY: 0, ocrW: nw, ocrH: nh
+                    });
+                    stageX += stageDrawW;
+                    ocrX += nw;
+                    ocrW += nw;
+                });
+                return { layouts, ocrCanvasW: ocrW, ocrCanvasH: maxH, stageW, stageH };
+            }
+
+            function mqOcrMapBboxToStage(bbox) {
+                if (!_mqOcrLayoutMap || !bbox) return bbox;
+                const cx = (bbox.x0 + bbox.x1) / 2;
+                const cy = (bbox.y0 + bbox.y1) / 2;
+                for (const lay of _mqOcrLayoutMap.layouts) {
+                    if (cx < lay.ocrX || cx >= lay.ocrX + lay.ocrW) continue;
+                    if (cy < lay.ocrY || cy >= lay.ocrY + lay.ocrH) continue;
+                    const sx = lay.stageW / (lay.ocrW || 1);
+                    const sy = lay.stageH / (lay.ocrH || 1);
+                    return {
+                        x0: lay.stageX + (bbox.x0 - lay.ocrX) * sx,
+                        y0: lay.stageY + (bbox.y0 - lay.ocrY) * sy,
+                        x1: lay.stageX + (bbox.x1 - lay.ocrX) * sx,
+                        y1: lay.stageY + (bbox.y1 - lay.ocrY) * sy
+                    };
+                }
+                return bbox;
+            }
+
+            function mqOcrBuildCompositeCanvas() {
+                const allImgs = Array.from(stage.querySelectorAll('img.bg'));
+                if (!allImgs.length) {
+                    _mqOcrLayoutMap = null;
+                    const empty = document.createElement('canvas');
+                    empty.width = 1;
+                    empty.height = 1;
+                    return empty;
+                }
+
+                const map = mqOcrComputeImageLayouts(allImgs);
+                _mqOcrLayoutMap = map;
+
+                const canvas = document.createElement('canvas');
+                canvas.width = Math.max(1, map.ocrCanvasW);
+                canvas.height = Math.max(1, map.ocrCanvasH);
+                const ctx = canvas.getContext('2d');
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                map.layouts.forEach((lay, i) => {
+                    const img = allImgs[i];
+                    if (!img || !img.complete) return;
+                    ctx.drawImage(img, lay.ocrX, lay.ocrY, lay.ocrW, lay.ocrH);
+                });
+
                 return canvas;
             }
 
@@ -6833,13 +6890,15 @@
                     listPrimary: true,
                     useDisplayedImageCoordinates: false,
                     getOcrCanvas: mqOcrBuildCompositeCanvas,
+                    mapOcrBbox: mqOcrMapBboxToStage,
                     observeResizeElement: stage,
                     preprocess: { grayscale: true, contrast: 1.15, threshold: null },
-                    beforeRunOCR: () => {
+                    beforeRunOCR: async () => {
                         if (state.mode !== 'admin') {
                             if (window.mqToast) window.mqToast('OCR disponible en mode admin uniquement.', { warn: true });
                             return false;
                         }
+                        await refreshStageLayout();
                         return true;
                     }
                 });

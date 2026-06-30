@@ -36,7 +36,8 @@
         getOcrCanvas: null,
         observeResizeElement: null,
         beforeRunOCR: null,
-        listPrimary: false
+        listPrimary: false,
+        mapOcrBbox: null
     };
 
     let state = null;
@@ -965,7 +966,8 @@
             getOcrCanvas: typeof opts.getOcrCanvas === 'function' ? opts.getOcrCanvas : null,
             observeResizeElement: resolveElement(opts.observeResizeElement),
             beforeRunOCR: typeof opts.beforeRunOCR === 'function' ? opts.beforeRunOCR : null,
-            listPrimary: !!opts.listPrimary
+            listPrimary: !!opts.listPrimary,
+            mapOcrBbox: typeof opts.mapOcrBbox === 'function' ? opts.mapOcrBbox : null
         };
 
         if (!state.imageElement && !state.getOcrCanvas) {
@@ -1000,8 +1002,9 @@
         if (!state) throw new Error('OCRAddon non initialisé. Appelez OCRAddon.init() d\'abord.');
         if (state.running) return state.fields;
 
-        if (state.beforeRunOCR && state.beforeRunOCR() === false) {
-            return [];
+        if (state.beforeRunOCR) {
+            const ok = await Promise.resolve(state.beforeRunOCR());
+            if (ok === false) return [];
         }
 
         const img = state.imageElement;
@@ -1056,13 +1059,18 @@
             const created = [];
             rawItems.forEach((item) => {
                 if (!passesFilter(item.text, item.confidence)) return;
-                const w = item.bbox.x1 - item.bbox.x0;
-                const h = item.bbox.y1 - item.bbox.y0;
+                let bbox = item.bbox;
+                if (state.mapOcrBbox) {
+                    const mapped = state.mapOcrBbox(bbox);
+                    if (mapped) bbox = mapped;
+                }
+                const w = bbox.x1 - bbox.x0;
+                const h = bbox.y1 - bbox.y0;
                 const field = createField({
                     text: item.text,
                     confidence: item.confidence,
-                    originalX: item.bbox.x0,
-                    originalY: item.bbox.y0,
+                    originalX: bbox.x0,
+                    originalY: bbox.y0,
                     originalWidth: w,
                     originalHeight: h
                 });
