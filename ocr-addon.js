@@ -32,7 +32,10 @@
             grayscale: true,
             contrast: 1.2,
             threshold: null
-        }
+        },
+        getOcrCanvas: null,
+        observeResizeElement: null,
+        beforeRunOCR: null
     };
 
     let state = null;
@@ -220,18 +223,13 @@
      * @param {HTMLImageElement} img
      * @returns {HTMLCanvasElement}
      */
-    function buildOcrCanvas(img) {
-        const canvas = document.createElement('canvas');
-        canvas.width = img.naturalWidth;
-        canvas.height = img.naturalHeight;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0);
-
+    function preprocessCanvasPixels(canvas) {
         const pp = state.preprocess || {};
         if (!pp.grayscale && (!pp.contrast || pp.contrast === 1) && pp.threshold == null) {
             return canvas;
         }
 
+        const ctx = canvas.getContext('2d');
         const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
         const data = imageData.data;
         const contrast = pp.contrast != null ? pp.contrast : 1;
@@ -266,6 +264,24 @@
 
         ctx.putImageData(imageData, 0, 0);
         return canvas;
+    }
+
+    function buildOcrCanvas(img) {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0);
+        return preprocessCanvasPixels(canvas);
+    }
+
+    /** Clone un canvas source puis applique le prétraitement optionnel. */
+    function canvasForOcr(source) {
+        const canvas = document.createElement('canvas');
+        canvas.width = source.width;
+        canvas.height = source.height;
+        canvas.getContext('2d').drawImage(source, 0, 0);
+        return preprocessCanvasPixels(canvas);
     }
 
     function clamp(v, min, max) {
@@ -771,11 +787,12 @@
 
     function setupResizeObserver() {
         if (resizeObserver) resizeObserver.disconnect();
-        if (!state.imageElement || typeof ResizeObserver === 'undefined') return;
+        const observeEl = state.observeResizeElement || state.imageElement;
+        if (!observeEl || typeof ResizeObserver === 'undefined') return;
         resizeObserver = new ResizeObserver(() => {
             if (state && state.fields.length) OCRAddon.refreshPositions();
         });
-        resizeObserver.observe(state.imageElement);
+        resizeObserver.observe(observeEl);
     }
 
   /* ------------------------------------------------------------------ */
@@ -809,11 +826,14 @@
             toolbar: null,
             listPanel: null,
             listItemsHost: null,
-            running: false
+            running: false,
+            getOcrCanvas: typeof opts.getOcrCanvas === 'function' ? opts.getOcrCanvas : null,
+            observeResizeElement: resolveElement(opts.observeResizeElement),
+            beforeRunOCR: typeof opts.beforeRunOCR === 'function' ? opts.beforeRunOCR : null
         };
 
-        if (!state.imageElement) {
-            throw new Error('OCRAddon.init : imageElement ou imageSelector requis.');
+        if (!state.imageElement && !state.getOcrCanvas) {
+            throw new Error('OCRAddon.init : imageElement ou getOcrCanvas requis.');
         }
         if (!state.overlayContainer) {
             throw new Error('OCRAddon.init : overlayContainer ou overlayContainerSelector requis.');
@@ -844,12 +864,18 @@
         if (!state) throw new Error('OCRAddon non initialisé. Appelez OCRAddon.init() d\'abord.');
         if (state.running) return state.fields;
 
+        if (state.beforeRunOCR && state.beforeRunOCR() === false) {
+            return [];
+        }
+
         const img = state.imageElement;
-        if (!img.complete || !img.naturalWidth) {
-            await new Promise((resolve, reject) => {
-                img.addEventListener('load', resolve, { once: true });
-                img.addEventListener('error', () => reject(new Error('Image non chargée.')), { once: true });
-            });
+        if (!state.getOcrCanvas && img) {
+            if (!img.complete || !img.naturalWidth) {
+                await new Promise((resolve, reject) => {
+                    img.addEventListener('load', resolve, { once: true });
+                    img.addEventListener('error', () => reject(new Error('Image non chargée.')), { once: true });
+                });
+            }
         }
 
         state.running = true;
@@ -862,7 +888,16 @@
                 throw new Error('Tesseract.js non chargé. Ajoutez le script CDN avant ocr-addon.js.');
             }
 
-            const canvas = buildOcrCanvas(img);
+            let canvas;
+            if (state.getOcrCanvas) {
+                const raw = state.getOcrCanvas();
+                if (!(raw instanceof HTMLCanvasElement)) {
+                    throw new Error('getOcrCanvas() doit retourner un HTMLCanvasElement.');
+                }
+                canvas = canvasForOcr(raw);
+            } else {
+                canvas = buildOcrCanvas(img);
+            }
 
             if (!worker) {
                 worker = await Tesseract.createWorker(state.language, 1, {

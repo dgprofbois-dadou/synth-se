@@ -5,6 +5,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Overlay Admin – V10.1 (Police Info-bulle ajoutée)</title>
+    <link rel="stylesheet" href="ocr-addon.css">
     <style>
         :root {
             --ui: #cfcfcf;
@@ -1467,7 +1468,86 @@
         }
 
         #viewport.mq-lib-drag-over {
+            outline: 2px dashed #7c3aed;
+            outline-offset: -2px;
             cursor: copy;
+        }
+
+        /* --- OCR (addon intégré) --- */
+        #mqOcrOverlay {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 95;
+            overflow: visible;
+        }
+
+        body[data-mode="student"] #mqOcrOverlay {
+            display: none;
+        }
+
+        #mqOcrSource {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0;
+            pointer-events: none;
+            z-index: -1;
+        }
+
+        #left .mq-ocr-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        #left .mq-ocr-panel .mini {
+            margin: 0;
+            color: #666;
+            line-height: 1.4;
+            font-size: 11px;
+        }
+
+        #left #mqOcrToolbarHost .ocr-toolbar {
+            flex-direction: column;
+            align-items: stretch;
+            gap: 8px;
+            padding: 8px;
+            margin: 0;
+        }
+
+        #left #mqOcrToolbarHost .ocr-toolbar-group {
+            flex-wrap: wrap;
+        }
+
+        #left #mqOcrListHost {
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        #btnOcrApplyBoxes {
+            width: 100%;
+            padding: 8px 10px;
+            border-radius: 6px;
+            border: 1px solid #86efac;
+            background: #ecfdf5;
+            color: #166534;
+            font-weight: 600;
+            font-size: 12px;
+            cursor: pointer;
+        }
+
+        #btnOcrApplyBoxes:hover {
+            background: #d1fae5;
+        }
+
+        #mqOcrOverlay .ocr-field {
+            z-index: 96;
         }
 
         #left .mq-tabs .mq-tab {
@@ -2621,6 +2701,17 @@
                 <button id="btnRemoveDndGame" type="button" style="flex:1; display:none;">➖ Retirer le dernier</button>
             </div>
 
+            <h3>Reconnaissance OCR</h3>
+            <div class="mq-ocr-panel">
+                <p class="mini">
+                    Détecte le texte sur les images de fond du canvas, place des champs
+                    éditables en surimpression, puis créez les champs texte définitifs sur le canvas.
+                </p>
+                <div id="mqOcrToolbarHost"></div>
+                <div id="mqOcrListHost"></div>
+                <button id="btnOcrApplyBoxes" type="button">✅ Créer les champs texte sur le canvas</button>
+            </div>
+
             <h3>Bibliothèque</h3>
             <div class="mq-lib-panel">
                 <p class="mini" style="margin:0; color:#666; line-height:1.4;">
@@ -2655,6 +2746,8 @@
             <div id="stage">
                 <img class="bg" src="RABOT 2026 page 1.jpg" alt="Page 1" />
                 <img class="bg" src="RABOT 2026 page 2.jpg" alt="Page 2" />
+                <img id="mqOcrSource" alt="" aria-hidden="true" />
+                <div id="mqOcrOverlay"></div>
                 <div id="dndGamesPreview"
                     style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 100; pointer-events: none;">
                 </div>
@@ -2665,6 +2758,8 @@
     </div>
     <div id="tooltip" aria-hidden="true"></div>
 
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+    <script src="ocr-addon.js"></script>
     <script src="mq-export-runtime.js"></script>
     <script>
         // Plafond technique du nombre de jeux DnD. Déclaré au niveau du script (hors des IIFE)
@@ -3660,6 +3755,9 @@
                         svgUi.setAttribute('width', totalW);
                         svgUi.setAttribute('height', totalH);
                         svgUi.setAttribute('viewBox', `0 0 ${totalW} ${totalH}`);
+                    }
+                    if (typeof window.mqOcrRefreshPositions === 'function') {
+                        window.mqOcrRefreshPositions();
                     }
                 } finally {
                     _updatingStageSize = false;
@@ -6548,6 +6646,150 @@
             }
             window.mqLibSaveFromSelection = mqLibSaveFromSelection;
             window.mqLibRenderList = mqLibRenderList;
+
+            // ─── OCR Addon (reconnaissance texte sur images de fond) ───
+            let _mqOcrReady = false;
+
+            function mqOcrBuildCompositeCanvas() {
+                updateStageSize();
+                const allImgs = Array.from(stage.querySelectorAll('img.bg'));
+                const totalW = parseFloat(stage.style.width) || 4800;
+                const totalH = parseFloat(stage.style.height) || 3400;
+                const canvas = document.createElement('canvas');
+                canvas.width = totalW;
+                canvas.height = totalH;
+                const ctx = canvas.getContext('2d');
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(0, 0, totalW, totalH);
+                if (!allImgs.length) return canvas;
+
+                if (state.layout === 'column') {
+                    const maxW = Math.max(...allImgs.map((i) => mqImgDim(i)), totalW);
+                    let y = 0;
+                    allImgs.forEach((img) => {
+                        const nw = mqImgDim(img) || maxW;
+                        const nh = mqImgDimH(img);
+                        const drawW = maxW;
+                        const drawH = Math.round(nh * (maxW / (nw || 1)));
+                        ctx.drawImage(img, 0, y, drawW, drawH);
+                        y += drawH;
+                    });
+                } else {
+                    const maxH = Math.max(...allImgs.map((i) => mqImgDimH(i)), totalH);
+                    let x = 0;
+                    allImgs.forEach((img) => {
+                        const nw = mqImgDim(img);
+                        const nh = mqImgDimH(img) || maxH;
+                        const drawH = maxH;
+                        const drawW = Math.round(nw * (maxH / (nh || 1)));
+                        ctx.drawImage(img, x, 0, drawW, drawH);
+                        x += drawW;
+                    });
+                }
+                return canvas;
+            }
+
+            function mqOcrNewBoxFromField(f, z) {
+                const text = (f.text || '').trim();
+                const fs = Math.max(12, Math.min(48, Math.round((f.height || 34) * 0.52)));
+                return {
+                    id: crypto.randomUUID(),
+                    x: Math.round(f.x),
+                    y: Math.round(f.y),
+                    w: Math.round(Math.max(40, f.width || 120)),
+                    h: Math.round(Math.max(24, f.height || 34)),
+                    z,
+                    group: '',
+                    copyToHotspotTip: false,
+                    answer: text,
+                    placeholder: state.defaults.placeholder,
+                    hintSameAsAnswer: true,
+                    font: state.defaults.font,
+                    fontSize: fs,
+                    weight: state.defaults.weight,
+                    pad: state.defaults.pad,
+                    bgColor: '#ffffff',
+                    bgAlpha: 0.96,
+                    borderColor: '#666666',
+                    borderW: 2,
+                    radius: 8,
+                    phColor: '#b5b5b5',
+                    phOpacity: 1,
+                    fillTyping: '#ffe0b2',
+                    fillWrong: '#ffcdd2',
+                    fillOk: '#c8e6c9',
+                    hint: '',
+                    hintMs: 2500,
+                    hintRender: 'image',
+                    hintFontSize: 24,
+                    hintFont: 'inherit',
+                    studentValue: '',
+                    ok: false,
+                    multiline: false,
+                    rows: 2,
+                    phSize: Math.max(10, Math.round(fs * 0.9)),
+                    phFont: 'inherit',
+                    phWeight: 'inherit',
+                    phStyle: 'normal',
+                    locked: false
+                };
+            }
+
+            function mqOcrApplyToBoxes() {
+                if (typeof OCRAddon === 'undefined') return;
+                const fields = OCRAddon.getFields();
+                if (!fields.length) {
+                    if (window.mqToast) window.mqToast('Aucun texte OCR à convertir. Lancez d\'abord l\'OCR.', { warn: true });
+                    else alert('Aucun texte OCR à convertir. Lancez d\'abord l\'OCR.');
+                    return;
+                }
+                let maxZ = state.boxes.reduce((m, b) => Math.max(m, b.z || 0), 0);
+                fields.forEach((f) => {
+                    maxZ += 1;
+                    state.boxes.push(mqOcrNewBoxFromField(f, maxZ));
+                });
+                OCRAddon.clear();
+                render();
+                saveLocal();
+                if (window.mqToast) window.mqToast(fields.length + ' champ(s) texte créé(s) sur le canvas.');
+            }
+
+            function mqOcrInit() {
+                if (_mqOcrReady || typeof OCRAddon === 'undefined') return;
+                const overlay = $('mqOcrOverlay');
+                const listHost = $('mqOcrListHost');
+                const toolbarHost = $('mqOcrToolbarHost');
+                if (!overlay || !listHost || !toolbarHost) return;
+
+                OCRAddon.init({
+                    overlayContainer: overlay,
+                    listContainer: listHost,
+                    toolbarContainer: toolbarHost,
+                    language: 'fra',
+                    mode: 'lines',
+                    minConfidence: 65,
+                    minTextLength: 2,
+                    createOverlayInputs: true,
+                    createListInputs: true,
+                    useDisplayedImageCoordinates: false,
+                    getOcrCanvas: mqOcrBuildCompositeCanvas,
+                    observeResizeElement: stage,
+                    preprocess: { grayscale: true, contrast: 1.15, threshold: null },
+                    beforeRunOCR: () => {
+                        if (state.mode !== 'admin') {
+                            if (window.mqToast) window.mqToast('OCR disponible en mode admin uniquement.', { warn: true });
+                            return false;
+                        }
+                        return true;
+                    }
+                });
+                _mqOcrReady = true;
+                window.mqOcrRefreshPositions = () => {
+                    if (_mqOcrReady) OCRAddon.refreshPositions();
+                };
+                window.mqOcrApplyToBoxes = mqOcrApplyToBoxes;
+            }
+            window.mqOcrInit = mqOcrInit;
 
             // Flash visuel sur l'élément cliqué (hotspot SVG ou champ) pour confirmer la prise en compte
             function mqFlashEl(el) {
@@ -9773,6 +10015,8 @@
             if ($('btnLibSave')) $('btnLibSave').addEventListener('click', () => mqLibSaveFromSelection());
             mqLibRenderList();
             mqLibInitDropTargets();
+            mqOcrInit();
+            if ($('btnOcrApplyBoxes')) $('btnOcrApplyBoxes').addEventListener('click', () => mqOcrApplyToBoxes());
             // --- GESTION COPIER / COLLER DE STYLE ---
 
             // 1. Fonction Copier
@@ -10927,6 +11171,7 @@
                     'Hotspot sélectionné': 'hotspot',
                     'Infobulle (hotspot)': 'hotspot',
                     '🎮 Jeux Drag & Drop': 'dnd',
+                    'Reconnaissance OCR': 'ocr',
                     'Bibliothèque': 'library',
                     'Import / Export': 'io'
                 };
@@ -11075,8 +11320,9 @@
             function mqBuildInspectorTabs() {
                 const left = $('left');
                 if (!left) return;
-                if (left.dataset.mqTabsVersion === '5') {
+                if (left.dataset.mqTabsVersion === '6') {
                     mqEnhanceDndPanels();
+                    if (typeof window.mqOcrInit === 'function') window.mqOcrInit();
                     return;
                 }
                 if (left.querySelector('.mq-tabs')) mqUnwrapInspectorTabs(left);
@@ -11105,6 +11351,7 @@
                     { id: 'hotspot', label: 'Hotspot' },
                     { id: 'iframe', label: 'Iframe' },
                     { id: 'dnd', label: 'DnD' },
+                    { id: 'ocr', label: 'OCR' },
                     { id: 'library', label: 'Biblio.' },
                     { id: 'io', label: 'Import' }
                 ];
@@ -11128,7 +11375,7 @@
                     left.appendChild(wrap);
                 });
 
-                const storageKey = 'mq_inspector_tab_v4';
+                const storageKey = 'mq_inspector_tab_v5';
                 function setTab(id) {
                     tabIds.forEach((d) => {
                         const on = d.id === id;
@@ -11147,7 +11394,7 @@
                 const tabMigrate = {
                     design: 'text', donnees: 'text', action: 'dnd',
                     hotspot: 'hotspot', text: 'text', dnd: 'dnd', io: 'io',
-                    library: 'library',
+                    library: 'library', ocr: 'ocr',
                     import: 'io', export: 'io'
                 };
                 let initial = 'text';
@@ -11158,7 +11405,7 @@
                 } catch (e) { /* */ }
                 if (!tabButtons[initial]) initial = 'text';
                 setTab(initial);
-                left.dataset.mqTabsVersion = '5';
+                left.dataset.mqTabsVersion = '6';
                 mqEnhanceDndPanels();
                 if (typeof window.mqLibRenderList === 'function') window.mqLibRenderList();
             }
