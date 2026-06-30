@@ -1230,6 +1230,23 @@
             transition: box-shadow .15s, border-color .15s;
         }
 
+        #left .mq-lib-item--box {
+            flex-direction: column;
+            align-items: stretch;
+            gap: 8px;
+            padding: 10px;
+        }
+
+        #left .mq-lib-item--box .mq-lib-item-footer {
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+        }
+
+        #left .mq-lib-item--box .mq-lib-item-body {
+            flex: 1;
+        }
+
         #left .mq-lib-item:hover {
             border-color: #a78bfa;
             box-shadow: 0 2px 8px rgba(124, 58, 237, .12);
@@ -1257,13 +1274,66 @@
             position: relative;
         }
 
+        #left .mq-lib-preview--box {
+            width: 100%;
+            height: auto;
+            min-height: 78px;
+            padding: 10px 10px 8px;
+            background:
+                linear-gradient(45deg, #ececec 25%, transparent 25%),
+                linear-gradient(-45deg, #ececec 25%, transparent 25%),
+                linear-gradient(45deg, transparent 75%, #ececec 75%),
+                linear-gradient(-45deg, transparent 75%, #ececec 75%);
+            background-size: 10px 10px;
+            background-position: 0 0, 0 5px, 5px -5px, -5px 0;
+            background-color: #f8f8f8;
+            flex-direction: column;
+            align-items: stretch;
+            justify-content: flex-start;
+            gap: 6px;
+        }
+
+        #left .mq-lib-preview-box-scene {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 40px;
+        }
+
         #left .mq-lib-preview-box {
             box-sizing: border-box;
-            max-width: 68px;
-            white-space: nowrap;
-            text-overflow: ellipsis;
+            width: 100%;
+            max-width: 100%;
+            min-height: 30px;
+            display: flex;
+            align-items: center;
             overflow: hidden;
-            line-height: 1.2;
+            line-height: 1.25;
+        }
+
+        #left .mq-lib-preview-ph {
+            display: block;
+            width: 100%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        #left .mq-lib-preview-swatches {
+            display: flex;
+            gap: 4px;
+            align-items: center;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        #left .mq-lib-preview-swatch {
+            width: 14px;
+            height: 14px;
+            border-radius: 3px;
+            border: 1px solid rgba(0, 0, 0, .15);
+            flex-shrink: 0;
+            box-sizing: border-box;
         }
 
         #left .mq-lib-preview-hs {
@@ -6094,34 +6164,69 @@
             }
             function mqLibBuildBoxPreview(d) {
                 const wrap = document.createElement('div');
-                wrap.className = 'mq-lib-preview';
+                wrap.className = 'mq-lib-preview mq-lib-preview--box';
+                const scene = document.createElement('div');
+                scene.className = 'mq-lib-preview-box-scene';
                 const inner = document.createElement('div');
                 inner.className = 'mq-lib-preview-box';
-                const scale = 0.42;
-                const bw = Math.max(52, Math.min(68, Math.round((d.w || 160) * scale)));
-                const bh = Math.max(20, Math.min(36, Math.round((d.h || 34) * scale)));
-                inner.style.width = bw + 'px';
-                inner.style.height = bh + 'px';
-                inner.style.borderRadius = Math.max(2, Math.round((d.radius ?? 8) * scale)) + 'px';
-                inner.style.borderWidth = Math.max(1, Math.min(2, d.borderW ?? 2)) + 'px';
-                inner.style.borderStyle = 'solid';
-                inner.style.borderColor = d.borderColor ?? '#666666';
+
+                const fw = Number(d.w) || 160;
+                const fh = Number(d.h) || 34;
+                const aspect = fw / Math.max(fh, 1);
+                const previewW = 100;
+                let previewH = Math.round(previewW / aspect);
+                previewH = Math.max(d.multiline ? 44 : 30, Math.min(d.multiline ? 56 : 40, previewH));
+
+                inner.style.width = '100%';
+                inner.style.minHeight = previewH + 'px';
+                inner.style.height = previewH + 'px';
+                inner.style.borderRadius = (d.radius ?? 8) + 'px';
+                const borderW = Math.max(0, Number(d.borderW) || 2);
+                inner.style.border = borderW + 'px solid ' + (d.borderColor ?? '#666666');
                 try {
                     inner.style.background = rgba(d.bgColor ?? '#ffffff', d.bgAlpha ?? 0.96);
                 } catch (_) {
                     inner.style.background = '#fff';
                 }
                 inner.style.fontFamily = d.font ?? 'system-ui, sans-serif';
-                inner.style.fontSize = Math.max(7, Math.min(11, Math.round((d.fontSize || 16) * scale))) + 'px';
+                const fs = Math.max(11, Math.min(15, Number(d.fontSize) || 16));
+                inner.style.fontSize = fs + 'px';
                 inner.style.fontWeight = String(d.weight ?? 400);
-                inner.style.color = '#333';
-                inner.style.display = 'flex';
-                inner.style.alignItems = 'center';
-                inner.style.padding = '0 5px';
-                const label = (d.placeholder || d.answer || '_______').trim();
-                inner.textContent = label.slice(0, 14) || '_______';
-                inner.title = label;
-                wrap.appendChild(inner);
+                inner.style.padding = (d.pad ?? 4) + 'px';
+
+                const ph = document.createElement('span');
+                ph.className = 'mq-lib-preview-ph';
+                const label = (d.placeholder || '_______').trim() || '_______';
+                ph.textContent = label;
+                ph.style.color = d.phColor ?? '#b5b5b5';
+                ph.style.opacity = String(d.phOpacity ?? 1);
+                if (d.phSize) ph.style.fontSize = d.phSize + 'px';
+                if (d.phFont && d.phFont !== 'inherit') ph.style.fontFamily = d.phFont;
+                if (d.phWeight && d.phWeight !== 'inherit') ph.style.fontWeight = String(d.phWeight);
+                if (d.phStyle && d.phStyle !== 'normal') ph.style.fontStyle = d.phStyle;
+                ph.title = label;
+                inner.appendChild(ph);
+                scene.appendChild(inner);
+
+                const swatches = document.createElement('div');
+                swatches.className = 'mq-lib-preview-swatches';
+                [
+                    { c: d.bgColor ?? '#fff', t: 'Fond' },
+                    { c: d.borderColor ?? '#666', t: 'Bordure' },
+                    { c: d.fillTyping ?? '#ffe0b2', t: 'Saisie' },
+                    { c: d.fillWrong ?? '#ffcdd2', t: 'Erreur' },
+                    { c: d.fillOk ?? '#c8e6c9', t: 'OK' }
+                ].forEach(s => {
+                    const dot = document.createElement('span');
+                    dot.className = 'mq-lib-preview-swatch';
+                    dot.style.background = s.c;
+                    dot.title = s.t;
+                    swatches.appendChild(dot);
+                });
+
+                wrap.appendChild(scene);
+                wrap.appendChild(swatches);
+                wrap.title = label + ' · ' + fs + 'px · bordure ' + borderW + 'px · rayon ' + (d.radius ?? 8) + 'px';
                 return wrap;
             }
             function mqLibBuildHotspotPreview(d) {
@@ -6163,7 +6268,7 @@
                 }
                 list.forEach(entry => {
                     const row = document.createElement('div');
-                    row.className = 'mq-lib-item';
+                    row.className = 'mq-lib-item' + (entry.kind === 'box' ? ' mq-lib-item--box' : ' mq-lib-item--hs');
                     row.draggable = true;
                     row.title = 'Glisser sur un élément du canvas · double-clic = appliquer à la sélection';
                     row.dataset.libId = entry.id;
@@ -6178,9 +6283,19 @@
                     const hint = entry.kind === 'box'
                         ? ((entry.data && (entry.data.placeholder || entry.data.answer)) || '').trim()
                         : ((entry.data && (entry.data.tip || entry.data.label)) || '').trim();
-                    meta.textContent = (entry.kind === 'box' ? 'Champ texte' : 'Hotspot')
-                        + (hint ? ' · ' + hint.slice(0, 22) + (hint.length > 22 ? '…' : '') : '')
-                        + ' · ' + (entry.createdAt || '').slice(0, 10);
+                    if (entry.kind === 'box' && entry.data) {
+                        const dd = entry.data;
+                        meta.textContent = [
+                            hint ? '« ' + hint.slice(0, 20) + (hint.length > 20 ? '…' : '') + ' »' : null,
+                            (dd.fontSize || 16) + 'px',
+                            'bord. ' + (dd.borderW ?? 2) + 'px',
+                            'rayon ' + (dd.radius ?? 8)
+                        ].filter(Boolean).join(' · ');
+                    } else {
+                        meta.textContent = (entry.kind === 'box' ? 'Champ texte' : 'Hotspot')
+                            + (hint ? ' · ' + hint.slice(0, 22) + (hint.length > 22 ? '…' : '') : '')
+                            + ' · ' + (entry.createdAt || '').slice(0, 10);
+                    }
                     body.appendChild(nameEl);
                     body.appendChild(meta);
                     const del = document.createElement('button');
@@ -6195,8 +6310,16 @@
                         mqLibRenderList();
                     });
                     row.appendChild(preview);
-                    row.appendChild(body);
-                    row.appendChild(del);
+                    if (entry.kind === 'box') {
+                        const foot = document.createElement('div');
+                        foot.className = 'mq-lib-item-footer';
+                        foot.appendChild(body);
+                        foot.appendChild(del);
+                        row.appendChild(foot);
+                    } else {
+                        row.appendChild(body);
+                        row.appendChild(del);
+                    }
                     row.addEventListener('dragstart', (e) => {
                         e.dataTransfer.setData(MQ_LIB_DND_TYPE, entry.id);
                         e.dataTransfer.effectAllowed = 'copy';
