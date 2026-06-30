@@ -389,6 +389,7 @@
         }
 
         state.fields.push(field);
+        refreshListLabels();
         return field;
     }
 
@@ -399,15 +400,100 @@
             if (!panel) return null;
             const wrap = document.createElement('div');
             wrap.className = 'ocr-list-panel';
-            wrap.innerHTML = '<h4>Textes reconnus</h4>';
+            wrap.innerHTML = '<h4>Textes reconnus</h4><p class="ocr-list-hint">Glisser ⋮⋮ pour trier · × pour supprimer</p>';
             const items = document.createElement('div');
             items.className = 'ocr-list-items';
             wrap.appendChild(items);
             panel.appendChild(wrap);
             state.listPanel = wrap;
             state.listItemsHost = items;
+            wireListReorder(items);
         }
         return state.listItemsHost;
+    }
+
+    /** Réordonne state.fields selon l'ordre DOM de la liste. */
+    function syncFieldsOrderFromList() {
+        if (!state.listItemsHost) return;
+        const ids = Array.from(state.listItemsHost.querySelectorAll('.ocr-list-item'))
+            .map((el) => el.dataset.ocrId);
+        const map = new Map(state.fields.map((f) => [f.id, f]));
+        state.fields = ids.map((id) => map.get(id)).filter(Boolean);
+        refreshListLabels();
+    }
+
+    /** Met à jour les numéros d'ordre affichés dans la liste. */
+    function refreshListLabels() {
+        state.fields.forEach((f, i) => {
+            if (!f.listEl) return;
+            const idx = f.listEl.querySelector('.ocr-list-index');
+            if (idx) idx.textContent = String(i + 1);
+        });
+    }
+
+    /** Tri manuel par glisser-déposer dans la liste latérale. */
+    function wireListReorder(host) {
+        if (!host || host.dataset.ocrSortWired) return;
+        host.dataset.ocrSortWired = '1';
+        let dragId = null;
+
+        host.addEventListener('dragstart', (e) => {
+            const grip = e.target.closest('.ocr-list-drag');
+            if (!grip) {
+                e.preventDefault();
+                return;
+            }
+            const row = grip.closest('.ocr-list-item');
+            if (!row) return;
+            dragId = row.dataset.ocrId;
+            row.classList.add('is-dragging');
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', dragId);
+        });
+
+        host.addEventListener('dragend', (e) => {
+            const row = e.target.closest('.ocr-list-item');
+            if (row) row.classList.remove('is-dragging');
+            dragId = null;
+            host.querySelectorAll('.ocr-list-drop-target').forEach((el) => {
+                el.classList.remove('ocr-list-drop-target');
+            });
+        });
+
+        host.addEventListener('dragover', (e) => {
+            if (!dragId) return;
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            const row = e.target.closest('.ocr-list-item');
+            host.querySelectorAll('.ocr-list-drop-target').forEach((el) => {
+                el.classList.remove('ocr-list-drop-target');
+            });
+            if (row && row.dataset.ocrId !== dragId) {
+                row.classList.add('ocr-list-drop-target');
+            }
+        });
+
+        host.addEventListener('dragleave', (e) => {
+            const row = e.target.closest('.ocr-list-item');
+            if (row) row.classList.remove('ocr-list-drop-target');
+        });
+
+        host.addEventListener('drop', (e) => {
+            if (!dragId) return;
+            e.preventDefault();
+            const targetRow = e.target.closest('.ocr-list-item');
+            host.querySelectorAll('.ocr-list-drop-target').forEach((el) => {
+                el.classList.remove('ocr-list-drop-target');
+            });
+            if (!targetRow || targetRow.dataset.ocrId === dragId) return;
+            const srcRow = host.querySelector('.ocr-list-item[data-ocr-id="' + dragId + '"]');
+            if (!srcRow) return;
+            const rect = targetRow.getBoundingClientRect();
+            const before = e.clientY < rect.top + rect.height / 2;
+            if (before) host.insertBefore(srcRow, targetRow);
+            else host.insertBefore(srcRow, targetRow.nextSibling);
+            syncFieldsOrderFromList();
+        });
     }
 
     /**
@@ -489,13 +575,35 @@
         row.className = 'ocr-list-item';
         row.dataset.ocrId = field.id;
 
-        const label = document.createElement('label');
-        label.textContent = field.id;
-        label.title = 'Confiance : ' + Math.round(field.confidence) + '%';
+        const grip = document.createElement('button');
+        grip.type = 'button';
+        grip.className = 'ocr-list-drag';
+        grip.title = 'Glisser pour réordonner';
+        grip.textContent = '⋮⋮';
+        grip.setAttribute('draggable', 'true');
+
+        const index = document.createElement('span');
+        index.className = 'ocr-list-index';
+        index.textContent = '?';
+
+        const idLab = document.createElement('label');
+        idLab.className = 'ocr-list-id';
+        idLab.textContent = field.id;
+        idLab.title = 'Confiance : ' + Math.round(field.confidence) + '%';
 
         const input = document.createElement('input');
         input.type = 'text';
         input.value = field.text;
+
+        const del = document.createElement('button');
+        del.type = 'button';
+        del.className = 'ocr-list-del';
+        del.title = 'Supprimer ce texte';
+        del.textContent = '×';
+        del.addEventListener('click', (e) => {
+            e.stopPropagation();
+            OCRAddon.deleteField(field.id);
+        });
 
         input.addEventListener('input', () => {
             field.text = input.value;
@@ -507,8 +615,11 @@
 
         input.addEventListener('focus', () => selectField(field.id, false));
 
-        row.appendChild(label);
+        row.appendChild(grip);
+        row.appendChild(index);
+        row.appendChild(idLab);
         row.appendChild(input);
+        row.appendChild(del);
         return row;
     }
 
@@ -613,6 +724,7 @@
         if (field.listEl) field.listEl.remove();
         state.fields.splice(idx, 1);
         if (state.selectedId === id) state.selectedId = null;
+        refreshListLabels();
     }
 
     /**
@@ -1103,6 +1215,27 @@
      */
     OCRAddon.duplicateField = function (id) {
         return duplicateField(id);
+    };
+
+    /**
+     * Réordonne les champs selon un tableau d'identifiants.
+     * @param {string[]} ids
+     */
+    OCRAddon.reorderFields = function (ids) {
+        if (!state || !Array.isArray(ids)) return;
+        const map = new Map(state.fields.map((f) => [f.id, f]));
+        const next = ids.map((id) => map.get(id)).filter(Boolean);
+        if (!next.length) return;
+        state.fields.forEach((f) => {
+            if (!ids.includes(f.id)) next.push(f);
+        });
+        state.fields = next;
+        if (state.listItemsHost) {
+            state.fields.forEach((f) => {
+                if (f.listEl) state.listItemsHost.appendChild(f.listEl);
+            });
+            refreshListLabels();
+        }
     };
 
     /**

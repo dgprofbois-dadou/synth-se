@@ -180,12 +180,19 @@
 }
 
 .ocr-list-panel h4 {
-    margin: 0 0 8px;
+    margin: 0 0 4px;
     font-size: 12px;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.04em;
     color: #52525b;
+}
+
+.ocr-list-hint {
+    margin: 0 0 8px;
+    font-size: 10px;
+    color: #a1a1aa;
+    line-height: 1.35;
 }
 
 .ocr-list-items {
@@ -199,20 +206,68 @@
 .ocr-list-item {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 5px;
+    padding: 3px 4px;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    background: #fff;
+    transition: border-color 0.12s, background 0.12s;
 }
 
-.ocr-list-item label {
+.ocr-list-item.is-dragging {
+    opacity: 0.45;
+}
+
+.ocr-list-item.ocr-list-drop-target {
+    border-color: #2563eb;
+    background: #eff6ff;
+}
+
+.ocr-list-drag {
     flex-shrink: 0;
-    width: 52px;
+    width: 20px;
+    height: 24px;
+    padding: 0;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    color: #a1a1aa;
+    font-size: 11px;
+    line-height: 1;
+    cursor: grab;
+    letter-spacing: -2px;
+}
+
+.ocr-list-drag:hover {
+    background: #f4f4f5;
+    color: #52525b;
+}
+
+.ocr-list-drag:active {
+    cursor: grabbing;
+}
+
+.ocr-list-index {
+    flex-shrink: 0;
+    width: 18px;
     font-size: 10px;
+    font-weight: 700;
     color: #71717a;
+    text-align: center;
+}
+
+.ocr-list-item label.ocr-list-id {
+    flex-shrink: 0;
+    width: 44px;
+    font-size: 9px;
+    color: #a1a1aa;
     overflow: hidden;
     text-overflow: ellipsis;
 }
 
 .ocr-list-item input {
     flex: 1;
+    min-width: 0;
     padding: 4px 6px;
     border: 1px solid #d4d4d8;
     border-radius: 4px;
@@ -228,6 +283,28 @@
 .ocr-list-item.is-active input {
     border-color: #2563eb;
     background: #eff6ff;
+}
+
+.ocr-list-del {
+    flex-shrink: 0;
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    border: 1px solid #fecaca;
+    border-radius: 50%;
+    background: #fff;
+    color: #dc2626;
+    font-size: 13px;
+    line-height: 16px;
+    text-align: center;
+    cursor: pointer;
+    transition: background 0.12s, color 0.12s;
+}
+
+.ocr-list-del:hover {
+    background: #dc2626;
+    color: #fff;
+    border-color: #dc2626;
 }
 
 /* --- État chargement --- */
