@@ -12362,10 +12362,6 @@
                     mqAddMenuItem('🔗 Lier (champ ou hotspot)', () => window.mqStartBoxLink && window.mqStartBoxLink());
                     const ctxBoxBreak = mqAddMenuItem('✂️ Rompre', () => window.mqBreakBoxLink && window.mqBreakBoxLink());
                     ctxBoxBreak.disabled = !(boxData && boxData.kind !== 'iframe' && (boxData.group || '').trim());
-                    mqAddMenuItem('🎨 Copier le style', () => mqProxyClick('btnCopyBoxStyle'));
-                    const pasteBtn = mqAddMenuItem('🖌️ Coller le style', () => mqProxyClick('btnPasteBoxStyle'));
-                    const pasteSrc = $('btnPasteBoxStyle');
-                    if (pasteSrc) pasteBtn.disabled = pasteSrc.disabled;
                     mqAddMenuSep();
                     mqAddMenuItem('🗑️ Supprimer', () => mqProxyClick('btnDel'), { danger: true, kbd: '⌫' });
                 } else if (type === 'hotspot') {
@@ -12390,10 +12386,6 @@
                     ctxHsBreak.disabled = !(hsData && (hsData.group || '').trim());
                     mqAddMenuSep();
                     mqAddMenuItem('📋 Dupliquer', () => mqProxyClick('btnDup'), { kbd: '⌘D' });
-                    mqAddMenuItem('🎨 Copier le style', () => mqProxyClick('btnCopyStyle'));
-                    const pasteHs = mqAddMenuItem('🖌️ Coller le style', () => mqProxyClick('btnPasteStyle'));
-                    const pasteHsSrc = $('btnPasteStyle');
-                    if (pasteHsSrc) pasteHs.disabled = pasteHsSrc.disabled;
                     mqAddMenuSep();
                     mqAddMenuItem('🗑️ Supprimer le hotspot', () => mqProxyClick('btnDel'), { danger: true, kbd: '⌫' });
                 } else if (type === 'dnd') {
