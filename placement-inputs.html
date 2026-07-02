@@ -7213,6 +7213,47 @@
                 scheduleSaveLocal();
             };
 
+            /** Presse-papiers : réponse attendue d'un champ → infobulle hotspot. */
+            window.mqBoxAnswerTipClipboard = null;
+
+            window.mqCopyBoxAnswerForHotspotTip = function () {
+                const b = getSelected();
+                if (!b || b.kind === 'iframe') {
+                    alert('Sélectionnez d\'abord un champ texte.');
+                    return;
+                }
+                const text = (b.answer || '').trim();
+                if (!text) {
+                    if (window.mqToast) window.mqToast('Ce champ n\'a pas de réponse attendue.', { warn: true });
+                    else alert('Ce champ n\'a pas de réponse attendue.');
+                    return;
+                }
+                window.mqBoxAnswerTipClipboard = { text: text };
+                if (window.mqToast) {
+                    window.mqToast('Réponse copiée — clic droit sur un hotspot : « Coller réponse comme infobulle ».');
+                }
+            };
+
+            window.mqPasteBoxAnswerAsHotspotTip = function () {
+                const clip = window.mqBoxAnswerTipClipboard;
+                if (!clip || !clip.text) {
+                    if (window.mqToast) window.mqToast('Copiez d\'abord la réponse d\'un champ (menu clic droit).', { warn: true });
+                    else alert('Copiez d\'abord la réponse d\'un champ texte.');
+                    return;
+                }
+                const h = getSelectedHotspot();
+                if (!h) {
+                    alert('Sélectionnez d\'abord un hotspot.');
+                    return;
+                }
+                h.tip = clip.text;
+                syncHotspotUI();
+                render();
+                scheduleSaveLocal();
+                if (typeof mqFlashHotspot === 'function') mqFlashHotspot(h.id);
+                if (window.mqToast) window.mqToast('Infobulle mise à jour avec la réponse copiée.');
+            };
+
             // 2) Pinceau infobulle : capture l'infobulle, puis on la colle sur les hotspots cliqués
             window.mqStartHotspotTipBrush = function () {
                 const h = getSelectedHotspot();
@@ -12302,8 +12343,15 @@
                 if (type === 'box') {
                     title.textContent = 'Champ texte';
                     ctxMenu.appendChild(title);
+                    const boxData = window.appState && window.appState.selectedId
+                        ? window.appState.boxes.find(x => x.id === window.appState.selectedId) : null;
                     mqAddMenuItem('⚙️ Propriétés', () => mqSetInspectorTab('text'));
                     mqAddMenuItem('✅ Réponse attendue…', () => window.mqBoxEditAnswer && window.mqBoxEditAnswer());
+                    const ctxCopyAnsTip = mqAddMenuItem(
+                        '💬 Copier réponse → infobulle hotspot',
+                        () => window.mqCopyBoxAnswerForHotspotTip && window.mqCopyBoxAnswerForHotspotTip()
+                    );
+                    ctxCopyAnsTip.disabled = !(boxData && boxData.kind !== 'iframe' && String(boxData.answer || '').trim());
                     mqAddMenuSep();
                     mqAddMenuItem('📋 Dupliquer', () => mqProxyClick('btnDup'), { kbd: '⌘D' });
                     mqAddMenuItem('⬆️ Mettre devant', () => mqProxyClick('btnFront'), { kbd: ']' });
@@ -12313,8 +12361,6 @@
                     mqAddMenuItem('🧪 Pipette de style', () => window.mqStartBoxPipette && window.mqStartBoxPipette());
                     mqAddMenuItem('🔗 Lier (champ ou hotspot)', () => window.mqStartBoxLink && window.mqStartBoxLink());
                     const ctxBoxBreak = mqAddMenuItem('✂️ Rompre', () => window.mqBreakBoxLink && window.mqBreakBoxLink());
-                    const boxData = window.appState && window.appState.selectedId
-                        ? window.appState.boxes.find(x => x.id === window.appState.selectedId) : null;
                     ctxBoxBreak.disabled = !(boxData && boxData.kind !== 'iframe' && (boxData.group || '').trim());
                     mqAddMenuItem('🎨 Copier le style', () => mqProxyClick('btnCopyBoxStyle'));
                     const pasteBtn = mqAddMenuItem('🖌️ Coller le style', () => mqProxyClick('btnPasteBoxStyle'));
@@ -12327,6 +12373,12 @@
                     ctxMenu.appendChild(title);
                     mqAddMenuItem('📏 Épaisseur…', () => window.mqHotspotEditThickness && window.mqHotspotEditThickness());
                     mqAddMenuItem('💬 Infobulle…', () => window.mqHotspotEditTip && window.mqHotspotEditTip());
+                    const ctxPasteAnsTip = mqAddMenuItem(
+                        '💬 Coller réponse comme infobulle',
+                        () => window.mqPasteBoxAnswerAsHotspotTip && window.mqPasteBoxAnswerAsHotspotTip()
+                    );
+                    const ansClip = window.mqBoxAnswerTipClipboard;
+                    ctxPasteAnsTip.disabled = !(ansClip && ansClip.text);
                     mqAddMenuItem('💬 Copier l\'infobulle (pinceau)', () => window.mqStartHotspotTipBrush && window.mqStartHotspotTipBrush());
                     mqAddMenuItem('🖌️ Pinceau de style', () => window.mqStartHotspotBrush && window.mqStartHotspotBrush());
                     mqAddMenuItem('🧪 Pipette de style', () => window.mqStartHotspotPipette && window.mqStartHotspotPipette());
