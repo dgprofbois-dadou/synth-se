@@ -1248,6 +1248,10 @@
             color: #c2410c;
         }
 
+        #left .mq-lib-section-title.is-shape {
+            color: #047857;
+        }
+
         #left .mq-lib-section-empty {
             font-size: 10px;
             color: #aaa;
@@ -1415,6 +1419,16 @@
             height: 32px;
             box-sizing: border-box;
             border-radius: 4px;
+        }
+
+        #left .mq-lib-preview--shape {
+            padding: 4px;
+        }
+
+        #left .mq-lib-preview--shape svg {
+            width: 100%;
+            height: 100%;
+            display: block;
         }
 
         #left .mq-lib-item-body {
@@ -2769,6 +2783,8 @@
                     Enregistrez le <strong>style</strong> d'un champ (taille, couleurs, police…)
                     sans la réponse ni l'infobulle. Au dépôt, la <strong>largeur</strong> s'adapte à la
                     réponse du champ cible ou à la réponse du modèle enregistré (réf. interne).
+                    Les <strong>formes SVG</strong> se déposent depuis le dossier
+                    <code style="font-size:10px;">library-shapes/</code> (voir manifest.json).
                 </p>
                 <div class="mq-lib-save-row">
                     <button id="btnLibSave" type="button">➕ Enregistrer la sélection</button>
@@ -6246,6 +6262,125 @@
                 'shadowX', 'shadowY', 'shadowBlur', 'shadowColor', 'trigger',
                 'tip', 'tipMs', 'tipRender', 'tipFontSize', 'tipPad', 'tipFont'
             ];
+            const MQ_SHAPE_BASE = 'library-shapes/';
+            let mqShapeCatalog = [];
+
+            function mqLibKindLabel(kind) {
+                return ({ box: 'champ texte', hotspot: 'hotspot', shape: 'forme SVG' })[kind] || kind;
+            }
+            function mqLibGetEntry(libId) {
+                const local = mqLibLoad().find(x => x.id === libId);
+                if (local) return local;
+                return mqShapeCatalog.find(x => x.id === libId) || null;
+            }
+            function mqParseSvgShapePoints(svgText) {
+                const doc = new DOMParser().parseFromString(svgText, 'image/svg+xml');
+                const svg = doc.documentElement;
+                if (!svg || String(svg.tagName || '').toLowerCase() === 'parsererror') return null;
+                const vb = (svg.getAttribute('viewBox') || '').trim().split(/[\s,]+/).map(Number);
+                let bw = vb[2];
+                let bh = vb[3];
+                if (!bw || !bh) {
+                    bw = parseFloat(svg.getAttribute('width')) || 100;
+                    bh = parseFloat(svg.getAttribute('height')) || 100;
+                }
+                const norm = (x, y) => ({ x: x / bw, y: y / bh });
+                let pts = null;
+                const poly = svg.querySelector('polygon');
+                if (poly) {
+                    const nums = (poly.getAttribute('points') || '').trim().match(/-?\d*\.?\d+/g);
+                    if (nums && nums.length >= 6) {
+                        pts = [];
+                        for (let i = 0; i + 1 < nums.length; i += 2) {
+                            pts.push(norm(parseFloat(nums[i]), parseFloat(nums[i + 1])));
+                        }
+                    }
+                }
+                if (!pts) {
+                    const rect = svg.querySelector('rect');
+                    if (rect) {
+                        const x = parseFloat(rect.getAttribute('x')) || 0;
+                        const y = parseFloat(rect.getAttribute('y')) || 0;
+                        const w = parseFloat(rect.getAttribute('width')) || bw;
+                        const h = parseFloat(rect.getAttribute('height')) || bh;
+                        pts = [
+                            norm(x, y), norm(x + w, y), norm(x + w, y + h), norm(x, y + h)
+                        ];
+                    }
+                }
+                if (!pts) {
+                    const pl = svg.querySelector('polyline');
+                    if (pl) {
+                        const nums = (pl.getAttribute('points') || '').trim().match(/-?\d*\.?\d+/g);
+                        if (nums && nums.length >= 6) {
+                            pts = [];
+                            for (let i = 0; i + 1 < nums.length; i += 2) {
+                                pts.push(norm(parseFloat(nums[i]), parseFloat(nums[i + 1])));
+                            }
+                        }
+                    }
+                }
+                return pts;
+            }
+            function mqShapePointsAtDrop(normPts, cx, cy, defaultSize) {
+                if (!normPts || normPts.length < 3) return [];
+                const maxDim = Number(defaultSize) || 100;
+                let minX = Infinity;
+                let minY = Infinity;
+                let maxX = -Infinity;
+                let maxY = -Infinity;
+                normPts.forEach((p) => {
+                    minX = Math.min(minX, p.x);
+                    maxX = Math.max(maxX, p.x);
+                    minY = Math.min(minY, p.y);
+                    maxY = Math.max(maxY, p.y);
+                });
+                const bw = maxX - minX || 1;
+                const bh = maxY - minY || 1;
+                const scale = maxDim / Math.max(bw, bh);
+                const ncx = (minX + maxX) / 2;
+                const ncy = (minY + maxY) / 2;
+                return normPts.map((p) => ({
+                    x: Math.round(cx + (p.x - ncx) * scale),
+                    y: Math.round(cy + (p.y - ncy) * scale)
+                }));
+            }
+            async function mqLoadShapeCatalog() {
+                try {
+                    const res = await fetch(MQ_SHAPE_BASE + 'manifest.json', { cache: 'no-store' });
+                    if (!res.ok) throw new Error('manifest');
+                    const data = await res.json();
+                    const items = Array.isArray(data.shapes) ? data.shapes : [];
+                    const loaded = [];
+                    for (const item of items) {
+                        if (!item || !item.file) continue;
+                        let points = null;
+                        try {
+                            const sr = await fetch(MQ_SHAPE_BASE + item.file, { cache: 'no-store' });
+                            if (sr.ok) points = mqParseSvgShapePoints(await sr.text());
+                        } catch (_) { /* ignore */ }
+                        if (!points || points.length < 3) {
+                            console.warn('Forme SVG ignorée (polygon/rect requis) :', item.id || item.file);
+                            continue;
+                        }
+                        loaded.push({
+                            id: 'shape:' + (item.id || String(item.file).replace(/\.svg$/i, '')),
+                            kind: 'shape',
+                            name: item.name || item.id || item.file,
+                            createdAt: 'fichier',
+                            data: {
+                                points,
+                                defaultSize: Number(item.defaultSize) || 100,
+                                preset: item.preset || {}
+                            }
+                        });
+                    }
+                    mqShapeCatalog = loaded;
+                } catch (e) {
+                    console.warn('mqLoadShapeCatalog', e);
+                    mqShapeCatalog = [];
+                }
+            }
 
             function mqLibLoad() {
                 try {
@@ -6403,7 +6538,7 @@
             }
             function mqLibApplyEntry(entry, targetKind, targetId) {
                 if (!entry || entry.kind !== targetKind) {
-                    if (window.mqToast) window.mqToast('Ce modèle est pour un ' + (entry.kind === 'box' ? 'champ texte' : 'hotspot'), { warn: true });
+                    if (window.mqToast) window.mqToast('Ce modèle est pour un ' + mqLibKindLabel(entry.kind), { warn: true });
                     return false;
                 }
                 if (targetKind === 'box') {
@@ -6502,6 +6637,24 @@
                 saveLocal();
                 mqFlashBox(b.id);
                 if (window.mqToast) window.mqToast('Champ créé avec le modèle « ' + entry.name + ' »');
+            }
+            function mqLibCreateShapeAt(clientX, clientY, entry) {
+                if (state.mode !== 'admin') return;
+                const d = entry.data || {};
+                const { x, y } = stageToLocal(clientX, clientY);
+                const pts = mqShapePointsAtDrop(d.points, x, y, d.defaultSize);
+                if (pts.length < 3) {
+                    if (window.mqToast) window.mqToast('Forme SVG invalide', { warn: true });
+                    return;
+                }
+                const h = mqCreateHotspotFromDraft(pts);
+                mqLibApplyHotspotPreset(h, d.preset || {});
+                if (entry.name) h.label = entry.name;
+                syncHotspotUI();
+                render();
+                saveLocal();
+                mqFlashHotspot(h.id);
+                if (window.mqToast) window.mqToast('Hotspot créé : « ' + entry.name + ' »');
             }
             let _mqLibHoverTimer = null;
             let _mqLibHoverHideTimer = null;
@@ -6668,17 +6821,43 @@
                 wrap.appendChild(rect);
                 return wrap;
             }
+            function mqLibBuildShapePreview(entry) {
+                const wrap = document.createElement('div');
+                wrap.className = 'mq-lib-preview mq-lib-preview--shape';
+                const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                svg.setAttribute('viewBox', '0 0 1 1');
+                svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+                const d = entry.data || {};
+                const preset = d.preset || {};
+                const pts = (d.points || []).map((p) => p.x + ',' + p.y).join(' ');
+                if (pts) {
+                    const poly = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+                    poly.setAttribute('points', pts);
+                    poly.setAttribute('fill', preset.fill || '#ffcc00');
+                    poly.setAttribute('stroke', preset.stroke || '#ff9900');
+                    poly.setAttribute('stroke-width', '0.025');
+                    poly.setAttribute('opacity', String(
+                        preset.alphaIdle != null ? Math.min(1, preset.alphaIdle + 0.2) : 0.55
+                    ));
+                    svg.appendChild(poly);
+                }
+                wrap.appendChild(svg);
+                return wrap;
+            }
             function mqLibBuildPreview(entry) {
                 const d = entry.data || {};
+                if (entry.kind === 'shape') return mqLibBuildShapePreview(entry);
                 return entry.kind === 'box' ? mqLibBuildBoxThumb(d) : mqLibBuildHotspotPreview(d);
             }
             function mqLibRenderEntryRow(entry) {
                 const row = document.createElement('div');
                 row.className = 'mq-lib-item';
                 row.draggable = true;
-                row.title = entry.kind === 'box'
-                    ? 'Survoler pour l\'aperçu · glisser pour appliquer · double-clic sur la sélection'
-                    : 'Glisser sur un élément du canvas · double-clic = appliquer à la sélection';
+                row.title = entry.kind === 'shape'
+                    ? 'Glisser-déposer sur le canvas pour créer un hotspot'
+                    : (entry.kind === 'box'
+                        ? 'Survoler pour l\'aperçu · glisser pour appliquer · double-clic sur la sélection'
+                        : 'Glisser sur un élément du canvas · double-clic = appliquer à la sélection');
                 row.dataset.libId = entry.id;
                 const preview = mqLibBuildPreview(entry);
                 const body = document.createElement('div');
@@ -6690,11 +6869,13 @@
                 meta.className = 'mq-lib-item-meta';
                 const hint = entry.kind === 'box'
                     ? ((entry.data && entry.data.placeholder) || '').trim()
-                    : ((entry.data && (entry.data.tip || entry.data.label)) || '').trim();
-                meta.textContent = (entry.kind === 'box'
-                    ? (hint ? hint.slice(0, 28) + (hint.length > 28 ? '…' : '') : 'Style uniquement')
-                    : (hint ? hint.slice(0, 28) + (hint.length > 28 ? '…' : '') : 'Sans texte'))
-                    + ' · ' + (entry.createdAt || '').slice(0, 10);
+                    : ((entry.data && (entry.data.tip || entry.data.label || (entry.data.preset && entry.data.preset.label))) || '').trim();
+                meta.textContent = entry.kind === 'shape'
+                    ? 'Forme SVG · glisser sur le canvas'
+                    : ((entry.kind === 'box'
+                        ? (hint ? hint.slice(0, 28) + (hint.length > 28 ? '…' : '') : 'Style uniquement')
+                        : (hint ? hint.slice(0, 28) + (hint.length > 28 ? '…' : '') : 'Sans texte'))
+                        + ' · ' + (entry.createdAt || '').slice(0, 10));
                 body.appendChild(nameEl);
                 body.appendChild(meta);
                 const del = document.createElement('button');
@@ -6710,7 +6891,7 @@
                 });
                 row.appendChild(preview);
                 row.appendChild(body);
-                row.appendChild(del);
+                if (entry.kind !== 'shape') row.appendChild(del);
                 if (entry.kind === 'box') mqLibWireBoxHover(row, entry);
                 row.addEventListener('dragstart', (e) => {
                     mqLibHideHoverPreview();
@@ -6720,7 +6901,13 @@
                     row.classList.add('is-dragging');
                 });
                 row.addEventListener('dragend', () => row.classList.remove('is-dragging'));
-                row.addEventListener('dblclick', () => mqLibApplyToSelection(entry));
+                row.addEventListener('dblclick', () => {
+                    if (entry.kind === 'shape') {
+                        if (window.mqToast) window.mqToast('Glissez la forme sur le canvas pour la créer', { warn: true });
+                        return;
+                    }
+                    mqLibApplyToSelection(entry);
+                });
                 return row;
             }
             function mqLibRenderSection(host, title, cssKind, entries) {
@@ -6750,14 +6937,23 @@
                 if (!host) return;
                 const list = mqLibLoad();
                 host.innerHTML = '';
-                if (!list.length) {
+                const boxes = list.filter(e => e.kind === 'box');
+                const hotspots = list.filter(e => e.kind === 'hotspot');
+                const shapes = mqShapeCatalog.slice();
+                if (!boxes.length && !hotspots.length && !shapes.length) {
                     host.innerHTML = '<div class="mq-lib-empty">Aucun modèle enregistré.</div>';
                     return;
                 }
-                const boxes = list.filter(e => e.kind === 'box');
-                const hotspots = list.filter(e => e.kind === 'hotspot');
-                mqLibRenderSection(host, 'Champs texte', 'box', boxes);
-                mqLibRenderSection(host, 'Hotspots', 'hotspot', hotspots);
+                if (!boxes.length && !hotspots.length && shapes.length) {
+                    const hint = document.createElement('p');
+                    hint.className = 'mini';
+                    hint.style.cssText = 'margin:0 0 8px; color:#666; font-size:10px; line-height:1.35;';
+                    hint.textContent = 'Aucun modèle personnalisé. Utilisez les formes SVG ci-dessous.';
+                    host.appendChild(hint);
+                }
+                if (boxes.length) mqLibRenderSection(host, 'Champs texte', 'box', boxes);
+                if (hotspots.length) mqLibRenderSection(host, 'Hotspots', 'hotspot', hotspots);
+                if (shapes.length) mqLibRenderSection(host, 'Formes SVG', 'shape', shapes);
             }
             function mqLibInitDropTargets() {
                 const libList = document.getElementById('mqLibList');
@@ -6801,7 +6997,7 @@
                     viewport.classList.remove('mq-lib-drag-over');
                     clearDropHighlights();
                     const libId = e.dataTransfer.getData(MQ_LIB_DND_TYPE);
-                    const entry = mqLibLoad().find(x => x.id === libId);
+                    const entry = mqLibGetEntry(libId);
                     if (!entry) return;
                     const boxEl = e.target.closest && e.target.closest('.box');
                     const hsEl = e.target.closest && e.target.closest('.hotspot-group');
@@ -6809,6 +7005,8 @@
                         mqLibApplyEntry(entry, 'box', boxEl.dataset.id);
                     } else if (hsEl && entry.kind === 'hotspot') {
                         mqLibApplyEntry(entry, 'hotspot', hsEl.dataset.hsid);
+                    } else if (entry.kind === 'shape') {
+                        mqLibCreateShapeAt(e.clientX, e.clientY, entry);
                     } else if (entry.kind === 'box') {
                         mqLibCreateBoxAt(e.clientX, e.clientY, entry);
                     } else {
@@ -6818,6 +7016,7 @@
             }
             window.mqLibSaveFromSelection = mqLibSaveFromSelection;
             window.mqLibRenderList = mqLibRenderList;
+            window.mqLoadShapeCatalog = mqLoadShapeCatalog;
 
             // ─── OCR Addon (reconnaissance texte sur images de fond) ───
             let _mqOcrReady = false;
@@ -10321,8 +10520,8 @@
             if ($('btnUndo')) $('btnUndo').addEventListener('click', () => mqUndo());
             if ($('btnRedo')) $('btnRedo').addEventListener('click', () => mqRedo());
             if ($('btnLibSave')) $('btnLibSave').addEventListener('click', () => mqLibSaveFromSelection());
-            mqLibRenderList();
             mqLibInitDropTargets();
+            mqLoadShapeCatalog().then(() => mqLibRenderList());
             mqOcrInit();
             if ($('btnOcrApplyBoxes')) $('btnOcrApplyBoxes').addEventListener('click', () => mqOcrApplyToBoxes());
             // --- GESTION COPIER / COLLER DE STYLE ---
