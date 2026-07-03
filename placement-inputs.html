@@ -1475,6 +1475,27 @@
             border-radius: 8px;
         }
 
+        #mqLibList.mq-shape-drop-hint {
+            outline: 2px dashed #047857;
+            outline-offset: -2px;
+            background: #ecfdf5;
+            border-radius: 8px;
+        }
+
+        #left .mq-lib-shape-tools button {
+            font-size: 11px;
+            padding: 7px 8px;
+            border-radius: 6px;
+            cursor: pointer;
+            border: 1px solid #cbd5e1;
+            background: #f8fafc;
+        }
+
+        #left .mq-lib-shape-tools button:hover {
+            background: #ecfdf5;
+            border-color: #047857;
+        }
+
         .box.mq-lib-drop-target,
         .hotspot-group.mq-lib-drop-target {
             outline: 3px dashed #7c3aed !important;
@@ -2795,10 +2816,20 @@
                     réponse du champ cible ou à la réponse du modèle enregistré (réf. interne).
                     <br><br>
                     <strong>Formes Inkscape</strong> : exportez en <code style="font-size:10px;">.svg</code>,
-                    déposez le fichier dans <code style="font-size:10px;">library-shapes/</code>,
-                    ajoutez son nom dans <code style="font-size:10px;">manifest.json</code>, rechargez.
-                    Glissez la forme sur le canvas — puis ajustez taille (Ctrl+T), forme (poignées) et épaisseur (Contour).
+                    copiez dans <code style="font-size:10px;">library-shapes/</code>
+                    puis double-cliquez <code style="font-size:10px;">MAJ-formes.bat</code>
+                    (catalogue auto) ou glissez des SVG ci-dessous.
+                    Sur le canvas : taille (Ctrl+T), forme (poignées), épaisseur (Contour).
                 </p>
+                <div class="mq-lib-shape-tools" style="display:flex; gap:6px; flex-wrap:wrap; margin:8px 0;">
+                    <button id="btnShapeImportSvg" type="button" style="flex:1; min-width:110px;">📄 Fichiers SVG…</button>
+                    <button id="btnShapeImportFolder" type="button" style="flex:1; min-width:110px;"
+                        title="Sélectionner le dossier library-shapes sur votre PC">📂 Dossier…</button>
+                    <button id="btnShapeReload" type="button" style="min-width:36px;"
+                        title="Recharger catalog.json (après MAJ-formes.bat)">🔄</button>
+                </div>
+                <input type="file" id="mqShapeFilePick" accept=".svg,image/svg+xml" multiple hidden>
+                <input type="file" id="mqShapeFolderPick" webkitdirectory directory multiple hidden>
                 <div class="mq-lib-save-row">
                     <button id="btnLibSave" type="button">➕ Enregistrer la sélection</button>
                 </div>
@@ -6277,6 +6308,148 @@
             ];
             const MQ_SHAPE_BASE = 'library-shapes/';
             let mqShapeCatalog = [];
+            let mqShapeCatalogServer = [];
+            let mqShapeCatalogSession = [];
+            const MQ_SHAPE_DEFAULTS = {
+                defaultSize: 120,
+                preset: {
+                    fill: '#ffeb3b',
+                    stroke: '#333333',
+                    strokeW: 2,
+                    alphaIdle: 0.35,
+                    alphaActive: 0.55,
+                    blendMode: 'multiply'
+                }
+            };
+
+            function mqMergeShapeCatalog(server, session) {
+                const map = new Map();
+                (server || []).forEach((e) => map.set(e.id, e));
+                (session || []).forEach((e) => map.set(e.id, e));
+                return Array.from(map.values());
+            }
+            function mqShapeEntryFromSvg(fileName, svgText, opts) {
+                const points = mqParseSvgShapePoints(svgText);
+                if (!points || points.length < 3) return null;
+                const id = String(fileName).replace(/\.svg$/i, '');
+                opts = opts || {};
+                return {
+                    id: 'shape:' + id,
+                    kind: 'shape',
+                    name: opts.name || mqShapeFileLabel(fileName),
+                    createdAt: opts.createdAt || 'fichier',
+                    data: {
+                        points,
+                        defaultSize: opts.defaultSize || MQ_SHAPE_DEFAULTS.defaultSize,
+                        preset: Object.assign({}, MQ_SHAPE_DEFAULTS.preset, opts.preset || {})
+                    }
+                };
+            }
+            async function mqBuildShapeCatalogFromManifest(data) {
+                const defaults = {
+                    defaultSize: Number(data.defaultSize) || MQ_SHAPE_DEFAULTS.defaultSize,
+                    preset: Object.assign({}, MQ_SHAPE_DEFAULTS.preset, data.defaultPreset || {})
+                };
+                const items = Array.isArray(data.shapes) ? data.shapes : [];
+                const loaded = [];
+                for (const rawItem of items) {
+                    const item = mqNormalizeShapeManifestItem(rawItem, defaults);
+                    if (!item) continue;
+                    let points = null;
+                    try {
+                        const sr = await fetch(MQ_SHAPE_BASE + item.file, { cache: 'no-store' });
+                        if (sr.ok) points = mqParseSvgShapePoints(await sr.text());
+                    } catch (_) { /* ignore */ }
+                    if (!points || points.length < 3) {
+                        console.warn('Forme SVG ignorée :', item.id || item.file);
+                        continue;
+                    }
+                    loaded.push({
+                        id: 'shape:' + item.id,
+                        kind: 'shape',
+                        name: item.name,
+                        createdAt: 'fichier',
+                        data: {
+                            points,
+                            defaultSize: Number(item.defaultSize) || defaults.defaultSize,
+                            preset: item.preset || {}
+                        }
+                    });
+                }
+                return loaded;
+            }
+            async function mqImportSvgFiles(files) {
+                const added = [];
+                for (const file of files) {
+                    if (!file || !file.name || !/\.svg$/i.test(file.name)) continue;
+                    let text = '';
+                    try { text = await file.text(); } catch (_) { continue; }
+                    const entry = mqShapeEntryFromSvg(file.name, text, { createdAt: 'import' });
+                    if (!entry) continue;
+                    mqShapeCatalogSession = mqShapeCatalogSession.filter((x) => x.id !== entry.id);
+                    mqShapeCatalogSession.push(entry);
+                    added.push(entry.name);
+                }
+                mqShapeCatalog = mqMergeShapeCatalog(mqShapeCatalogServer, mqShapeCatalogSession);
+                mqLibRenderList();
+                if (added.length && window.mqToast) {
+                    window.mqToast(added.length + ' forme(s) importée(s) : ' + added.join(', '));
+                } else if (!added.length && window.mqToast) {
+                    window.mqToast('Aucun SVG valide (Inkscape path/polygon)', { warn: true });
+                }
+            }
+            function mqInitShapeImportUi() {
+                const list = document.getElementById('mqLibList');
+                const pick = document.getElementById('mqShapeFilePick');
+                const folderPick = document.getElementById('mqShapeFolderPick');
+                const btnPick = document.getElementById('btnShapeImportSvg');
+                const btnFolder = document.getElementById('btnShapeImportFolder');
+                const btnReload = document.getElementById('btnShapeReload');
+                if (btnPick && pick) {
+                    btnPick.addEventListener('click', () => pick.click());
+                    pick.addEventListener('change', () => {
+                        if (pick.files && pick.files.length) mqImportSvgFiles(Array.from(pick.files));
+                        pick.value = '';
+                    });
+                }
+                if (btnFolder && folderPick) {
+                    btnFolder.addEventListener('click', () => folderPick.click());
+                    folderPick.addEventListener('change', () => {
+                        if (folderPick.files && folderPick.files.length) {
+                            const svgs = Array.from(folderPick.files).filter((f) => /\.svg$/i.test(f.name));
+                            mqImportSvgFiles(svgs);
+                        }
+                        folderPick.value = '';
+                    });
+                }
+                if (btnReload) {
+                    btnReload.addEventListener('click', () => {
+                        mqLoadShapeCatalog().then(() => {
+                            mqLibRenderList();
+                            if (window.mqToast) window.mqToast('Formes rechargées depuis library-shapes/');
+                        });
+                    });
+                }
+                if (list) {
+                    list.addEventListener('dragover', (e) => {
+                        if (Array.from(e.dataTransfer.types || []).includes('Files')) {
+                            e.preventDefault();
+                            list.classList.add('mq-shape-drop-hint');
+                        }
+                    });
+                    list.addEventListener('dragleave', (e) => {
+                        if (!list.contains(e.relatedTarget)) list.classList.remove('mq-shape-drop-hint');
+                    });
+                    list.addEventListener('drop', (e) => {
+                        list.classList.remove('mq-shape-drop-hint');
+                        const files = Array.from(e.dataTransfer.files || []).filter((f) => /\.svg$/i.test(f.name));
+                        if (!files.length) return;
+                        e.preventDefault();
+                        e.stopPropagation();
+                        mqImportSvgFiles(files);
+                    });
+                }
+            }
 
             function mqLibKindLabel(kind) {
                 return ({ box: 'champ texte', hotspot: 'hotspot', shape: 'forme SVG' })[kind] || kind;
@@ -6425,52 +6598,20 @@
                 ]);
             }
             async function mqLoadShapeCatalog() {
+                let server = [];
                 try {
-                    const res = await fetch(MQ_SHAPE_BASE + 'manifest.json', { cache: 'no-store' });
-                    if (!res.ok) throw new Error('manifest');
-                    const data = await res.json();
-                    const defaults = {
-                        defaultSize: Number(data.defaultSize) || 120,
-                        preset: data.defaultPreset || {
-                            fill: '#ffeb3b',
-                            stroke: '#333333',
-                            strokeW: 2,
-                            alphaIdle: 0.35,
-                            alphaActive: 0.55,
-                            blendMode: 'multiply'
-                        }
-                    };
-                    const items = Array.isArray(data.shapes) ? data.shapes : [];
-                    const loaded = [];
-                    for (const rawItem of items) {
-                        const item = mqNormalizeShapeManifestItem(rawItem, defaults);
-                        if (!item) continue;
-                        let points = null;
-                        try {
-                            const sr = await fetch(MQ_SHAPE_BASE + item.file, { cache: 'no-store' });
-                            if (sr.ok) points = mqParseSvgShapePoints(await sr.text());
-                        } catch (_) { /* ignore */ }
-                        if (!points || points.length < 3) {
-                            console.warn('Forme SVG ignorée (path/polygon requis, Inkscape OK) :', item.id || item.file);
-                            continue;
-                        }
-                        loaded.push({
-                            id: 'shape:' + item.id,
-                            kind: 'shape',
-                            name: item.name,
-                            createdAt: 'fichier',
-                            data: {
-                                points,
-                                defaultSize: Number(item.defaultSize) || defaults.defaultSize,
-                                preset: item.preset || {}
-                            }
-                        });
+                    let res = await fetch(MQ_SHAPE_BASE + 'catalog.json', { cache: 'no-store' });
+                    if (!res.ok) {
+                        res = await fetch(MQ_SHAPE_BASE + 'manifest.json', { cache: 'no-store' });
                     }
-                    mqShapeCatalog = loaded;
+                    if (!res.ok) throw new Error('catalog');
+                    server = await mqBuildShapeCatalogFromManifest(await res.json());
                 } catch (e) {
                     console.warn('mqLoadShapeCatalog', e);
-                    mqShapeCatalog = [];
+                    server = [];
                 }
+                mqShapeCatalogServer = server;
+                mqShapeCatalog = mqMergeShapeCatalog(server, mqShapeCatalogSession);
             }
 
             function mqLibLoad() {
@@ -7114,6 +7255,7 @@
             window.mqLibSaveFromSelection = mqLibSaveFromSelection;
             window.mqLibRenderList = mqLibRenderList;
             window.mqLoadShapeCatalog = mqLoadShapeCatalog;
+            window.mqImportSvgFiles = mqImportSvgFiles;
 
             // ─── OCR Addon (reconnaissance texte sur images de fond) ───
             let _mqOcrReady = false;
@@ -10619,6 +10761,7 @@
             if ($('btnLibSave')) $('btnLibSave').addEventListener('click', () => mqLibSaveFromSelection());
             if ($('btnHsTransform')) $('btnHsTransform').addEventListener('click', () => mqToggleHotspotTransform());
             mqLibInitDropTargets();
+            mqInitShapeImportUi();
             mqLoadShapeCatalog().then(() => mqLibRenderList());
             mqOcrInit();
             if ($('btnOcrApplyBoxes')) $('btnOcrApplyBoxes').addEventListener('click', () => mqOcrApplyToBoxes());
