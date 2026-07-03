@@ -145,7 +145,8 @@
         }
 
         #btnSpellCheck.is-on,
-        #btnSpellReview.is-on {
+        #btnSpellReview.is-on,
+        #topbar.mq-topbar .mq-group .mq-btn-sec.is-on {
             background: #ecfdf5;
             border-color: #047857;
             color: #065f46;
@@ -4284,11 +4285,13 @@
             function mqSpellReviewToggle(force) {
                 const panel = document.getElementById('mqSpellPanel');
                 const btn = document.getElementById('btnSpellReview');
+                const proxy = document.getElementById('mqProxySpellReview');
                 if (!panel) return;
                 const open = force != null ? !!force : !panel.classList.contains('mq-open');
                 panel.classList.toggle('mq-open', open);
                 panel.setAttribute('aria-hidden', open ? 'false' : 'true');
                 if (btn) btn.classList.toggle('is-on', open);
+                if (proxy) proxy.classList.toggle('is-on', open);
                 if (open) mqSpellReviewRender();
             }
 
@@ -4298,6 +4301,9 @@
                     localStorage.setItem('mq_admin_spellcheck_v1', state.adminSpellcheck ? '1' : '0');
                 } catch (_) { /* ignore */ }
                 mqApplyAdminSpellcheck(state.adminSpellcheck);
+                const proxy = document.getElementById('mqProxySpellCheck');
+                const btn = document.getElementById('btnSpellCheck');
+                if (proxy && btn) proxy.classList.toggle('is-on', btn.classList.contains('is-on'));
                 if (window.mqToast) {
                     window.mqToast(state.adminSpellcheck ? 'Orthographe activée (français)' : 'Orthographe désactivée');
                 }
@@ -4307,10 +4313,14 @@
                 const admin = state.mode === 'admin';
                 const btnSpell = document.getElementById('btnSpellCheck');
                 const btnReview = document.getElementById('btnSpellReview');
+                const proxySpell = document.getElementById('mqProxySpellCheck');
+                const proxyReview = document.getElementById('mqProxySpellReview');
                 if (btnSpell) btnSpell.style.display = admin ? '' : 'none';
                 if (btnReview) btnReview.style.display = admin ? '' : 'none';
                 mqApplyAdminSpellcheck(state.adminSpellcheck);
                 if (!admin) mqSpellReviewToggle(false);
+                if (proxySpell && btnSpell) proxySpell.classList.toggle('is-on', btnSpell.classList.contains('is-on'));
+                if (proxyReview && btnReview) proxyReview.classList.toggle('is-on', btnReview.classList.contains('is-on'));
             }
 
             function mqInitSpellcheckUi() {
@@ -4323,6 +4333,7 @@
                 mqSpellRefreshUi();
             }
             window.mqSpellReviewRender = mqSpellReviewRender;
+            window.mqSpellRefreshUi = mqSpellRefreshUi;
 
             function rgba(hex, a) {
                 // hex: #RRGGBB
@@ -12746,7 +12757,7 @@
             stash.setAttribute('aria-hidden', 'true');
             document.body.appendChild(stash);
 
-            const stashIds = ['btnAdd', 'btnHs', 'btnHsFreehand', 'btnIframe', 'btnUndo', 'btnRedo', 'btnDup', 'btnDel', 'btnFront', 'btnBack', 'btnGenHTML', 'btnSaveLocal', 'btnLoadLocal', 'btnFit', 'zoomSlider'];
+            const stashIds = ['btnAdd', 'btnHs', 'btnHsFreehand', 'btnIframe', 'btnUndo', 'btnRedo', 'btnDup', 'btnDel', 'btnFront', 'btnBack', 'btnGenHTML', 'btnSaveLocal', 'btnLoadLocal', 'btnFit', 'zoomSlider', 'btnSpellCheck', 'btnSpellReview'];
             stashIds.forEach((sid) => {
                 const el = $(sid);
                 if (el && el.parentNode) stash.appendChild(el);
@@ -12825,6 +12836,16 @@
             grp.appendChild(mqProxyDiv('mq-btn-sec', 'Save', 'btnSaveLocal'));
             grp.appendChild(mqProxyDiv('mq-btn-sec', 'Load', 'btnLoadLocal'));
             adminBlock.appendChild(grp);
+            const spellGrp = el('div', 'mq-group');
+            const proxySpell = mqProxyDiv('mq-btn-sec', '✎ Ortho', 'btnSpellCheck');
+            proxySpell.id = 'mqProxySpellCheck';
+            proxySpell.title = 'Surlignage orthographique (français)';
+            const proxyReview = mqProxyDiv('mq-btn-sec', '📋 Textes', 'btnSpellReview');
+            proxyReview.id = 'mqProxySpellReview';
+            proxyReview.title = 'Revoir tous les textes pédagogiques';
+            spellGrp.appendChild(proxySpell);
+            spellGrp.appendChild(proxyReview);
+            adminBlock.appendChild(spellGrp);
             const genB = mqProxyDiv('mq-btn-gen', '⚡ Générer', 'btnGenHTML');
             adminBlock.appendChild(genB);
 
@@ -13308,6 +13329,8 @@
             }, true);
 
             window.mqSetInspectorTab = mqSetInspectorTab;
+
+            if (typeof window.mqSpellRefreshUi === 'function') window.mqSpellRefreshUi();
 
             document.body.classList.add('mq-ui-ready');
             document.documentElement.dataset.mqUiReady = '1';
