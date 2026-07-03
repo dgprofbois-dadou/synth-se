@@ -872,7 +872,10 @@
         input.readOnly = false;
         input.disabled = false;
         input.autocomplete = 'off';
-        input.spellcheck = true;
+        input.spellcheck = typeof window.mqAdminSpellcheckEnabled === 'function'
+            ? window.mqAdminSpellcheckEnabled()
+            : true;
+        input.lang = input.spellcheck ? 'fr' : '';
         input.title = field.id + ' · confiance ' + Math.round(field.confidence) + '% · modifiez le texte ici';
 
         const del = document.createElement('button');
@@ -1678,6 +1681,26 @@
             originalHeight: f.originalHeight
         };
         });
+    };
+
+    /**
+     * Met à jour le texte d'un champ OCR (liste + overlay).
+     * @param {string} id
+     * @param {string} text
+     */
+    OCRAddon.setFieldText = function (id, text) {
+        if (!state) return;
+        const f = state.fields.find((x) => x.id === id);
+        if (!f) return;
+        f.text = text;
+        if (f.listEl) {
+            const inp = f.listEl.querySelector('input.ocr-list-text, input');
+            if (inp) inp.value = text;
+        }
+        if (f.el) {
+            const oi = f.el.querySelector('input');
+            if (oi) oi.value = text;
+        }
     };
 
     /**

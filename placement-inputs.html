@@ -144,6 +144,118 @@
             font-size: 12px;
         }
 
+        #btnSpellCheck.is-on,
+        #btnSpellReview.is-on {
+            background: #ecfdf5;
+            border-color: #047857;
+            color: #065f46;
+            font-weight: 600;
+        }
+
+        #mqSpellPanel {
+            position: fixed;
+            top: 56px;
+            right: 12px;
+            z-index: 100020;
+            width: min(420px, calc(100vw - 24px));
+            max-height: calc(100vh - 72px);
+            background: #fff;
+            border: 1px solid #cbd5e1;
+            border-radius: 12px;
+            box-shadow: 0 12px 40px rgba(0, 0, 0, .14);
+            display: none;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        #mqSpellPanel.mq-open {
+            display: flex;
+        }
+
+        #mqSpellPanel .mq-spell-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            padding: 10px 12px;
+            border-bottom: 1px solid #e8e8e8;
+            background: #f8fafc;
+        }
+
+        #mqSpellPanel .mq-spell-head strong {
+            font-size: 13px;
+        }
+
+        #mqSpellPanel .mq-spell-help {
+            margin: 0;
+            padding: 8px 12px;
+            font-size: 11px;
+            color: #666;
+            line-height: 1.35;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        #mqSpellList {
+            overflow-y: auto;
+            padding: 8px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        #mqSpellPanel .mq-spell-row {
+            border: 1px solid #e4e4e7;
+            border-radius: 8px;
+            padding: 8px;
+            background: #fff;
+            cursor: pointer;
+        }
+
+        #mqSpellPanel .mq-spell-row:hover {
+            border-color: #047857;
+            background: #f0fdf4;
+        }
+
+        #mqSpellPanel .mq-spell-row-meta {
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: .03em;
+            color: #64748b;
+            margin-bottom: 4px;
+        }
+
+        #mqSpellPanel .mq-spell-row-meta.is-hotspot {
+            color: #c2410c;
+        }
+
+        #mqSpellPanel .mq-spell-row-meta.is-dnd {
+            color: #7c3aed;
+        }
+
+        #mqSpellPanel .mq-spell-input {
+            width: 100%;
+            box-sizing: border-box;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            padding: 6px 8px;
+            font-size: 13px;
+            font-family: inherit;
+            resize: vertical;
+            min-height: 34px;
+        }
+
+        #mqSpellPanel .mq-spell-empty {
+            font-size: 12px;
+            color: #888;
+            text-align: center;
+            padding: 24px 12px;
+        }
+
+        body[data-mode="student"] #mqSpellPanel {
+            display: none !important;
+        }
+
         /* Viewport / stage */
         #viewport {
             position: relative;
@@ -2172,6 +2284,9 @@
         <button id="btnUndo" type="button" title="Annuler (Ctrl+Z)" disabled>↶</button>
         <button id="btnRedo" type="button" title="Rétablir (Ctrl+Y)" disabled>↷</button>
 
+        <button id="btnSpellCheck" type="button" class="mq-only-admin" title="Surlignage orthographique (français) dans les champs admin">✎ Ortho</button>
+        <button id="btnSpellReview" type="button" class="mq-only-admin" title="Revoir et corriger tous les textes pédagogiques">📋 Textes</button>
+
         <button id="btnDup" type="button">Dupliquer</button>
         <button id="btnDel" type="button">Supprimer</button>
         <button id="btnFront" type="button">Avant</button>
@@ -2869,6 +2984,16 @@
     </div>
     <div id="tooltip" aria-hidden="true"></div>
 
+    <div id="mqSpellPanel" aria-hidden="true">
+        <div class="mq-spell-head">
+            <strong>Correction orthographique</strong>
+            <button id="mqSpellPanelClose" type="button" title="Fermer"
+                style="border:0;background:transparent;font-size:18px;cursor:pointer;line-height:1;">×</button>
+        </div>
+        <p class="mq-spell-help">Clic droit sur un mot souligné pour les suggestions (dictionnaire français du navigateur). Cliquez une ligne pour sélectionner l'élément sur le canvas.</p>
+        <div id="mqSpellList"></div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     <script src="ocr-addon.js"></script>
     <script src="mq-export-runtime.js"></script>
@@ -3036,6 +3161,7 @@
                 insertionData: null,
                 hsTransform: null,   // { hsId } quand le mode Transform (poignées) est actif
                 draggingScale: null, // état du redimensionnement en cours via une poignée
+                adminSpellcheck: localStorage.getItem('mq_admin_spellcheck_v1') !== '0',
 
                 // Configuration des jeux DnD
                 dndGames: {
@@ -3983,7 +4109,220 @@
                     if (el.id === 'btnMode') return;
                     el.style.display = '';
                 });
+                if (typeof mqSpellRefreshUi === 'function') mqSpellRefreshUi();
             }
+
+            // ─── Correction orthographique (admin) ───
+            window.mqAdminSpellcheckEnabled = function () {
+                return state.mode === 'admin' && state.adminSpellcheck !== false;
+            };
+
+            function mqApplyAdminSpellcheck(on) {
+                const enabled = !!on && state.mode === 'admin';
+                document.body.classList.toggle('mq-spell-on', enabled);
+                document.querySelectorAll(
+                    '#left input[type="text"], #left textarea, #mqSpellList .mq-spell-input, #mqOcrListHost input.ocr-list-text'
+                ).forEach((el) => {
+                    if (el.id === 'io') return;
+                    el.spellcheck = enabled;
+                    el.lang = enabled ? 'fr' : '';
+                });
+                const btn = document.getElementById('btnSpellCheck');
+                if (btn) btn.classList.toggle('is-on', enabled);
+            }
+
+            function mqCollectSpellEntries() {
+                const items = [];
+                const boxNum = new Map();
+                state.boxes.forEach((b, i) => {
+                    if (b.kind !== 'iframe') boxNum.set(b.id, i + 1);
+                });
+                const pushEntry = (entry) => {
+                    const text = (entry.get() || '').trim();
+                    if (!text) return;
+                    if (entry.skip && entry.skip(text)) return;
+                    items.push(entry);
+                };
+                state.boxes.forEach((b) => {
+                    if (b.kind === 'iframe') return;
+                    const n = boxNum.get(b.id) || '?';
+                    pushEntry({
+                        kind: 'box', refId: b.id, label: 'Champ ' + n + ' · Réponse',
+                        get: () => b.answer,
+                        apply: (v) => {
+                            b.answer = v;
+                            if (typeof mqAutoFitBoxDimensions === 'function') mqAutoFitBoxDimensions(b);
+                            if (state.selectedId === b.id && typeof syncPropsFromSelected === 'function') syncPropsFromSelected();
+                        }
+                    });
+                    pushEntry({
+                        kind: 'box', refId: b.id, label: 'Champ ' + n + ' · Placeholder',
+                        get: () => b.placeholder,
+                        skip: (t) => /^_+$/.test(t),
+                        apply: (v) => {
+                            b.placeholder = v;
+                            if (state.selectedId === b.id && typeof syncPropsFromSelected === 'function') syncPropsFromSelected();
+                        }
+                    });
+                    if (!b.hintSameAsAnswer) {
+                        pushEntry({
+                            kind: 'box', refId: b.id, label: 'Champ ' + n + ' · Indice',
+                            get: () => b.hint,
+                            apply: (v) => {
+                                b.hint = v;
+                                if (state.selectedId === b.id && typeof syncPropsFromSelected === 'function') syncPropsFromSelected();
+                            }
+                        });
+                    }
+                });
+                state.hotspots.forEach((h, i) => {
+                    pushEntry({
+                        kind: 'hotspot', refId: h.id, label: 'Hotspot ' + (i + 1) + ' · Infobulle',
+                        get: () => h.tip,
+                        apply: (v) => {
+                            h.tip = v;
+                            if (state.selectedHotspotId === h.id && typeof syncHotspotUI === 'function') syncHotspotUI();
+                        }
+                    });
+                    pushEntry({
+                        kind: 'hotspot', refId: h.id, label: 'Hotspot ' + (i + 1) + ' · Libellé',
+                        get: () => h.label,
+                        skip: (t) => t === 'Hotspot',
+                        apply: (v) => {
+                            h.label = v;
+                            if (state.selectedHotspotId === h.id && typeof syncHotspotUI === 'function') syncHotspotUI();
+                        }
+                    });
+                });
+                Object.keys(state.dndGames || {}).forEach((gid) => {
+                    const g = state.dndGames[gid];
+                    if (!g) return;
+                    const gLabel = g.title || gid;
+                    pushEntry({
+                        kind: 'dnd', refId: gid, label: 'DnD · ' + gLabel,
+                        get: () => g.title,
+                        apply: (v) => {
+                            g.title = v;
+                            const inp = document.getElementById('dnd' + gid.charAt(0).toUpperCase() + gid.slice(1) + 'Title');
+                            if (inp) inp.value = v;
+                            if (typeof renderDndGamesPreview === 'function') renderDndGamesPreview();
+                        }
+                    });
+                    (g.draggables || []).forEach((d, di) => {
+                        pushEntry({
+                            kind: 'dnd', refId: gid + ':' + (d.id || di), label: 'DnD · ' + gLabel + ' · Étiquette ' + (d.id || (di + 1)),
+                            get: () => d.title,
+                            apply: (v) => {
+                                d.title = v;
+                                if (typeof updateDraggablesUI === 'function') updateDraggablesUI(gid);
+                                if (typeof renderDndGamesPreview === 'function') renderDndGamesPreview();
+                            }
+                        });
+                    });
+                });
+                if (window.OCRAddon && typeof OCRAddon.getFields === 'function') {
+                    OCRAddon.getFields().forEach((f, i) => {
+                        pushEntry({
+                            kind: 'ocr', refId: f.id, label: 'OCR · Texte ' + (i + 1),
+                            get: () => f.text,
+                            apply: (v) => {
+                                if (typeof OCRAddon.setFieldText === 'function') OCRAddon.setFieldText(f.id, v);
+                            }
+                        });
+                    });
+                }
+                return items;
+            }
+
+            function mqSpellSelectEntry(entry) {
+                if (entry.kind === 'box') {
+                    state.selectedHotspotId = null;
+                    if (typeof select === 'function') select(entry.refId);
+                } else if (entry.kind === 'hotspot') {
+                    state.selectedId = null;
+                    state.selectedHotspotId = entry.refId;
+                    if (typeof syncHotspotUI === 'function') syncHotspotUI();
+                    if (typeof render === 'function') render();
+                }
+            }
+
+            function mqSpellReviewRender() {
+                const host = document.getElementById('mqSpellList');
+                const panel = document.getElementById('mqSpellPanel');
+                if (!host || !panel) return;
+                host.innerHTML = '';
+                const entries = mqCollectSpellEntries();
+                if (!entries.length) {
+                    host.innerHTML = '<div class="mq-spell-empty">Aucun texte pédagogique à relire.</div>';
+                    return;
+                }
+                entries.forEach((entry) => {
+                    const row = document.createElement('div');
+                    row.className = 'mq-spell-row';
+                    const meta = document.createElement('div');
+                    meta.className = 'mq-spell-row-meta' + (entry.kind === 'hotspot' ? ' is-hotspot' : (entry.kind === 'dnd' ? ' is-dnd' : ''));
+                    meta.textContent = entry.label;
+                    const input = document.createElement('textarea');
+                    input.className = 'mq-spell-input';
+                    input.rows = Math.min(4, Math.max(1, Math.ceil((entry.get() || '').length / 42)));
+                    input.value = entry.get() || '';
+                    input.spellcheck = window.mqAdminSpellcheckEnabled();
+                    input.lang = input.spellcheck ? 'fr' : '';
+                    input.addEventListener('input', () => {
+                        entry.apply(input.value);
+                        if (typeof scheduleSaveLocal === 'function') scheduleSaveLocal();
+                    });
+                    input.addEventListener('click', (e) => e.stopPropagation());
+                    input.addEventListener('pointerdown', (e) => e.stopPropagation());
+                    row.addEventListener('click', () => mqSpellSelectEntry(entry));
+                    row.appendChild(meta);
+                    row.appendChild(input);
+                    host.appendChild(row);
+                });
+            }
+
+            function mqSpellReviewToggle(force) {
+                const panel = document.getElementById('mqSpellPanel');
+                const btn = document.getElementById('btnSpellReview');
+                if (!panel) return;
+                const open = force != null ? !!force : !panel.classList.contains('mq-open');
+                panel.classList.toggle('mq-open', open);
+                panel.setAttribute('aria-hidden', open ? 'false' : 'true');
+                if (btn) btn.classList.toggle('is-on', open);
+                if (open) mqSpellReviewRender();
+            }
+
+            function mqToggleAdminSpellcheck() {
+                state.adminSpellcheck = !state.adminSpellcheck;
+                try {
+                    localStorage.setItem('mq_admin_spellcheck_v1', state.adminSpellcheck ? '1' : '0');
+                } catch (_) { /* ignore */ }
+                mqApplyAdminSpellcheck(state.adminSpellcheck);
+                if (window.mqToast) {
+                    window.mqToast(state.adminSpellcheck ? 'Orthographe activée (français)' : 'Orthographe désactivée');
+                }
+            }
+
+            function mqSpellRefreshUi() {
+                const admin = state.mode === 'admin';
+                const btnSpell = document.getElementById('btnSpellCheck');
+                const btnReview = document.getElementById('btnSpellReview');
+                if (btnSpell) btnSpell.style.display = admin ? '' : 'none';
+                if (btnReview) btnReview.style.display = admin ? '' : 'none';
+                mqApplyAdminSpellcheck(state.adminSpellcheck);
+                if (!admin) mqSpellReviewToggle(false);
+            }
+
+            function mqInitSpellcheckUi() {
+                const btnSpell = document.getElementById('btnSpellCheck');
+                const btnReview = document.getElementById('btnSpellReview');
+                const btnClose = document.getElementById('mqSpellPanelClose');
+                if (btnSpell) btnSpell.addEventListener('click', () => mqToggleAdminSpellcheck());
+                if (btnReview) btnReview.addEventListener('click', () => mqSpellReviewToggle());
+                if (btnClose) btnClose.addEventListener('click', () => mqSpellReviewToggle(false));
+                mqSpellRefreshUi();
+            }
+            window.mqSpellReviewRender = mqSpellReviewRender;
 
             function rgba(hex, a) {
                 // hex: #RRGGBB
@@ -10829,6 +11168,7 @@
             if ($('btnHsTransform')) $('btnHsTransform').addEventListener('click', () => mqToggleHotspotTransform());
             mqLibInitDropTargets();
             mqInitShapeImportUi();
+            mqInitSpellcheckUi();
             mqLoadShapeCatalog().then(() => mqLibRenderList());
             mqOcrInit();
             if ($('btnOcrApplyBoxes')) $('btnOcrApplyBoxes').addEventListener('click', () => mqOcrApplyToBoxes());
