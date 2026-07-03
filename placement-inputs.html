@@ -6277,6 +6277,8 @@
             let mqHsBrushStyle = null;   // pinceau hotspot : style à peindre
             let mqHsTipBrush = null;     // pinceau infobulle : texte + réglages à appliquer
             let mqHsLinkGroup = null;    // lien hotspot -> champ : groupe à appliquer
+            let mqHsLinkSourceId = null; // élément qui a lancé le mode Lier
+            let mqHsLinkSourceKind = null; // 'hotspot' | 'box'
             let mqHsPipetteTarget = null;// pipette hotspot : id du hotspot qui RECEVRA le style prélevé
             let mqBoxBrushStyle = null;  // pinceau champ : style à peindre
             let mqBoxPipetteTarget = null;// pipette champ : id du champ qui RECEVRA le style prélevé
@@ -7493,6 +7495,8 @@
                 mqHsBrushStyle = null;
                 mqHsTipBrush = null;
                 mqHsLinkGroup = null;
+                mqHsLinkSourceId = null;
+                mqHsLinkSourceKind = null;
                 mqHsPipetteTarget = null;
                 mqBoxBrushStyle = null;
                 mqBoxPipetteTarget = null;
@@ -7632,6 +7636,55 @@
             };
 
             // Affiche un message de réussite puis restaure l'instruction du lien (mode multi-cibles)
+            /** Lie source → cible : si la cible a déjà un groupe, la source le rejoint ; sinon la cible rejoint le groupe source. */
+            function mqApplyLink(sourceKind, sourceId, targetKind, targetId) {
+                if (!mqHsLinkGroup || !sourceKind || !sourceId || !targetKind || !targetId) return null;
+                if (sourceKind === targetKind && sourceId === targetId) return null;
+
+                let targetGroup = '';
+                if (targetKind === 'hotspot') {
+                    const t = state.hotspots.find((x) => x.id === targetId);
+                    if (!t) return null;
+                    targetGroup = (t.group || '').trim();
+                } else {
+                    const t = state.boxes.find((x) => x.id === targetId);
+                    if (!t || t.kind === 'iframe') return null;
+                    targetGroup = (t.group || '').trim();
+                }
+
+                if (sourceKind === 'hotspot') {
+                    const src = state.hotspots.find((x) => x.id === sourceId);
+                    if (!src) return null;
+                    if (targetGroup) {
+                        src.group = targetGroup;
+                        return targetGroup;
+                    }
+                    if (targetKind === 'hotspot') {
+                        const t = state.hotspots.find((x) => x.id === targetId);
+                        if (t) t.group = mqHsLinkGroup;
+                    } else {
+                        const t = state.boxes.find((x) => x.id === targetId);
+                        if (t && t.kind !== 'iframe') t.group = mqHsLinkGroup;
+                    }
+                    return mqHsLinkGroup;
+                }
+
+                const srcBox = state.boxes.find((x) => x.id === sourceId);
+                if (!srcBox || srcBox.kind === 'iframe') return null;
+                if (targetGroup) {
+                    srcBox.group = targetGroup;
+                    return targetGroup;
+                }
+                if (targetKind === 'hotspot') {
+                    const t = state.hotspots.find((x) => x.id === targetId);
+                    if (t) t.group = mqHsLinkGroup;
+                } else {
+                    const t = state.boxes.find((x) => x.id === targetId);
+                    if (t && t.kind !== 'iframe') t.group = mqHsLinkGroup;
+                }
+                return mqHsLinkGroup;
+            }
+
             function mqLinkFeedback(msg) {
                 mqHsBanner(msg);
                 setTimeout(() => {
@@ -7736,6 +7789,8 @@
                     scheduleSaveLocal();
                 }
                 mqCancelTools();
+                mqHsLinkSourceId = h.id;
+                mqHsLinkSourceKind = 'hotspot';
                 mqHsLinkGroup = grp;
                 mqHsBanner('🔗 Lien « ' + grp + ' » : cliquez un champ ou un hotspot à lier — Échap / clic droit pour terminer');
                 document.body.style.cursor = 'crosshair';
@@ -7790,6 +7845,8 @@
                     scheduleSaveLocal();
                 }
                 mqCancelTools();
+                mqHsLinkSourceId = b.id;
+                mqHsLinkSourceKind = 'box';
                 mqHsLinkGroup = grp;
                 mqHsBanner('🔗 Lien « ' + grp + ' » : cliquez un champ ou un hotspot à lier — Échap / clic droit pour terminer');
                 document.body.style.cursor = 'crosshair';
@@ -7942,10 +7999,15 @@
                         e.preventDefault(); e.stopPropagation();
                         const h = state.hotspots.find(x => x.id === hsEl.dataset.hsid);
                         if (h) {
-                            h.group = mqHsLinkGroup;
-                            if (state.selectedHotspotId === h.id) syncHotspotUI();
-                            render(); mqFlashHotspot(h.id); scheduleSaveLocal();
-                            mqLinkFeedback('✅ Hotspot lié à « ' + mqHsLinkGroup + ' »');
+                            const grp = mqApplyLink(mqHsLinkSourceKind, mqHsLinkSourceId, 'hotspot', h.id);
+                            if (grp) {
+                                mqHsLinkGroup = grp;
+                                if (state.selectedHotspotId === h.id) syncHotspotUI();
+                                if (mqHsLinkSourceKind === 'hotspot' && state.selectedHotspotId === mqHsLinkSourceId) syncHotspotUI();
+                                if (state.selectedId && typeof syncPropsFromSelected === 'function') syncPropsFromSelected();
+                                render(); mqFlashHotspot(h.id); scheduleSaveLocal();
+                                mqLinkFeedback('✅ Ajouté au groupe « ' + grp + ' »');
+                            }
                         }
                         return;
                     }
@@ -7954,10 +8016,15 @@
                         e.preventDefault(); e.stopPropagation();
                         const b = state.boxes.find(x => x.id === boxEl.dataset.id);
                         if (b && b.kind !== 'iframe') {
-                            b.group = mqHsLinkGroup;
-                            if (state.selectedId === b.id && typeof pGroup !== 'undefined' && pGroup) pGroup.value = b.group;
-                            render(); mqFlashBox(b.id); scheduleSaveLocal();
-                            mqLinkFeedback('✅ Champ lié à « ' + mqHsLinkGroup + ' »');
+                            const grp = mqApplyLink(mqHsLinkSourceKind, mqHsLinkSourceId, 'box', b.id);
+                            if (grp) {
+                                mqHsLinkGroup = grp;
+                                if (state.selectedId === b.id && typeof pGroup !== 'undefined' && pGroup) pGroup.value = b.group;
+                                if (mqHsLinkSourceKind === 'box' && state.selectedId === mqHsLinkSourceId && typeof syncPropsFromSelected === 'function') syncPropsFromSelected();
+                                if (state.selectedId === b.id && typeof syncPropsFromSelected === 'function') syncPropsFromSelected();
+                                render(); mqFlashBox(b.id); scheduleSaveLocal();
+                                mqLinkFeedback('✅ Ajouté au groupe « ' + grp + ' »');
+                            }
                         }
                     }
                     return;
