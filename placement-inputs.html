@@ -2405,6 +2405,16 @@
                 <label>Profondeur (z)</label>
                 <input id="hsZ" type="number" step="1" value="0" title="Plus grand = au-dessus">
             </div>
+            <button id="btnHsTransform" type="button"
+                style="width:100%; margin:8px 0; background:#e8f4fd; border:1px solid #2196f3; color:#0d47a1; border-radius:6px; padding:8px; font-weight:600; cursor:pointer;"
+                title="Afficher les poignées de redimensionnement (raccourci Ctrl+T)">
+                ↔ Redimensionner (Ctrl+T)
+            </button>
+            <p class="mini" style="margin:0 0 10px; color:#666; line-height:1.35;">
+                <strong>Taille</strong> : bouton ci-dessus ou Ctrl+T ·
+                <strong>Forme</strong> : poignées blanches sur le contour ·
+                <strong>Épaisseur</strong> : champ Contour (px)
+            </p>
             <div class="row" style="align-items:center; gap:8px;">
                 <input id="pCopyToHsTip" type="checkbox" style="width:auto;">
                 <label for="pCopyToHsTip" style="font-size:11px; color:#555; cursor:pointer; width:auto;">
@@ -2462,7 +2472,7 @@
                     <label>Contour</label>
                     <div style="display:flex; gap:5px; align-items:center;">
                         <input type="color" id="hsStroke" value="#ff9900" style="height:32px; flex:1;">
-                        <input type="number" id="hsStrokeW" min="0" max="20" value="2" style="width:50px;"> px
+                        <input type="number" id="hsStrokeW" min="0" max="50" value="2" style="width:50px;"> px
                     </div>
                 </div>
 
@@ -2783,8 +2793,11 @@
                     Enregistrez le <strong>style</strong> d'un champ (taille, couleurs, police…)
                     sans la réponse ni l'infobulle. Au dépôt, la <strong>largeur</strong> s'adapte à la
                     réponse du champ cible ou à la réponse du modèle enregistré (réf. interne).
-                    Les <strong>formes SVG</strong> se déposent depuis le dossier
-                    <code style="font-size:10px;">library-shapes/</code> (voir manifest.json).
+                    <br><br>
+                    <strong>Formes Inkscape</strong> : exportez en <code style="font-size:10px;">.svg</code>,
+                    déposez le fichier dans <code style="font-size:10px;">library-shapes/</code>,
+                    ajoutez son nom dans <code style="font-size:10px;">manifest.json</code>, rechargez.
+                    Glissez la forme sur le canvas — puis ajustez taille (Ctrl+T), forme (poignées) et épaisseur (Contour).
                 </p>
                 <div class="mq-lib-save-row">
                     <button id="btnLibSave" type="button">➕ Enregistrer la sélection</button>
@@ -6273,54 +6286,120 @@
                 if (local) return local;
                 return mqShapeCatalog.find(x => x.id === libId) || null;
             }
+            function mqShapeFileLabel(file) {
+                return String(file || '').replace(/\.svg$/i, '').replace(/[-_]+/g, ' ').trim() || 'Forme';
+            }
+            function mqNormalizeShapeManifestItem(item, defaults) {
+                defaults = defaults || {};
+                if (typeof item === 'string') {
+                    const file = item.trim();
+                    if (!/\.svg$/i.test(file)) return null;
+                    const id = file.replace(/\.svg$/i, '');
+                    return {
+                        id,
+                        name: mqShapeFileLabel(file),
+                        file,
+                        defaultSize: defaults.defaultSize,
+                        preset: Object.assign({}, defaults.preset || {})
+                    };
+                }
+                if (!item || !item.file) return null;
+                const file = String(item.file).trim();
+                const id = item.id || file.replace(/\.svg$/i, '');
+                return {
+                    id,
+                    name: item.name || mqShapeFileLabel(file),
+                    file,
+                    defaultSize: item.defaultSize != null ? item.defaultSize : defaults.defaultSize,
+                    preset: Object.assign({}, defaults.preset || {}, item.preset || {})
+                };
+            }
             function mqParseSvgShapePoints(svgText) {
                 const doc = new DOMParser().parseFromString(svgText, 'image/svg+xml');
-                const svg = doc.documentElement;
-                if (!svg || String(svg.tagName || '').toLowerCase() === 'parsererror') return null;
-                const vb = (svg.getAttribute('viewBox') || '').trim().split(/[\s,]+/).map(Number);
-                let bw = vb[2];
-                let bh = vb[3];
-                if (!bw || !bh) {
-                    bw = parseFloat(svg.getAttribute('width')) || 100;
-                    bh = parseFloat(svg.getAttribute('height')) || 100;
-                }
-                const norm = (x, y) => ({ x: x / bw, y: y / bh });
-                let pts = null;
-                const poly = svg.querySelector('polygon');
-                if (poly) {
-                    const nums = (poly.getAttribute('points') || '').trim().match(/-?\d*\.?\d+/g);
-                    if (nums && nums.length >= 6) {
-                        pts = [];
-                        for (let i = 0; i + 1 < nums.length; i += 2) {
-                            pts.push(norm(parseFloat(nums[i]), parseFloat(nums[i + 1])));
-                        }
+                const svgRoot = doc.documentElement;
+                if (!svgRoot || String(svgRoot.tagName || '').toLowerCase() === 'parsererror') return null;
+                return mqSampleSvgToNormPoints(svgRoot);
+            }
+            function mqSampleSvgToNormPoints(svgRoot) {
+                const NS = 'http://www.w3.org/2000/svg';
+                const temp = document.createElementNS(NS, 'svg');
+                temp.setAttribute('xmlns', NS);
+                const vb = svgRoot.getAttribute('viewBox');
+                if (vb) temp.setAttribute('viewBox', vb);
+                temp.style.cssText = 'position:fixed;left:-9999px;top:-9999px;width:800px;height:800px;visibility:hidden;pointer-events:none';
+                Array.from(svgRoot.childNodes).forEach((node) => {
+                    temp.appendChild(document.importNode(node, true));
+                });
+                document.body.appendChild(temp);
+                try {
+                    let bb;
+                    try { bb = temp.getBBox(); } catch (_) { bb = null; }
+                    if (!bb || bb.width <= 0 || bb.height <= 0) {
+                        const vbParts = (vb || '0 0 100 100').trim().split(/[\s,]+/).map(Number);
+                        bb = {
+                            x: vbParts[0] || 0,
+                            y: vbParts[1] || 0,
+                            width: vbParts[2] || 100,
+                            height: vbParts[3] || 100
+                        };
                     }
-                }
-                if (!pts) {
-                    const rect = svg.querySelector('rect');
-                    if (rect) {
-                        const x = parseFloat(rect.getAttribute('x')) || 0;
-                        const y = parseFloat(rect.getAttribute('y')) || 0;
-                        const w = parseFloat(rect.getAttribute('width')) || bw;
-                        const h = parseFloat(rect.getAttribute('height')) || bh;
-                        pts = [
-                            norm(x, y), norm(x + w, y), norm(x + w, y + h), norm(x, y + h)
-                        ];
-                    }
-                }
-                if (!pts) {
-                    const pl = svg.querySelector('polyline');
-                    if (pl) {
-                        const nums = (pl.getAttribute('points') || '').trim().match(/-?\d*\.?\d+/g);
-                        if (nums && nums.length >= 6) {
-                            pts = [];
+                    const bw = bb.width || 1;
+                    const bh = bb.height || 1;
+                    const ox = bb.x || 0;
+                    const oy = bb.y || 0;
+                    const raw = [];
+                    temp.querySelectorAll('path, polygon, polyline, rect, circle, ellipse').forEach((el) => {
+                        const tag = String(el.tagName || '').toLowerCase();
+                        if (tag === 'path') {
+                            let len = 0;
+                            try { len = el.getTotalLength(); } catch (_) { len = 0; }
+                            if (len < 0.5) return;
+                            const n = Math.max(12, Math.min(120, Math.ceil(len / 4)));
+                            for (let i = 0; i < n; i++) {
+                                const p = el.getPointAtLength((len * i) / Math.max(1, n - 1));
+                                raw.push([p.x, p.y]);
+                            }
+                        } else if (tag === 'polygon' || tag === 'polyline') {
+                            const nums = (el.getAttribute('points') || '').trim().match(/-?\d*\.?\d+/g);
+                            if (!nums || nums.length < 6) return;
                             for (let i = 0; i + 1 < nums.length; i += 2) {
-                                pts.push(norm(parseFloat(nums[i]), parseFloat(nums[i + 1])));
+                                raw.push([parseFloat(nums[i]), parseFloat(nums[i + 1])]);
+                            }
+                        } else if (tag === 'rect') {
+                            const x = parseFloat(el.getAttribute('x')) || 0;
+                            const y = parseFloat(el.getAttribute('y')) || 0;
+                            const w = parseFloat(el.getAttribute('width')) || bw;
+                            const h = parseFloat(el.getAttribute('height')) || bh;
+                            raw.push([x, y], [x + w, y], [x + w, y + h], [x, y + h]);
+                        } else if (tag === 'circle') {
+                            const cx = parseFloat(el.getAttribute('cx')) || 0;
+                            const cy = parseFloat(el.getAttribute('cy')) || 0;
+                            const r = parseFloat(el.getAttribute('r')) || 0;
+                            for (let i = 0; i < 20; i++) {
+                                const a = (2 * Math.PI * i) / 20;
+                                raw.push([cx + r * Math.cos(a), cy + r * Math.sin(a)]);
+                            }
+                        } else if (tag === 'ellipse') {
+                            const cx = parseFloat(el.getAttribute('cx')) || 0;
+                            const cy = parseFloat(el.getAttribute('cy')) || 0;
+                            const rx = parseFloat(el.getAttribute('rx')) || 0;
+                            const ry = parseFloat(el.getAttribute('ry')) || 0;
+                            for (let i = 0; i < 24; i++) {
+                                const a = (2 * Math.PI * i) / 24;
+                                raw.push([cx + rx * Math.cos(a), cy + ry * Math.sin(a)]);
                             }
                         }
-                    }
+                    });
+                    if (raw.length < 3) return null;
+                    const simplified = mqSimplifyPolyline(raw, 1.5);
+                    const usePts = simplified.length >= 3 ? simplified : raw;
+                    return usePts.map(([x, y]) => ({
+                        x: (x - ox) / bw,
+                        y: (y - oy) / bh
+                    }));
+                } finally {
+                    temp.remove();
                 }
-                return pts;
             }
             function mqShapePointsAtDrop(normPts, cx, cy, defaultSize) {
                 if (!normPts || normPts.length < 3) return [];
@@ -6340,37 +6419,49 @@
                 const scale = maxDim / Math.max(bw, bh);
                 const ncx = (minX + maxX) / 2;
                 const ncy = (minY + maxY) / 2;
-                return normPts.map((p) => ({
-                    x: Math.round(cx + (p.x - ncx) * scale),
-                    y: Math.round(cy + (p.y - ncy) * scale)
-                }));
+                return normPts.map((p) => [
+                    Math.round(cx + (p.x - ncx) * scale),
+                    Math.round(cy + (p.y - ncy) * scale)
+                ]);
             }
             async function mqLoadShapeCatalog() {
                 try {
                     const res = await fetch(MQ_SHAPE_BASE + 'manifest.json', { cache: 'no-store' });
                     if (!res.ok) throw new Error('manifest');
                     const data = await res.json();
+                    const defaults = {
+                        defaultSize: Number(data.defaultSize) || 120,
+                        preset: data.defaultPreset || {
+                            fill: '#ffeb3b',
+                            stroke: '#333333',
+                            strokeW: 2,
+                            alphaIdle: 0.35,
+                            alphaActive: 0.55,
+                            blendMode: 'multiply'
+                        }
+                    };
                     const items = Array.isArray(data.shapes) ? data.shapes : [];
                     const loaded = [];
-                    for (const item of items) {
-                        if (!item || !item.file) continue;
+                    for (const rawItem of items) {
+                        const item = mqNormalizeShapeManifestItem(rawItem, defaults);
+                        if (!item) continue;
                         let points = null;
                         try {
                             const sr = await fetch(MQ_SHAPE_BASE + item.file, { cache: 'no-store' });
                             if (sr.ok) points = mqParseSvgShapePoints(await sr.text());
                         } catch (_) { /* ignore */ }
                         if (!points || points.length < 3) {
-                            console.warn('Forme SVG ignorée (polygon/rect requis) :', item.id || item.file);
+                            console.warn('Forme SVG ignorée (path/polygon requis, Inkscape OK) :', item.id || item.file);
                             continue;
                         }
                         loaded.push({
-                            id: 'shape:' + (item.id || String(item.file).replace(/\.svg$/i, '')),
+                            id: 'shape:' + item.id,
                             kind: 'shape',
-                            name: item.name || item.id || item.file,
+                            name: item.name,
                             createdAt: 'fichier',
                             data: {
                                 points,
-                                defaultSize: Number(item.defaultSize) || 100,
+                                defaultSize: Number(item.defaultSize) || defaults.defaultSize,
                                 preset: item.preset || {}
                             }
                         });
@@ -6650,11 +6741,17 @@
                 const h = mqCreateHotspotFromDraft(pts);
                 mqLibApplyHotspotPreset(h, d.preset || {});
                 if (entry.name) h.label = entry.name;
+                state.hsTransform = { hsId: h.id };
+                if (typeof mqHsBanner === 'function') {
+                    mqHsBanner('↔️ Taille : poignées bleues · Forme : poignées blanches · Épaisseur : Contour (px) · Échap pour quitter');
+                }
                 syncHotspotUI();
                 render();
                 saveLocal();
                 mqFlashHotspot(h.id);
-                if (window.mqToast) window.mqToast('Hotspot créé : « ' + entry.name + ' »');
+                if (window.mqToast) {
+                    window.mqToast('Forme déposée — Ctrl+T taille · poignées = forme · Contour = épaisseur');
+                }
             }
             let _mqLibHoverTimer = null;
             let _mqLibHoverHideTimer = null;
@@ -10520,6 +10617,7 @@
             if ($('btnUndo')) $('btnUndo').addEventListener('click', () => mqUndo());
             if ($('btnRedo')) $('btnRedo').addEventListener('click', () => mqRedo());
             if ($('btnLibSave')) $('btnLibSave').addEventListener('click', () => mqLibSaveFromSelection());
+            if ($('btnHsTransform')) $('btnHsTransform').addEventListener('click', () => mqToggleHotspotTransform());
             mqLibInitDropTargets();
             mqLoadShapeCatalog().then(() => mqLibRenderList());
             mqOcrInit();

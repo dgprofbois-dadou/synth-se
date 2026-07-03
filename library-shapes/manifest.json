@@ -1,49 +1,16 @@
 {
+  "defaultSize": 120,
+  "defaultPreset": {
+    "fill": "#ffeb3b",
+    "stroke": "#333333",
+    "strokeW": 2,
+    "alphaIdle": 0.35,
+    "alphaActive": 0.55,
+    "blendMode": "multiply"
+  },
   "shapes": [
-    {
-      "id": "arrow-right",
-      "name": "Flèche droite",
-      "file": "arrow-right.svg",
-      "defaultSize": 140,
-      "preset": {
-        "fill": "#ffeb3b",
-        "stroke": "#f57f17",
-        "strokeW": 2,
-        "alphaIdle": 0.35,
-        "alphaActive": 0.55,
-        "blendMode": "multiply",
-        "label": "Flèche"
-      }
-    },
-    {
-      "id": "rect-label",
-      "name": "Rectangle étiquette",
-      "file": "rect-label.svg",
-      "defaultSize": 160,
-      "preset": {
-        "fill": "#e3f2fd",
-        "stroke": "#1565c0",
-        "strokeW": 2,
-        "alphaIdle": 0.4,
-        "alphaActive": 0.6,
-        "blendMode": "multiply",
-        "label": "Zone"
-      }
-    },
-    {
-      "id": "check-badge",
-      "name": "Pastille validation",
-      "file": "check-badge.svg",
-      "defaultSize": 80,
-      "preset": {
-        "fill": "#c8e6c9",
-        "stroke": "#2e7d32",
-        "strokeW": 2,
-        "alphaIdle": 0.45,
-        "alphaActive": 0.65,
-        "blendMode": "multiply",
-        "label": "OK"
-      }
-    }
+    "arrow-right.svg",
+    "rect-label.svg",
+    "check-badge.svg"
   ]
 }
