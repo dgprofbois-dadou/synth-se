@@ -1,26 +1,35 @@
 ---
-description: Commit et push automatiques sur GitHub après chaque modification
+description: Commit et push automatiques sur GitHub après chaque modification — sans attendre la demande de l'utilisateur
 alwaysApply: true
 ---
 
-# Déploiement GitHub automatique
+# Déploiement GitHub automatique (obligatoire)
 
-Ce projet est testé en ligne via une page serveur synchronisée avec GitHub. **Ne pas attendre que l'utilisateur demande un push.**
+Ce projet est testé en ligne via GitHub Pages (`dgprofbois-dadou.github.io/synth-se/`).
+**L'utilisateur ne doit jamais avoir à demander un push.** C'est systématique après chaque modification de fichiers.
 
-## Après chaque tâche qui modifie des fichiers
+## Workflow obligatoire en fin de tâche
 
-1. Vérifier `git status` et `git diff`.
-2. **Commit** les changements pertinents (message concis en français, style du dépôt).
-3. **Push** immédiatement sur `origin main` (ou la branche de travail courante).
-4. Confirmer à l'utilisateur que le push a réussi (hash du commit + branche).
+Dès qu'un fichier du dépôt est modifié, créé ou supprimé :
 
-## Règles
+1. `git status` + `git diff` pour vérifier les changements.
+2. **Commit** immédiat (message concis en français, style du dépôt).
+3. **Push** immédiat sur `origin main` (ou la branche de travail courante).
+4. Confirmer brièvement à l'utilisateur : hash du commit + branche + URL si pertinent.
 
+Ne pas terminer une tâche de code sans avoir poussé, sauf échec de push à corriger.
+
+## Interdictions
+
+- Ne pas attendre « as-tu poussé sur GitHub ? » ou toute formulation équivalente.
 - Ne pas committer de secrets (`.env`, clés, credentials).
-- Ne pas push `--force` sur `main`/`master`.
-- Si le push échoue (auth, conflit), diagnostiquer et corriger sans abandonner.
-- Si la tâche était une simple question sans modification de fichier, ne rien committer.
+- Ne pas `push --force` sur `main`/`master`.
+- Ne pas committer si la tâche était une simple question sans modification de fichier.
 
-## Exemple de fin de tâche
+## En cas d'échec du push
 
-Après un correctif : commit → `git push origin main` → « Poussé sur GitHub (commit abc1234). »
+Diagnostiquer (auth, conflit, réseau), corriger, puis retenter — ne pas laisser des commits locaux non poussés sans le signaler.
+
+## Exemple de clôture
+
+« Correctif appliqué. Poussé sur GitHub (`763d939` sur `main`). Rechargez avec Ctrl+F5. »
