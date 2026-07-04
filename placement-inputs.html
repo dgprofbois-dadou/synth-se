@@ -7997,6 +7997,8 @@
                     voiceConsigne: text
                 };
             }
+
+            function mqOcrApplyToBoxes() {
                 if (typeof OCRAddon === 'undefined') return;
                 const fields = OCRAddon.getFields();
                 if (!fields.length) {
@@ -9231,6 +9233,39 @@
                 return tpl;
             }
 
+            function mqSyncDropzonesToTargetCount(g) {
+                if (!g) return false;
+                const target = Math.max(1, Math.min(10, parseInt(g.targetCount, 10) || 4));
+                g.targetCount = target;
+                if (!Array.isArray(g.dropzones)) g.dropzones = [];
+                const before = g.dropzones.length;
+                const zw = g.zoneWidth || 250;
+                const zh = g.zoneHeight || 250;
+                const gap = g.zoneGap ?? 10;
+                const defaultY = 250;
+
+                while (g.dropzones.length < target) {
+                    const n = g.dropzones.length;
+                    const last = n > 0 ? g.dropzones[n - 1] : null;
+                    let newX, newY;
+                    if (last) {
+                        newX = (last.x || 0) + (last.width || zw) + gap;
+                        newY = last.y ?? defaultY;
+                    } else {
+                        newX = 10;
+                        newY = defaultY;
+                    }
+                    const ids = g.dropzones.map((dz) => parseInt(dz.id, 10) || 0);
+                    const maxId = ids.length ? Math.max(...ids) : 0;
+                    g.dropzones.push({ id: maxId + 1, x: newX, y: newY, width: zw, height: zh });
+                }
+
+                while (g.dropzones.length > target) {
+                    g.dropzones.pop();
+                }
+                return g.dropzones.length !== before;
+            }
+
             function normalizeDndGame(saved, defaults) {
                 const g = Object.assign({}, defaults, saved || {});
                 g.draggables = Array.isArray(saved && saved.draggables)
@@ -9273,6 +9308,7 @@
                 if (typeof g.width !== 'number') g.width = defaults.width;
                 if (typeof g.height !== 'number') g.height = defaults.height;
                 if (!g.bgColor) g.bgColor = defaults.bgColor;
+                mqSyncDropzonesToTargetCount(g);
                 return g;
             }
 
@@ -9336,6 +9372,7 @@
                         bgColor: ttBg ? ttBg.value : '#333',
                         color: ttTxt ? ttTxt.value : '#fff'
                     };
+                    mqSyncDropzonesToTargetCount(g);
                 });
             }
 
@@ -11991,8 +12028,12 @@
                 opts = opts || {};
                 syncDndGamesFromUI();
                 if (!opts.skipRender) {
-                    if (state.mode === 'admin') renderDndGamesPreview();
-                    else render();
+                    if (state.mode === 'admin') {
+                        renderDndGamesPreview();
+                        if (opts.refreshDropzonesGame && typeof renderDropzonesList === 'function') {
+                            renderDropzonesList(opts.refreshDropzonesGame);
+                        }
+                    } else render();
                 }
                 if (!opts.skipSave) saveLocal();
             }
@@ -12332,7 +12373,10 @@
                 if (!host) return;
                 const onEdit = (e) => {
                     if (e.target && typeof e.target.id === 'string' && /^dndGame\d+/.test(e.target.id)) {
-                        saveDndGamesFromUI();
+                        const m = /^dndGame(\d+)TargetCount$/.exec(e.target.id);
+                        saveDndGamesFromUI({
+                            refreshDropzonesGame: m ? ('game' + m[1]) : null
+                        });
                     }
                 };
                 host.addEventListener('input', onEdit);
@@ -12578,6 +12622,7 @@
     </script>
     <script id="mq-ui-init">
         /* ─── MQ UI · Init (surcouche — ne pas supprimer le script principal) ─── */
+        if (typeof MQ_MAX_GAMES === 'undefined') { var MQ_MAX_GAMES = 20; }
         (function mqUiInit() {
             if (document.body.classList.contains('mq-ui-ready')) return;
 
