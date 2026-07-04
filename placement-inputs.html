@@ -353,6 +353,46 @@
             line-height: 1.15;
         }
 
+        .mq-voice-badge {
+            position: absolute;
+            left: 0;
+            bottom: -17px;
+            max-width: 100%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            font-size: 9px;
+            line-height: 1.2;
+            color: #065f46;
+            background: rgba(236, 253, 245, .95);
+            border: 1px solid #6ee7b7;
+            border-radius: 4px;
+            padding: 1px 5px;
+            pointer-events: none;
+            z-index: 2;
+        }
+
+        #pVoiceFileDisplay {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+            font-weight: 700;
+            background: #ecfdf5 !important;
+            border-color: #6ee7b7 !important;
+            color: #065f46;
+        }
+
+        #pVoiceManifest {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+            font-size: 11px;
+            background: #f8fafc;
+            border: 1px dashed #cbd5e1;
+            border-radius: 8px;
+            padding: 8px;
+            max-height: 180px;
+            overflow: auto;
+            white-space: pre-wrap;
+            margin: 6px 0 0;
+        }
+
         body[data-mode="admin"] .hotspot-group {
             pointer-events: auto;
         }
@@ -2331,6 +2371,15 @@
             <div class="mini" style="color:#666;">
                 Importez vos sous-cul (A3 paysage). Ils s'affichent aussitôt dans l'éditeur et sont intégrés au HTML généré (pas besoin de les déposer dans le dépôt).
             </div>
+            <div class="row">
+                <label>Voix — dossier FTP</label>
+                <input id="confVoiceBase" type="text" placeholder="https://monsite.fr/voices/" style="flex:1;">
+            </div>
+            <div class="mini" style="color:#666; margin-top:-4px;">
+                URL du dossier où vous déposez les MP3 (barre oblique finale optionnelle).
+            </div>
+            <button id="btnVoiceManifest" type="button" style="width:100%; margin:6px 0 4px; font-size:12px;">📋 Liste des MP3 à produire</button>
+            <pre id="pVoiceManifest" style="display:none;"></pre>
 
             <h3>Champ sélectionné</h3>
             <div class="mini" id="selInfo">Aucun champ sélectionné.</div>
@@ -2362,6 +2411,25 @@
             <div class="row">
                 <label>Réponse attendue</label>
                 <input id="pAnswer" type="text" placeholder="Ex: CHEVRON" />
+            </div>
+            <div id="pVoicePanel" style="margin:10px 0 14px; padding:10px; background:#f0fdf4; border:1px solid #6ee7b7; border-radius:8px;">
+                <div style="font-size:11px; font-weight:700; color:#047857; margin-bottom:8px;">🎙 Consigne vocale (MP3 sur FTP)</div>
+                <div class="row" style="margin-bottom:6px;">
+                    <label>Fichier MP3</label>
+                    <input id="pVoiceFileDisplay" type="text" readonly title="Nom exact du fichier à déposer sur le FTP">
+                </div>
+                <div class="row" style="margin-bottom:6px;">
+                    <label>Identifiant</label>
+                    <input id="pVoiceKey" type="text" placeholder="ch001" title="Partie fixe du nom : préfixe-identifiant.mp3">
+                </div>
+                <div class="row" style="margin-bottom:8px; align-items:flex-start;">
+                    <label style="padding-top:6px;">Texte lu</label>
+                    <textarea id="pVoiceConsigne" rows="2" placeholder="Consigne à enregistrer en MP3 (ex. Recopiez le mot…)" style="min-height:48px; font-size:12px;"></textarea>
+                </div>
+                <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                    <button id="btnCopyVoiceFile" type="button" style="flex:1; font-size:11px;">📋 Copier nom MP3</button>
+                    <button id="btnPlayVoiceTest" type="button" style="flex:1; font-size:11px;">▶ Tester le son</button>
+                </div>
             </div>
             <div class="row">
                 <label>Placeholder</label>
@@ -3036,6 +3104,10 @@
             const pGroup = $('pGroup');
             const pCopyToHsTip = $('pCopyToHsTip');
             const pAnswer = $('pAnswer');
+            const pVoiceKey = $('pVoiceKey');
+            const pVoiceFileDisplay = $('pVoiceFileDisplay');
+            const pVoiceConsigne = $('pVoiceConsigne');
+            const pVoicePanel = $('pVoicePanel');
             const pPlaceholder = $('pPlaceholder');
             const pX = $('pX'); const pY = $('pY'); const pW = $('pW'); const pH = $('pH');
             const pFont = $('pFont'); const pFontSize = $('pFontSize'); const pWeight = $('pWeight'); const pPad = $('pPad');
@@ -3752,6 +3824,13 @@
 
                     el.appendChild(field);
                     el.appendChild(handle);
+                    if (state.mode === 'admin') {
+                        const vBadge = document.createElement('div');
+                        vBadge.className = 'mq-voice-badge';
+                        vBadge.textContent = mqVoiceFileName(b);
+                        vBadge.title = 'Fichier MP3 à déposer sur le FTP';
+                        el.appendChild(vBadge);
+                    }
                     stage.appendChild(el);
                 }
                 renderHotspots();
@@ -4453,6 +4532,11 @@
                     field.style.setProperty('--ph-weight', String(b.phWeight ?? 'inherit'));
                     field.style.setProperty('--ph-style', b.phStyle ?? 'normal');
 
+                    field.addEventListener('focus', () => {
+                        if (state.mode !== 'student' || b.locked) return;
+                        mqPlayVoiceForBox(b);
+                    });
+
                     // === Validation élève ===
                     // === Validation élève (MODIFIÉ AVEC ANIMATION) ===
                     // === Validation élève (AVEC POP ET SHAKE) ===
@@ -4625,7 +4709,14 @@
                     });
 
                     el.appendChild(field);
-                    if (state.mode === 'admin') el.appendChild(handle);
+                    if (state.mode === 'admin') {
+                        el.appendChild(handle);
+                        const vBadge = document.createElement('div');
+                        vBadge.className = 'mq-voice-badge';
+                        vBadge.textContent = mqVoiceFileName(b);
+                        vBadge.title = 'Fichier MP3 à déposer sur le FTP';
+                        el.appendChild(vBadge);
+                    }
                     stage.appendChild(el);
                 }
                 renderHotspots();
@@ -4687,13 +4778,15 @@
                 const b = getSelected();
                 if (!b) {
                     selInfo.textContent = 'Aucun champ sélectionné.';
+                    if (pVoicePanel) pVoicePanel.style.display = 'none';
                     var _ipNone = document.getElementById('iframeProps');
                     if (_ipNone) _ipNone.style.display = 'none';
                     var _ieNone = document.getElementById('iframeEmpty');
                     if (_ieNone) _ieNone.style.display = 'block';
                     return;
                 }
-                selInfo.textContent = `ID: ${b.id.slice(0, 8)}… | z-index: ${b.z || 0}`;
+                selInfo.textContent = `MP3 : ${mqVoiceFileName(b)} · z-index: ${b.z || 0}`;
+                mqRefreshVoicePanel(b);
 
                 // --- Cas spécial : iframe (onglet dédié) ---
                 const _ip = document.getElementById('iframeProps');
@@ -4915,6 +5008,151 @@
                 });
 
             // Add / duplicate / delete
+            let _mqVoiceAudio = null;
+            let _mqVoiceLastBoxId = null;
+
+            function mqSanitizeVoicePrefix(raw) {
+                return String(raw || 'exercice').trim().replace(/[^\w\u00C0-\u024F.-]+/gi, '_').replace(/^_+|_+$/g, '') || 'exercice';
+            }
+            function mqGetVoicePrefix() {
+                return mqSanitizeVoicePrefix($('confPrefix') ? $('confPrefix').value : 'exercice');
+            }
+            function mqNextVoiceKey() {
+                let max = 0;
+                state.boxes.forEach((b) => {
+                    if (b.kind === 'iframe') return;
+                    const m = /^ch(\d+)$/i.exec(String(b.voiceKey || '').trim());
+                    if (m) max = Math.max(max, parseInt(m[1], 10));
+                });
+                return 'ch' + String(max + 1).padStart(3, '0');
+            }
+            function mqAssignVoiceKey(b) {
+                if (!b || b.kind === 'iframe') return '';
+                if (!b.voiceKey) b.voiceKey = mqNextVoiceKey();
+                return b.voiceKey;
+            }
+            function mqEnsureAllVoiceKeys() {
+                state.boxes.forEach((b) => {
+                    if (b.kind !== 'iframe') mqAssignVoiceKey(b);
+                });
+            }
+            function mqVoiceFileName(b) {
+                if (!b || b.kind === 'iframe') return '';
+                return mqGetVoicePrefix() + '-' + mqAssignVoiceKey(b) + '.mp3';
+            }
+            function mqVoiceConsigneText(b) {
+                if (!b) return '';
+                if ((b.voiceConsigne || '').trim()) return b.voiceConsigne.trim();
+                if ((b.hint || '').trim()) return b.hint.trim();
+                return '';
+            }
+            function mqVoiceUrl(b) {
+                const base = ($('confVoiceBase') && $('confVoiceBase').value || '').trim();
+                if (!base || !b || b.kind === 'iframe') return null;
+                return base.replace(/\/+$/, '') + '/' + encodeURIComponent(mqVoiceFileName(b)).replace(/%2F/g, '/');
+            }
+            function mqPlayVoiceForBox(b) {
+                if (!b || b.kind === 'iframe' || b.locked) return;
+                const url = mqVoiceUrl(b);
+                if (!url) return;
+                if (_mqVoiceLastBoxId === b.id && _mqVoiceAudio && !_mqVoiceAudio.paused) return;
+                if (_mqVoiceAudio) {
+                    _mqVoiceAudio.pause();
+                    _mqVoiceAudio = null;
+                }
+                _mqVoiceAudio = new Audio(url);
+                _mqVoiceLastBoxId = b.id;
+                _mqVoiceAudio.play().catch((e) => console.warn('MP3 consigne', url, e));
+            }
+            function mqRefreshVoicePanel(b) {
+                if (!pVoicePanel) return;
+                if (!b || b.kind === 'iframe') {
+                    pVoicePanel.style.display = 'none';
+                    return;
+                }
+                pVoicePanel.style.display = 'block';
+                mqAssignVoiceKey(b);
+                if (pVoiceKey && document.activeElement !== pVoiceKey) pVoiceKey.value = b.voiceKey || '';
+                if (pVoiceFileDisplay) pVoiceFileDisplay.value = mqVoiceFileName(b);
+                if (pVoiceConsigne && document.activeElement !== pVoiceConsigne) {
+                    pVoiceConsigne.value = b.voiceConsigne != null ? b.voiceConsigne : mqVoiceConsigneText(b);
+                }
+            }
+            function mqBuildVoiceManifestText() {
+                const lines = [];
+                const base = ($('confVoiceBase') && $('confVoiceBase').value || '').trim();
+                lines.push('# MP3 à produire — nom = préfixe-identifiant.mp3');
+                lines.push('# Préfixe export : ' + mqGetVoicePrefix());
+                if (base) lines.push('# URL FTP : ' + base.replace(/\/+$/, '') + '/');
+                lines.push('');
+                state.boxes.forEach((b, i) => {
+                    if (b.kind === 'iframe') return;
+                    mqAssignVoiceKey(b);
+                    const consigne = mqVoiceConsigneText(b) || '(texte consigne non renseigné)';
+                    lines.push(mqVoiceFileName(b) + '\t→\t' + consigne);
+                });
+                return lines.join('\n');
+            }
+            function mqInitVoiceUi() {
+                if ($('btnVoiceManifest')) {
+                    $('btnVoiceManifest').addEventListener('click', () => {
+                        mqEnsureAllVoiceKeys();
+                        const host = $('pVoiceManifest');
+                        if (!host) return;
+                        host.textContent = mqBuildVoiceManifestText();
+                        host.style.display = host.style.display === 'none' ? 'block' : 'none';
+                    });
+                }
+                if ($('btnCopyVoiceFile')) {
+                    $('btnCopyVoiceFile').addEventListener('click', async () => {
+                        const b = getSelected();
+                        if (!b || b.kind === 'iframe') return;
+                        const name = mqVoiceFileName(b);
+                        try {
+                            await navigator.clipboard.writeText(name);
+                            if (window.mqToast) window.mqToast('Copié : ' + name);
+                        } catch (_) {
+                            prompt('Nom du fichier MP3 :', name);
+                        }
+                    });
+                }
+                if ($('btnPlayVoiceTest')) {
+                    $('btnPlayVoiceTest').addEventListener('click', () => {
+                        const b = getSelected();
+                        if (!b || b.kind === 'iframe') return;
+                        if (!($('confVoiceBase') && $('confVoiceBase').value.trim())) {
+                            if (window.mqToast) window.mqToast('Indiquez l\'URL du dossier FTP (Configuration de la page)', { warn: true });
+                            return;
+                        }
+                        mqPlayVoiceForBox(b);
+                    });
+                }
+                if (pVoiceKey) {
+                    pVoiceKey.addEventListener('input', () => {
+                        const b = getSelected();
+                        if (!b || b.kind === 'iframe') return;
+                        b.voiceKey = pVoiceKey.value.trim().replace(/[^\w-]+/g, '');
+                        mqRefreshVoicePanel(b);
+                        render();
+                        scheduleSaveLocal();
+                    });
+                }
+                if (pVoiceConsigne) {
+                    pVoiceConsigne.addEventListener('input', () => {
+                        const b = getSelected();
+                        if (!b || b.kind === 'iframe') return;
+                        b.voiceConsigne = pVoiceConsigne.value;
+                        scheduleSaveLocal();
+                    });
+                }
+                if ($('confPrefix')) {
+                    $('confPrefix').addEventListener('input', () => {
+                        mqRefreshVoicePanel(getSelected());
+                        render();
+                    });
+                }
+            }
+
             function addBox() {
                 const id = crypto.randomUUID();
                 // create near viewport center in stage coords
@@ -4977,7 +5215,9 @@
                     phStyle: 'normal',
 
 
-                    locked: false
+                    locked: false,
+                    voiceKey: mqNextVoiceKey(),
+                    voiceConsigne: ''
                 };
 
                 state.boxes.push(b);
@@ -5226,6 +5466,8 @@
                     copy.studentValue = '';
                     copy.ok = false;
                     copy.locked = false;
+                    copy.voiceKey = mqNextVoiceKey();
+                    copy.voiceConsigne = b.voiceConsigne || '';
 
                     state.boxes.push(copy);
                     render();
@@ -7750,11 +7992,11 @@
                     phFont: 'inherit',
                     phWeight: 'inherit',
                     phStyle: 'normal',
-                    locked: false
+                    locked: false,
+                    voiceKey: mqNextVoiceKey(),
+                    voiceConsigne: text
                 };
             }
-
-            function mqOcrApplyToBoxes() {
                 if (typeof OCRAddon === 'undefined') return;
                 const fields = OCRAddon.getFields();
                 if (!fields.length) {
@@ -8768,7 +9010,8 @@
                     exportConfig: {
                         img1: $('confImg1') ? $('confImg1').value : '',
                         img2: $('confImg2') ? $('confImg2').value : '',
-                        prefix: $('confPrefix') ? $('confPrefix').value : ''
+                        prefix: $('confPrefix') ? $('confPrefix').value : '',
+                        voiceBase: $('confVoiceBase') ? $('confVoiceBase').value : ''
                     }
                 };
             }
@@ -8827,6 +9070,7 @@
                         resolveBgInto('confImg1', snap.exportConfig.img1 || '', 0);
                         resolveBgInto('confImg2', snap.exportConfig.img2 || '', 1);
                         if ($('confPrefix')) $('confPrefix').value = snap.exportConfig.prefix || '';
+                        if ($('confVoiceBase')) $('confVoiceBase').value = snap.exportConfig.voiceBase || '';
                     }
                     if (confLayout) {
                         confLayout.value = state.layout;
@@ -9115,7 +9359,8 @@
                     exportConfig: {
                         img1: $('confImg1') ? $('confImg1').value : '',
                         img2: $('confImg2') ? $('confImg2').value : '',
-                        prefix: $('confPrefix') ? $('confPrefix').value : ''
+                        prefix: $('confPrefix') ? $('confPrefix').value : '',
+                        voiceBase: $('confVoiceBase') ? $('confVoiceBase').value : ''
                     }
                 };
             }
@@ -9211,7 +9456,10 @@
                     resolveBgInto('confImg1', obj.exportConfig.img1 || '', 0);
                     resolveBgInto('confImg2', obj.exportConfig.img2 || '', 1);
                     if ($('confPrefix')) $('confPrefix').value = obj.exportConfig.prefix || '';
+                    if ($('confVoiceBase')) $('confVoiceBase').value = obj.exportConfig.voiceBase || '';
                 }
+
+                mqEnsureAllVoiceKeys();
 
                 // load layout
                 if (obj.layout) {
@@ -10682,6 +10930,8 @@
                     const pathImg1 = mqNormalizeBgPath($('confImg1') ? $('confImg1').value : '', 0);
                     const pathImg2 = mqNormalizeBgPath($('confImg2') ? $('confImg2').value : '', 1);
                     const prefix = $('confPrefix') ? $('confPrefix').value : 'exercice';
+                    mqEnsureAllVoiceKeys();
+                    const voiceBaseExport = ($('confVoiceBase') ? $('confVoiceBase').value : '').trim();
 
                     const bgImgs = Array.from(document.querySelectorAll('#stage img.bg'));
                     const live1 = bgImgs[0] && (bgImgs[0].currentSrc || bgImgs[0].src);
@@ -10878,10 +11128,11 @@
                         const padVw = (b.pad || 0) * pxToVw;
 
                         const styles = `width:100%; height:100%; font-family:${b.font}; font-size:${b.fontSize || 16}px; font-weight:${b.weight}; padding:${b.pad ?? 4}px; border:2px solid #666; border-radius:8px; box-sizing:border-box;`;
+                        const voiceFile = mqVoiceFileName(b).replace(/"/g, '&quot;');
 
                         html += `
                 <div class="input-wrapper" style="top:${topPct}%; left:${leftPct}%; width:${wPct}%; height:${hPct}%;" 
-                     data-tooltip="${safeHint}" data-hint-font="${finalFont}" data-duration="${b.hintMs || 3000}" data-group="${group}">
+                     data-tooltip="${safeHint}" data-hint-font="${finalFont}" data-duration="${b.hintMs || 3000}" data-group="${group}" data-voice="${voiceFile}">
                     <${tag} data-answer="${safeAns}" placeholder="${(b.placeholder || '').replace(/"/g, '&quot;')}" style="${styles}">${closeTag}
                 </div>`;
                     });
@@ -11050,10 +11301,11 @@
                         const padVw = (b.pad || 0) * pxToVw;
 
                         const styles = `width:100%; height:100%; font-family:${b.font}; font-size:${b.fontSize || 16}px; font-weight:${b.weight}; padding:${b.pad ?? 4}px; border:2px solid #666; border-radius:8px; box-sizing:border-box;`;
+                        const voiceFile = mqVoiceFileName(b).replace(/"/g, '&quot;');
 
                         html += `
                 <div class="input-wrapper" style="top:${topPct}%; left:${leftPct}%; width:${wPct}%; height:${hPct}%;" 
-                     data-tooltip="${safeHint}" data-hint-font="${finalFont}" data-duration="${b.hintMs || 3000}" data-group="${group}">
+                     data-tooltip="${safeHint}" data-hint-font="${finalFont}" data-duration="${b.hintMs || 3000}" data-group="${group}" data-voice="${voiceFile}">
                     <${tag} data-answer="${safeAns}" placeholder="${(b.placeholder || '').replace(/"/g, '&quot;')}" style="${styles}">${closeTag}
                 </div>`;
                     });
@@ -11097,6 +11349,8 @@
     <\/script>
     <script>
     (function() {
+        const MQ_VOICE_BASE = ${JSON.stringify(voiceBaseExport)};
+        let mqVoiceAud = null;
         document.addEventListener('DOMContentLoaded', () => {
             document.querySelectorAll('.hotspot-group[data-alpha-active]').forEach(group => {
                 const alphaActive = group.getAttribute('data-alpha-active');
@@ -11108,6 +11362,21 @@
                     console.warn('[Synthèse] Page ' + (i + 1) + ' : image non intégrée — régénérez le HTML (⚡ GÉNÉRER). Le PDF local échouera sinon.');
                 }
             });
+            if (MQ_VOICE_BASE) {
+                document.querySelectorAll('.input-wrapper[data-voice]').forEach(function(wrap) {
+                    const inp = wrap.querySelector('input,textarea');
+                    if (!inp) return;
+                    inp.addEventListener('focus', function() {
+                        if (inp.disabled || inp.readOnly) return;
+                        const f = wrap.getAttribute('data-voice');
+                        if (!f) return;
+                        const url = MQ_VOICE_BASE.replace(/\\/+$/, '') + '/' + encodeURIComponent(f).replace(/%2F/g, '/');
+                        if (mqVoiceAud) { mqVoiceAud.pause(); mqVoiceAud = null; }
+                        mqVoiceAud = new Audio(url);
+                        mqVoiceAud.play().catch(function() {});
+                    });
+                });
+            }
         });
     })();
     <\/script>
@@ -11180,6 +11449,7 @@
             mqLibInitDropTargets();
             mqInitShapeImportUi();
             mqInitSpellcheckUi();
+            mqInitVoiceUi();
             mqLoadShapeCatalog().then(() => mqLibRenderList());
             mqOcrInit();
             if ($('btnOcrApplyBoxes')) $('btnOcrApplyBoxes').addEventListener('click', () => mqOcrApplyToBoxes());
