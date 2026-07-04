@@ -3067,10 +3067,10 @@
     <script src="ocr-addon.js"></script>
     <script src="mq-export-runtime.js"></script>
     <script>
-        // Plafond technique du nombre de jeux DnD. Déclaré au niveau du script (hors des IIFE)
-        // pour être visible par TOUTES les IIFE de ce <script>.
-        const MQ_MAX_GAMES = 20;
+        // Plafond technique du nombre de jeux DnD — sur window pour être partagé entre les blocs <script>.
+        window.MQ_MAX_GAMES = window.MQ_MAX_GAMES || 20;
         (() => {
+            const MQ_MAX_GAMES = window.MQ_MAX_GAMES;
             const $ = (id) => document.getElementById(id);
 
             const viewport = $('viewport');
@@ -12622,9 +12622,9 @@
     </script>
     <script id="mq-ui-init">
         /* ─── MQ UI · Init (surcouche — ne pas supprimer le script principal) ─── */
-        if (typeof MQ_MAX_GAMES === 'undefined') { var MQ_MAX_GAMES = 20; }
         (function mqUiInit() {
             if (document.body.classList.contains('mq-ui-ready')) return;
+            const MQ_MAX_GAMES = window.MQ_MAX_GAMES || 20;
 
             const $ = (id) => document.getElementById(id);
 
@@ -12720,6 +12720,7 @@
             }
 
             function mqEnhanceDndPanels() {
+                try {
                 const mqCardEmojis = ['🎯', '🧩', '🧠', '🎨', '⭐', '🚀', '🎲', '🔧', '📦', '🎵'];
                 for (let n = 1; n <= MQ_MAX_GAMES; n++) {
                     const id = 'dndGame' + n + 'Enabled';
@@ -12795,6 +12796,7 @@
                     mqLayoutDndToolbar(p + 'TooltipFont', '💬 Infobulles');
                     mqLayoutDndToolbar(p + 'HeaderWidth', '🏷️ Bandeau titre');
                 }
+                } catch (e) { console.warn('[mq-ui] mqEnhanceDndPanels', e); }
             }
             window.mqEnhanceDndPanels = mqEnhanceDndPanels;
 
