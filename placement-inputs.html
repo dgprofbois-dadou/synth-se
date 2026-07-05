@@ -5220,6 +5220,8 @@
                     voiceConsigne: ''
                 };
 
+                mqFitBoxHeightToTypography(b, null);
+
                 state.boxes.push(b);
                 state.selectedHotspotId = null;
                 if (pGroup) pGroup.value = '';
@@ -7230,6 +7232,7 @@
                 MQ_BOX_PRESET_KEYS.forEach(k => { if (b[k] !== undefined) o[k] = b[k]; });
                 const ans = (b.answer || '').trim();
                 if (ans) o._widthRef = ans;
+                mqLibFitBoxPresetDimensions(o);
                 return o;
             }
             function mqLibExtractHotspotPreset(h) {
@@ -7251,21 +7254,82 @@
                 return true;
             }
 
-            /** Largeur (px) nécessaire pour afficher un texte avec le style du champ. */
-            function mqMeasureBoxTextWidth(b, text) {
-                const raw = (text != null ? text : b.answer || '').trim();
-                if (!raw) return null;
-                const fs = Math.max(10, Number(b.fontSize || 16));
+            /** Métriques typo communes pour mesure largeur / hauteur des champs. */
+            function mqBoxTypoMetrics(b) {
+                const fs = Math.max(8, Number(b.fontSize || 16));
                 const fw = String(b.weight != null ? b.weight : 400);
                 const ff = (b.font && b.font !== 'inherit')
                     ? b.font
                     : 'system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif';
                 const pad = Number(b.pad != null ? b.pad : 4) * 2;
                 const border = Number(b.borderW != null ? b.borderW : 2) * 2;
-                const slack = 10;
+                const lineRatio = b.multiline ? 1.15 : 1.35;
+                return { fs, fw, ff, pad, border, lineRatio, lineH: fs * lineRatio };
+            }
+
+            function mqBoxMeasureCtx(b) {
+                const m = mqBoxTypoMetrics(b);
                 const canvas = document.createElement('canvas');
                 const ctx = canvas.getContext('2d');
-                ctx.font = fw + ' ' + fs + 'px ' + ff;
+                ctx.font = m.fw + ' ' + m.fs + 'px ' + m.ff;
+                return { ctx, m };
+            }
+
+            function mqWrapLineCount(ctx, line, maxW) {
+                if (!line) return 1;
+                if (ctx.measureText(line).width <= maxW) return 1;
+                const words = line.split(/\s+/).filter(Boolean);
+                if (words.length > 1) {
+                    let lines = 1;
+                    let lineW = 0;
+                    words.forEach((word, i) => {
+                        const chunk = word + (i < words.length - 1 ? ' ' : '');
+                        const w = ctx.measureText(chunk).width;
+                        if (lineW > 0 && lineW + w > maxW) {
+                            lines++;
+                            lineW = w;
+                        } else {
+                            lineW += w;
+                        }
+                    });
+                    return lines;
+                }
+                let lines = 1;
+                let lineW = 0;
+                for (const ch of line) {
+                    const w = ctx.measureText(ch).width;
+                    if (lineW > 0 && lineW + w > maxW) {
+                        lines++;
+                        lineW = w;
+                    } else {
+                        lineW += w;
+                    }
+                }
+                return lines;
+            }
+
+            /** Nombre de lignes nécessaires pour afficher le texte (retours à la ligne + césure). */
+            function mqMeasureBoxTextLines(b, text, contentWidth) {
+                if (!b.multiline) return 1;
+                const raw = (text != null ? text : b.answer || '').trim();
+                if (!raw) return Math.max(1, Number(b.rows || 2));
+                const { ctx } = mqBoxMeasureCtx(b);
+                const maxW = Math.max(20, contentWidth || 80);
+                return raw.split('\n').reduce((sum, line) => sum + mqWrapLineCount(ctx, line, maxW), 0);
+            }
+
+            function mqSyncBoxPhSize(b) {
+                if (!b || b.kind === 'iframe') return;
+                const fs = Math.max(8, Number(b.fontSize || 16));
+                b.phSize = Math.max(6, Math.round(fs * 0.9));
+            }
+
+            /** Largeur (px) nécessaire pour afficher un texte avec le style du champ. */
+            function mqMeasureBoxTextWidth(b, text) {
+                const raw = (text != null ? text : b.answer || '').trim();
+                if (!raw) return null;
+                const { ctx, m } = mqBoxMeasureCtx(b);
+                const slack = 10;
                 let textW = 0;
                 if (b.multiline) {
                     raw.split('\n').forEach((line) => {
@@ -7274,7 +7338,23 @@
                 } else {
                     textW = ctx.measureText(raw).width;
                 }
-                return Math.ceil(textW + pad + border + slack);
+                return Math.ceil(textW + m.pad + m.border + slack);
+            }
+
+            /** Hauteur (px) selon typo et contenu texte (lignes réelles ou rows par défaut). */
+            function mqMeasureBoxTextHeight(b, text) {
+                const { m } = mqBoxTypoMetrics(b);
+                const raw = (text != null ? text : b.answer || '').trim();
+                let lines;
+                if (raw) {
+                    const contentW = Math.max(20, Number(b.w || 160) - m.pad - m.border - 4);
+                    lines = mqMeasureBoxTextLines(b, raw, contentW);
+                } else if (b.multiline) {
+                    lines = Math.max(1, Number(b.rows || 2));
+                } else {
+                    lines = 1;
+                }
+                return Math.max(24, Math.ceil(m.lineH * lines + m.pad + m.border));
             }
 
             /** Ajuste la largeur du champ à la réponse attendue (ou texte de référence). */
@@ -7284,20 +7364,11 @@
                 if (measured != null) b.w = Math.max(40, Math.min(2400, measured));
             }
 
-            /** Hauteur minimale selon la taille de police (et lignes si multiligne). */
-            function mqFitBoxHeightToFont(b) {
+            /** Ajuste la hauteur du champ selon la typo et le texte (réponse ou rows). */
+            function mqFitBoxHeightToTypography(b, textOverride) {
                 if (!b || b.kind === 'iframe') return;
-                const fs = Math.max(8, Number(b.fontSize || 16));
-                const pad = Number(b.pad != null ? b.pad : 4) * 2;
-                const border = Number(b.borderW != null ? b.borderW : 2) * 2;
-                const lineH = fs * 1.35;
-                if (b.multiline) {
-                    const rows = Math.max(1, Number(b.rows || 2));
-                    b.h = Math.max(24, Math.ceil(lineH * rows + pad + border));
-                } else {
-                    b.h = Math.max(24, Math.ceil(lineH + pad + border));
-                }
-                b.phSize = Math.max(6, Math.round(fs * 0.9));
+                b.h = Math.max(24, Math.min(800, mqMeasureBoxTextHeight(b, textOverride)));
+                mqSyncBoxPhSize(b);
             }
 
             /**
@@ -7308,25 +7379,45 @@
             function mqAutoFitBoxDimensions(b, opts) {
                 if (!b || b.kind === 'iframe') return;
                 opts = opts || {};
-                mqFitBoxHeightToFont(b);
                 const ans = (b.answer || '').trim();
+                const fs = Math.max(8, Number(b.fontSize || 16));
+                const prev = opts.prevFontSize != null ? Math.max(8, Number(opts.prevFontSize)) : null;
+
                 if (ans) {
                     mqFitBoxWidthToAnswer(b);
-                } else if (opts.scaleWidthIfNoAnswer && opts.prevFontSize) {
-                    const fs = Math.max(8, Number(b.fontSize || 16));
-                    const prev = Math.max(8, Number(opts.prevFontSize));
-                    if (prev !== fs) {
-                        const ratio = fs / prev;
-                        b.w = Math.max(40, Math.min(2400, Math.round(b.w * ratio)));
-                    }
+                    mqFitBoxHeightToTypography(b, ans);
+                } else if (opts.scaleWidthIfNoAnswer && prev && prev !== fs) {
+                    const ratio = fs / prev;
+                    b.w = Math.max(40, Math.min(2400, Math.round(b.w * ratio)));
+                    b.h = Math.max(24, Math.min(800, Math.round(b.h * ratio)));
+                    mqSyncBoxPhSize(b);
+                } else {
+                    mqFitBoxHeightToTypography(b, null);
+                }
+            }
+
+            /** Recalcule w/h d'un preset bibliothèque (typo + _widthRef). */
+            function mqLibFitBoxPresetDimensions(data) {
+                if (!data) return;
+                const ref = (data._widthRef || '').trim();
+                if (ref) {
+                    mqFitBoxWidthToAnswer(data, ref);
+                    mqFitBoxHeightToTypography(data, ref);
+                } else {
+                    mqFitBoxHeightToTypography(data, null);
                 }
             }
 
             function mqLibFitBoxAfterPreset(b, entryData) {
                 const ans = (b.answer || '').trim();
                 const widthRef = (entryData && entryData._widthRef) ? String(entryData._widthRef).trim() : '';
-                mqFitBoxHeightToFont(b);
-                mqFitBoxWidthToAnswer(b, ans || widthRef || null);
+                const ref = ans || widthRef;
+                if (ref) {
+                    mqFitBoxWidthToAnswer(b, ref);
+                    mqFitBoxHeightToTypography(b, ref);
+                } else {
+                    mqSyncBoxPhSize(b);
+                }
             }
 
             function mqLibDefaultName(kind) {
