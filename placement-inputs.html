@@ -7377,7 +7377,7 @@
 
             /** Ajuste la largeur du champ à la réponse attendue (ou texte de référence). */
             function mqFitBoxWidthToAnswer(b, textOverride) {
-                if (!b || b.kind === 'iframe') return;
+                if (!b || b.kind === 'iframe' || b.multiline) return;
                 const measured = mqMeasureBoxTextWidth(b, textOverride);
                 if (measured != null) b.w = Math.max(40, Math.min(2400, measured));
             }
@@ -7402,9 +7402,9 @@
                 const prev = opts.prevFontSize != null ? Math.max(8, Number(opts.prevFontSize)) : null;
 
                 if (ans) {
-                    mqFitBoxWidthToAnswer(b);
+                    if (!b.multiline) mqFitBoxWidthToAnswer(b);
                     mqFitBoxHeightToTypography(b, ans);
-                } else if (opts.scaleWidthIfNoAnswer && prev && prev !== fs) {
+                } else if (!b.multiline && opts.scaleWidthIfNoAnswer && prev && prev !== fs) {
                     const ratio = fs / prev;
                     b.w = Math.max(40, Math.min(2400, Math.round(b.w * ratio)));
                     b.h = Math.max(24, Math.min(800, Math.round(b.h * ratio)));
@@ -7430,11 +7430,11 @@
                 const prevFs = Math.max(8, prevFontSize);
 
                 if (ref) {
-                    mqFitBoxWidthToAnswer(b, ref);
+                    if (!b.multiline) mqFitBoxWidthToAnswer(b, ref);
                     mqFitBoxHeightToTypography(b, ref);
                 } else {
                     mqFitBoxHeightToTypography(b, null);
-                    if (prevFs !== fs) {
+                    if (!b.multiline && prevFs !== fs) {
                         const ratio = fs / prevFs;
                         b.w = Math.max(40, Math.min(2400, Math.round(prevW * ratio)));
                         b.h = Math.max(24, Math.min(800, Math.round(prevH * ratio)));
@@ -7448,7 +7448,7 @@
                 if (!data) return;
                 const ref = (data._widthRef || '').trim();
                 if (ref) {
-                    mqFitBoxWidthToAnswer(data, ref);
+                    if (!data.multiline) mqFitBoxWidthToAnswer(data, ref);
                     mqFitBoxHeightToTypography(data, ref);
                 } else {
                     mqFitBoxHeightToTypography(data, null);
@@ -7460,9 +7460,10 @@
                 const widthRef = (entryData && entryData._widthRef) ? String(entryData._widthRef).trim() : '';
                 const ref = ans || widthRef;
                 if (ref) {
-                    mqFitBoxWidthToAnswer(b, ref);
+                    if (!b.multiline) mqFitBoxWidthToAnswer(b, ref);
                     mqFitBoxHeightToTypography(b, ref);
                 } else {
+                    mqFitBoxHeightToTypography(b, null);
                     mqSyncBoxPhSize(b);
                 }
             }
