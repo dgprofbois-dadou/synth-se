@@ -2312,9 +2312,8 @@
                 value="Binder 2019 Toupie P _Page_1.jpg">
             <input type="text" id="confImg2" placeholder="Img Page 2 (ex: fond2.jpg)" style="width:140px;"
                 value="Binder 2019 Toupie P _Page_2.jpg">
-            <input type="text" id="confPrefix" placeholder="Préfixe PDF" style="width:90px;" value="exercice">
-            <input type="text" id="confExportName" placeholder="Nom fichier .html" style="width:140px;" value="exercice"
-                title="Nom du fichier HTML téléchargé par ⚡ GÉNÉRER">
+            <input type="text" id="confPrefix" placeholder="Préfixe MP3/PDF" style="width:110px;" value="exercice"
+                title="Préfixe des fichiers MP3 (ex. exercice-ch001.mp3) et export PDF — indépendant du nom du projet">
 
         </div>
         <button id="btnGenHTML" class="primary" style="font-weight:bold;">⚡ GÉNÉRER</button>
@@ -2337,6 +2336,8 @@
 
         <button id="btnSaveLocal" type="button">Save</button>
         <button id="btnLoadLocal" type="button">Load</button>
+        <input type="text" id="confExportName" placeholder="Nom du projet" style="width:150px;"
+            title="Nom du fichier HTML en cours de travail (⚡ GÉNÉRER) — n'affecte pas les MP3">
 
         <div id="score-info-topbar">Score: 0/0</div>
         <div class="score-widget">
@@ -2378,7 +2379,7 @@
                 <input id="confVoiceBase" type="text" placeholder="https://monsite.fr/voices/" style="flex:1;">
             </div>
             <div class="mini" style="color:#666; margin-top:-4px;">
-                URL du dossier où vous déposez les MP3 (barre oblique finale optionnelle).
+                URL du dossier où vous déposez les MP3 (barre oblique finale optionnelle). Les noms MP3 utilisent le <strong>préfixe MP3/PDF</strong> (barre du haut), pas le nom du projet.
             </div>
             <button id="btnVoiceManifest" type="button" style="width:100%; margin:6px 0 4px; font-size:12px;">📋 Liste des MP3 à produire</button>
             <pre id="pVoiceManifest" style="display:none;"></pre>
@@ -5013,11 +5014,9 @@
             function mqGetVoicePrefix() {
                 return mqSanitizeVoicePrefix($('confPrefix') ? $('confPrefix').value : 'exercice');
             }
-            /** Nom de base du fichier HTML généré (sans extension). */
+            /** Nom du projet / fichier HTML (sans extension) — indépendant des MP3. */
             function getHtmlExportBaseName() {
-                const raw = ($('confExportName') ? $('confExportName').value : '')
-                    || ($('confPrefix') ? $('confPrefix').value : '')
-                    || 'exercice';
+                const raw = ($('confExportName') ? $('confExportName').value : '') || 'exercice';
                 return mqSanitizeVoicePrefix(String(raw).trim().replace(/\.html$/i, ''));
             }
             function getHtmlExportFileName() {
@@ -5088,7 +5087,8 @@
                 const lines = [];
                 const base = ($('confVoiceBase') && $('confVoiceBase').value || '').trim();
                 lines.push('# MP3 à produire — nom = préfixe-identifiant.mp3');
-                lines.push('# Préfixe export : ' + mqGetVoicePrefix());
+                lines.push('# Préfixe MP3/PDF : ' + mqGetVoicePrefix());
+                lines.push('# Nom du projet HTML : ' + getHtmlExportBaseName());
                 if (base) lines.push('# URL FTP : ' + base.replace(/\/+$/, '') + '/');
                 lines.push('');
                 state.boxes.forEach((b, i) => {
@@ -9350,7 +9350,7 @@
                         resolveBgInto('confImg2', snap.exportConfig.img2 || '', 1);
                         if ($('confPrefix')) $('confPrefix').value = snap.exportConfig.prefix || '';
                         if ($('confExportName')) {
-                            $('confExportName').value = snap.exportConfig.htmlName || snap.exportConfig.prefix || '';
+                            $('confExportName').value = snap.exportConfig.htmlName || 'exercice';
                         }
                         if ($('confVoiceBase')) $('confVoiceBase').value = snap.exportConfig.voiceBase || '';
                     }
@@ -9775,7 +9775,7 @@
                     resolveBgInto('confImg2', obj.exportConfig.img2 || '', 1);
                     if ($('confPrefix')) $('confPrefix').value = obj.exportConfig.prefix || '';
                     if ($('confExportName')) {
-                        $('confExportName').value = obj.exportConfig.htmlName || obj.exportConfig.prefix || '';
+                        $('confExportName').value = obj.exportConfig.htmlName || 'exercice';
                     }
                     if ($('confVoiceBase')) $('confVoiceBase').value = obj.exportConfig.voiceBase || '';
                 }
