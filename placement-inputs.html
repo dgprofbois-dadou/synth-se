@@ -3647,12 +3647,7 @@
                     field.style.fontSize = (b.fontSize ?? 16) + 'px';
                     field.style.fontWeight = String(b.weight ?? 400);
                     field.style.padding = (b.pad ?? 4) + 'px';
-                    field.style.setProperty('--ph-color', b.phColor ?? '#b5b5b5');
-                    field.style.setProperty('--ph-opacity', String(b.phOpacity ?? 1));
-                    field.style.setProperty('--ph-size', (b.phSize ? `${b.phSize}px` : '1em'));
-                    field.style.setProperty('--ph-font', b.phFont ?? 'inherit');
-                    field.style.setProperty('--ph-weight', String(b.phWeight ?? 'inherit'));
-                    field.style.setProperty('--ph-style', b.phStyle ?? 'normal');
+                    mqApplyFieldPlaceholder(b, field);
 
                     // === Validation élève ===
                     field.addEventListener('input', () => {
@@ -3816,6 +3811,8 @@
                         b.h = Math.max(24, Math.round(rstart.h + dh));
                         el.style.width = b.w + 'px';
                         el.style.height = b.h + 'px';
+                        const _phField = el.querySelector('.field');
+                        if (_phField) mqApplyFieldPlaceholder(b, _phField);
                         syncPropsFromSelected();
                     });
                     handle.addEventListener('pointerup', () => {
@@ -4527,12 +4524,7 @@
                     field.style.fontSize = (b.fontSize ?? 16) + 'px';
                     field.style.fontWeight = String(b.weight ?? 400);
                     field.style.padding = (b.pad ?? 4) + 'px';
-                    field.style.setProperty('--ph-color', b.phColor ?? '#b5b5b5');
-                    field.style.setProperty('--ph-opacity', String(b.phOpacity ?? 1));
-                    field.style.setProperty('--ph-size', (b.phSize ? `${b.phSize}px` : '1em'));
-                    field.style.setProperty('--ph-font', b.phFont ?? 'inherit');
-                    field.style.setProperty('--ph-weight', String(b.phWeight ?? 'inherit'));
-                    field.style.setProperty('--ph-style', b.phStyle ?? 'normal');
+                    mqApplyFieldPlaceholder(b, field);
 
                     field.addEventListener('focus', () => {
                         if (state.mode !== 'student' || b.locked) return;
@@ -4702,6 +4694,8 @@
                         b.h = Math.max(24, Math.round(rstart.h + dh));
                         el.style.width = b.w + 'px';
                         el.style.height = b.h + 'px';
+                        const _phField = el.querySelector('.field');
+                        if (_phField) mqApplyFieldPlaceholder(b, _phField);
                         syncPropsFromSelected();
                     });
                     handle.addEventListener('pointerup', () => {
@@ -7352,6 +7346,89 @@
                 if (!b || b.kind === 'iframe') return;
                 const fs = Math.max(8, Number(b.fontSize || 16));
                 b.phSize = Math.max(6, Math.round(fs * 0.9));
+            }
+
+            function mqResolveBoxPhSize(b) {
+                return Math.max(6, Number(b.phSize != null ? b.phSize : Math.round((b.fontSize || 16) * 0.9)));
+            }
+
+            function mqBoxContentWidth(b) {
+                const m = mqBoxTypoMetrics(b);
+                return Math.max(20, Number(b.w || 160) - m.pad - m.border - 4);
+            }
+
+            function mqBoxPhMeasureCtx(b) {
+                const fs = mqResolveBoxPhSize(b);
+                const fw = (b.phWeight && b.phWeight !== 'inherit')
+                    ? String(b.phWeight)
+                    : String(b.weight != null ? b.weight : 400);
+                const ff = (b.phFont && b.phFont !== 'inherit')
+                    ? b.phFont
+                    : ((b.font && b.font !== 'inherit')
+                        ? b.font
+                        : 'system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif');
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                ctx.font = fw + ' ' + fs + 'px ' + ff;
+                return { ctx, fs, fw, ff };
+            }
+
+            /** Placeholder affiché : typo + longueur adaptées à la box (underscores ou troncature). */
+            function mqFitPlaceholderToBox(b, raw) {
+                const src = (raw != null ? raw : b.placeholder || '_______').trim() || '_______';
+                const contentW = mqBoxContentWidth(b);
+                const { ctx, fs } = mqBoxPhMeasureCtx(b);
+
+                if (/^_+$/.test(src)) {
+                    const uw = Math.max(1, ctx.measureText('_').width);
+                    const perLine = Math.max(1, Math.floor(contentW / uw));
+                    if (!b.multiline) return '_'.repeat(perLine);
+                    const tm = mqBoxTypoMetrics(b);
+                    const innerH = Math.max(fs, Number(b.h || 34) - tm.pad - tm.border);
+                    const lineH = fs * 1.15;
+                    const rows = Math.max(1, Math.floor(innerH / lineH));
+                    return Array.from({ length: rows }, () => '_'.repeat(perLine)).join('\n');
+                }
+
+                if (!b.multiline) {
+                    if (ctx.measureText(src).width <= contentW) return src;
+                    let out = src;
+                    while (out.length > 1 && ctx.measureText(out + '…').width > contentW) {
+                        out = out.slice(0, -1);
+                    }
+                    return out.length < src.length ? out + '…' : out;
+                }
+
+                const lines = src.split('\n');
+                const fitted = lines.map((line) => {
+                    if (!line) return '';
+                    if (ctx.measureText(line).width <= contentW) return line;
+                    let out = line;
+                    while (out.length > 1 && ctx.measureText(out + '…').width > contentW) {
+                        out = out.slice(0, -1);
+                    }
+                    return out.length < line.length ? out + '…' : out;
+                });
+                const tm = mqBoxTypoMetrics(b);
+                const innerH = Math.max(fs, Number(b.h || 34) - tm.pad - tm.border);
+                const maxRows = Math.max(1, Math.floor(innerH / (fs * 1.15)));
+                return fitted.slice(0, maxRows).join('\n');
+            }
+
+            /** Applique placeholder + variables CSS typo sur un champ rendu. */
+            function mqApplyFieldPlaceholder(b, field) {
+                if (!b || !field) return;
+                const phFs = mqResolveBoxPhSize(b);
+                const phFont = (b.phFont && b.phFont !== 'inherit') ? b.phFont : (b.font ?? 'inherit');
+                const phWeight = (b.phWeight && b.phWeight !== 'inherit') ? String(b.phWeight) : String(b.weight ?? 'inherit');
+                const phStyle = b.phStyle ?? 'normal';
+                field.placeholder = mqFitPlaceholderToBox(b);
+                field.style.setProperty('--ph-color', b.phColor ?? '#b5b5b5');
+                field.style.setProperty('--ph-opacity', String(b.phOpacity ?? 1));
+                field.style.setProperty('--ph-size', phFs + 'px');
+                field.style.setProperty('--ph-font', phFont);
+                field.style.setProperty('--ph-weight', phWeight);
+                field.style.setProperty('--ph-style', phStyle);
             }
 
             /** Largeur (px) nécessaire pour afficher un texte avec le style du champ. */
@@ -11326,14 +11403,18 @@
                         const hPct = (b.h / containerBaseH) * 100;
                         const fsVw = (b.fontSize || 16) * pxToVw;
                         const padVw = (b.pad || 0) * pxToVw;
+                        const phFs = mqResolveBoxPhSize(b);
+                        const phFont = (b.phFont && b.phFont !== 'inherit') ? b.phFont : (b.font || 'inherit');
+                        const phWeight = (b.phWeight && b.phWeight !== 'inherit') ? String(b.phWeight) : String(b.weight ?? 400);
+                        const phDisplay = mqFitPlaceholderToBox(b).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/\n/g, '&#10;');
 
-                        const styles = `width:100%; height:100%; font-family:${b.font}; font-size:${b.fontSize || 16}px; font-weight:${b.weight}; padding:${b.pad ?? 4}px; border:2px solid #666; border-radius:8px; box-sizing:border-box;`;
+                        const styles = `width:100%; height:100%; font-family:${b.font}; font-size:${b.fontSize || 16}px; font-weight:${b.weight}; padding:${b.pad ?? 4}px; border:2px solid #666; border-radius:8px; box-sizing:border-box; --ph-size:${phFs}px; --ph-font:${phFont}; --ph-weight:${phWeight}; --ph-color:${b.phColor ?? '#b5b5b5'}; --ph-opacity:${b.phOpacity ?? 1};`;
                         const voiceFile = mqVoiceFileName(b).replace(/"/g, '&quot;');
 
                         html += `
                 <div class="input-wrapper" style="top:${topPct}%; left:${leftPct}%; width:${wPct}%; height:${hPct}%;" 
                      data-tooltip="${safeHint}" data-hint-font="${finalFont}" data-duration="${b.hintMs || 3000}" data-group="${group}" data-voice="${voiceFile}">
-                    <${tag} data-answer="${safeAns}" placeholder="${(b.placeholder || '').replace(/"/g, '&quot;')}" style="${styles}">${closeTag}
+                    <${tag} data-answer="${safeAns}" placeholder="${phDisplay}" style="${styles}">${closeTag}
                 </div>`;
                     });
 
@@ -11499,14 +11580,18 @@
                         const hPct = (b.h / containerBaseH) * 100;
                         const fsVw = (b.fontSize || 16) * pxToVw;
                         const padVw = (b.pad || 0) * pxToVw;
+                        const phFs = mqResolveBoxPhSize(b);
+                        const phFont = (b.phFont && b.phFont !== 'inherit') ? b.phFont : (b.font || 'inherit');
+                        const phWeight = (b.phWeight && b.phWeight !== 'inherit') ? String(b.phWeight) : String(b.weight ?? 400);
+                        const phDisplay = mqFitPlaceholderToBox(b).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/\n/g, '&#10;');
 
-                        const styles = `width:100%; height:100%; font-family:${b.font}; font-size:${b.fontSize || 16}px; font-weight:${b.weight}; padding:${b.pad ?? 4}px; border:2px solid #666; border-radius:8px; box-sizing:border-box;`;
+                        const styles = `width:100%; height:100%; font-family:${b.font}; font-size:${b.fontSize || 16}px; font-weight:${b.weight}; padding:${b.pad ?? 4}px; border:2px solid #666; border-radius:8px; box-sizing:border-box; --ph-size:${phFs}px; --ph-font:${phFont}; --ph-weight:${phWeight}; --ph-color:${b.phColor ?? '#b5b5b5'}; --ph-opacity:${b.phOpacity ?? 1};`;
                         const voiceFile = mqVoiceFileName(b).replace(/"/g, '&quot;');
 
                         html += `
                 <div class="input-wrapper" style="top:${topPct}%; left:${leftPct}%; width:${wPct}%; height:${hPct}%;" 
                      data-tooltip="${safeHint}" data-hint-font="${finalFont}" data-duration="${b.hintMs || 3000}" data-group="${group}" data-voice="${voiceFile}">
-                    <${tag} data-answer="${safeAns}" placeholder="${(b.placeholder || '').replace(/"/g, '&quot;')}" style="${styles}">${closeTag}
+                    <${tag} data-answer="${safeAns}" placeholder="${phDisplay}" style="${styles}">${closeTag}
                 </div>`;
                     });
 
