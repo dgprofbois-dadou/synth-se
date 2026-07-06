@@ -7361,7 +7361,7 @@
 
             /** Hauteur (px) selon typo et contenu texte (lignes réelles ou rows par défaut). */
             function mqMeasureBoxTextHeight(b, text) {
-                const { m } = mqBoxTypoMetrics(b);
+                const m = mqBoxTypoMetrics(b);
                 const raw = (text != null ? text : b.answer || '').trim();
                 let lines;
                 if (raw) {
