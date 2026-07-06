@@ -7396,6 +7396,17 @@
                 }
             }
 
+            /** Applique un style de champ puis recalcule w/h (typo + réponse). */
+            function mqApplyBoxStyleWithDimFit(b, s) {
+                if (!b || b.kind === 'iframe' || !s) return;
+                const prevFontSize = b.fontSize;
+                applyBoxStyle(b, s);
+                mqAutoFitBoxDimensions(b, {
+                    prevFontSize,
+                    scaleWidthIfNoAnswer: !(b.answer || '').trim()
+                });
+            }
+
             /** Recalcule w/h d'un preset bibliothèque (typo + _widthRef). */
             function mqLibFitBoxPresetDimensions(data) {
                 if (!data) return;
@@ -8722,7 +8733,7 @@
                         e.preventDefault(); e.stopPropagation();
                         const b = state.boxes.find(x => x.id === boxEl.dataset.id);
                         if (b && b.kind !== 'iframe') {
-                            applyBoxStyle(b, mqBoxBrushStyle);
+                            mqApplyBoxStyleWithDimFit(b, mqBoxBrushStyle);
                             render(); mqFlashBox(b.id);
                             if (state.selectedId === b.id) syncPropsFromSelected();
                             scheduleSaveLocal();
@@ -8739,7 +8750,7 @@
                         const src = state.boxes.find(x => x.id === boxEl.dataset.id);
                         const tgt = state.boxes.find(x => x.id === mqBoxPipetteTarget);
                         if (src && tgt && src.kind !== 'iframe' && tgt.kind !== 'iframe') {
-                            applyBoxStyle(tgt, extractBoxStyle(src));
+                            mqApplyBoxStyleWithDimFit(tgt, extractBoxStyle(src));
                             render();
                             mqFlashBox(src.id); mqFlashBox(tgt.id);
                             if (state.selectedId === tgt.id) syncPropsFromSelected();
