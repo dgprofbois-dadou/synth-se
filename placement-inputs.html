@@ -6884,6 +6884,24 @@
             const MQ_BOX_STYLE_KEYS = ['font', 'fontSize', 'weight', 'pad', 'bgColor', 'bgAlpha', 'borderColor', 'borderW', 'radius', 'phColor', 'phOpacity', 'phSize', 'phFont', 'phWeight', 'phStyle', 'fillTyping', 'fillWrong', 'fillOk', 'hintRender', 'hintFontSize', 'hintFont', 'hintPad', 'hintMs'];
             function extractBoxStyle(b) { const o = {}; MQ_BOX_STYLE_KEYS.forEach(k => o[k] = b[k]); return o; }
             function applyBoxStyle(b, s) { MQ_BOX_STYLE_KEYS.forEach(k => { if (s[k] !== undefined) b[k] = s[k]; }); }
+            /** Style pinceau/pipette : typo + multiligne + référence de dimension (_widthRef). */
+            function extractBoxStyleForBrush(b) {
+                if (!b) return null;
+                const o = extractBoxStyle(b);
+                o.multiline = !!b.multiline;
+                o.rows = Math.max(1, Number(b.rows) || 2);
+                const ans = (b.answer || '').trim();
+                if (ans) o._widthRef = ans;
+                return o;
+            }
+            /** Met à jour largeur/hauteur du .box sur le canvas après recalcul. */
+            function mqSyncBoxCanvasGeometry(b) {
+                if (!b || !stage) return;
+                const el = stage.querySelector('.box[data-id="' + b.id + '"]');
+                if (!el || el.classList.contains('box-iframe')) return;
+                el.style.width = b.w + 'px';
+                el.style.height = b.h + 'px';
+            }
 
             // ─── Bibliothèque de configurations (champs / hotspots) ───
             const MQ_LIB_STORAGE_KEY = 'mq_config_library_v1';
@@ -7396,15 +7414,33 @@
                 }
             }
 
-            /** Applique un style de champ puis recalcule w/h (typo + réponse). */
+            /** Applique un style de champ puis recalcule w/h (typo + réponse ou _widthRef source). */
             function mqApplyBoxStyleWithDimFit(b, s) {
                 if (!b || b.kind === 'iframe' || !s) return;
-                const prevFontSize = b.fontSize;
+                const prevFontSize = Number(b.fontSize) || 16;
+                const prevW = Number(b.w) || 160;
+                const prevH = Number(b.h) || 34;
                 applyBoxStyle(b, s);
-                mqAutoFitBoxDimensions(b, {
-                    prevFontSize,
-                    scaleWidthIfNoAnswer: !(b.answer || '').trim()
-                });
+                if (s.multiline !== undefined) b.multiline = !!s.multiline;
+                if (s.rows !== undefined) b.rows = Math.max(1, Number(s.rows) || 2);
+
+                const ownAns = (b.answer || '').trim();
+                const ref = ownAns || String(s._widthRef || '').trim();
+                const fs = Math.max(8, Number(b.fontSize) || 16);
+                const prevFs = Math.max(8, prevFontSize);
+
+                if (ref) {
+                    mqFitBoxWidthToAnswer(b, ref);
+                    mqFitBoxHeightToTypography(b, ref);
+                } else {
+                    mqFitBoxHeightToTypography(b, null);
+                    if (prevFs !== fs) {
+                        const ratio = fs / prevFs;
+                        b.w = Math.max(40, Math.min(2400, Math.round(prevW * ratio)));
+                        b.h = Math.max(24, Math.min(800, Math.round(prevH * ratio)));
+                        mqSyncBoxPhSize(b);
+                    }
+                }
             }
 
             /** Recalcule w/h d'un preset bibliothèque (typo + _widthRef). */
@@ -8513,7 +8549,7 @@
                 const b = getSelected();
                 if (!b || b.kind === 'iframe') { alert('Sélectionnez d\'abord un champ source.'); return; }
                 mqCancelTools();
-                mqBoxBrushStyle = extractBoxStyle(b);
+                mqBoxBrushStyle = extractBoxStyleForBrush(b);
                 mqHsBanner('🖌️ Pinceau : cliquez les champs à styliser — Échap / clic droit pour terminer');
                 document.body.style.cursor = 'copy';
             };
@@ -8734,9 +8770,11 @@
                         const b = state.boxes.find(x => x.id === boxEl.dataset.id);
                         if (b && b.kind !== 'iframe') {
                             mqApplyBoxStyleWithDimFit(b, mqBoxBrushStyle);
-                            render(); mqFlashBox(b.id);
+                            render();
+                            mqSyncBoxCanvasGeometry(b);
                             if (state.selectedId === b.id) syncPropsFromSelected();
                             scheduleSaveLocal();
+                            mqFlashBox(b.id);
                         }
                     }
                     return;
@@ -8750,8 +8788,9 @@
                         const src = state.boxes.find(x => x.id === boxEl.dataset.id);
                         const tgt = state.boxes.find(x => x.id === mqBoxPipetteTarget);
                         if (src && tgt && src.kind !== 'iframe' && tgt.kind !== 'iframe') {
-                            mqApplyBoxStyleWithDimFit(tgt, extractBoxStyle(src));
+                            mqApplyBoxStyleWithDimFit(tgt, extractBoxStyleForBrush(src));
                             render();
+                            mqSyncBoxCanvasGeometry(tgt);
                             mqFlashBox(src.id); mqFlashBox(tgt.id);
                             if (state.selectedId === tgt.id) syncPropsFromSelected();
                             scheduleSaveLocal();
@@ -11651,40 +11690,7 @@
                 }
 
                 // On stocke UNIQUEMENT l'apparence (pas le contenu, ni la réponse)
-                boxClipboard = {
-                    // Police & Texte
-                    font: b.font,
-                    fontSize: b.fontSize,
-                    weight: b.weight,
-                    pad: b.pad,
-
-                    // Apparence Boîte
-                    bgColor: b.bgColor,
-                    bgAlpha: b.bgAlpha,
-                    borderColor: b.borderColor,
-                    borderW: b.borderW,
-                    radius: b.radius,
-
-                    // Placeholder (Style uniquement)
-                    phColor: b.phColor,
-                    phOpacity: b.phOpacity,
-                    phSize: b.phSize,
-                    phFont: b.phFont,
-                    phWeight: b.phWeight,
-                    phStyle: b.phStyle,
-
-                    // Couleurs de validation (Élève)
-                    fillTyping: b.fillTyping,
-                    fillWrong: b.fillWrong,
-                    fillOk: b.fillOk,
-
-                    // Style de l'infobulle (mais pas le texte)
-                    hintRender: b.hintRender,
-                    hintFontSize: b.hintFontSize,
-                    hintFont: b.hintFont,
-                    hintPad: b.hintPad,
-                    hintMs: b.hintMs
-                };
+                boxClipboard = extractBoxStyleForBrush(b);
 
                 // Feedback visuel
                 btnCopyBoxStyle.textContent = "Copié !";
@@ -11704,37 +11710,10 @@
                 }
                 if (!boxClipboard) return;
 
-                // Application des valeurs
-                b.font = boxClipboard.font;
-                b.fontSize = boxClipboard.fontSize;
-                b.weight = boxClipboard.weight;
-                b.pad = boxClipboard.pad;
-
-                b.bgColor = boxClipboard.bgColor;
-                b.bgAlpha = boxClipboard.bgAlpha;
-                b.borderColor = boxClipboard.borderColor;
-                b.borderW = boxClipboard.borderW;
-                b.radius = boxClipboard.radius;
-
-                b.phColor = boxClipboard.phColor;
-                b.phOpacity = boxClipboard.phOpacity;
-                b.phSize = boxClipboard.phSize;
-                b.phFont = boxClipboard.phFont;
-                b.phWeight = boxClipboard.phWeight;
-                b.phStyle = boxClipboard.phStyle;
-
-                b.fillTyping = boxClipboard.fillTyping;
-                b.fillWrong = boxClipboard.fillWrong;
-                b.fillOk = boxClipboard.fillOk;
-
-                b.hintRender = boxClipboard.hintRender;
-                b.hintFontSize = boxClipboard.hintFontSize;
-                b.hintFont = boxClipboard.hintFont;
-                b.hintPad = boxClipboard.hintPad;
-                b.hintMs = boxClipboard.hintMs;
-
+                mqApplyBoxStyleWithDimFit(b, boxClipboard);
                 syncPropsFromSelected();
                 render();
+                mqSyncBoxCanvasGeometry(b);
                 scheduleSaveLocal();
 
                 const oldText = btnPasteBoxStyle.textContent;
