@@ -2313,6 +2313,8 @@
             <input type="text" id="confImg2" placeholder="Img Page 2 (ex: fond2.jpg)" style="width:140px;"
                 value="Binder 2019 Toupie P _Page_2.jpg">
             <input type="text" id="confPrefix" placeholder="Préfixe PDF" style="width:90px;" value="exercice">
+            <input type="text" id="confExportName" placeholder="Nom fichier .html" style="width:140px;" value="exercice"
+                title="Nom du fichier HTML téléchargé par ⚡ GÉNÉRER">
 
         </div>
         <button id="btnGenHTML" class="primary" style="font-weight:bold;">⚡ GÉNÉRER</button>
@@ -5016,6 +5018,16 @@
             }
             function mqGetVoicePrefix() {
                 return mqSanitizeVoicePrefix($('confPrefix') ? $('confPrefix').value : 'exercice');
+            }
+            /** Nom de base du fichier HTML généré (sans extension). */
+            function getHtmlExportBaseName() {
+                const raw = ($('confExportName') ? $('confExportName').value : '')
+                    || ($('confPrefix') ? $('confPrefix').value : '')
+                    || 'exercice';
+                return mqSanitizeVoicePrefix(String(raw).trim().replace(/\.html$/i, ''));
+            }
+            function getHtmlExportFileName() {
+                return getHtmlExportBaseName() + '.html';
             }
             function mqNextVoiceKey() {
                 let max = 0;
@@ -9155,6 +9167,7 @@
                         img1: $('confImg1') ? $('confImg1').value : '',
                         img2: $('confImg2') ? $('confImg2').value : '',
                         prefix: $('confPrefix') ? $('confPrefix').value : '',
+                        htmlName: $('confExportName') ? $('confExportName').value : '',
                         voiceBase: $('confVoiceBase') ? $('confVoiceBase').value : ''
                     }
                 };
@@ -9214,6 +9227,9 @@
                         resolveBgInto('confImg1', snap.exportConfig.img1 || '', 0);
                         resolveBgInto('confImg2', snap.exportConfig.img2 || '', 1);
                         if ($('confPrefix')) $('confPrefix').value = snap.exportConfig.prefix || '';
+                        if ($('confExportName')) {
+                            $('confExportName').value = snap.exportConfig.htmlName || snap.exportConfig.prefix || '';
+                        }
                         if ($('confVoiceBase')) $('confVoiceBase').value = snap.exportConfig.voiceBase || '';
                     }
                     if (confLayout) {
@@ -9539,6 +9555,7 @@
                         img1: $('confImg1') ? $('confImg1').value : '',
                         img2: $('confImg2') ? $('confImg2').value : '',
                         prefix: $('confPrefix') ? $('confPrefix').value : '',
+                        htmlName: $('confExportName') ? $('confExportName').value : '',
                         voiceBase: $('confVoiceBase') ? $('confVoiceBase').value : ''
                     }
                 };
@@ -9635,6 +9652,9 @@
                     resolveBgInto('confImg1', obj.exportConfig.img1 || '', 0);
                     resolveBgInto('confImg2', obj.exportConfig.img2 || '', 1);
                     if ($('confPrefix')) $('confPrefix').value = obj.exportConfig.prefix || '';
+                    if ($('confExportName')) {
+                        $('confExportName').value = obj.exportConfig.htmlName || obj.exportConfig.prefix || '';
+                    }
                     if ($('confVoiceBase')) $('confVoiceBase').value = obj.exportConfig.voiceBase || '';
                 }
 
@@ -11109,6 +11129,7 @@
                     const pathImg1 = mqNormalizeBgPath($('confImg1') ? $('confImg1').value : '', 0);
                     const pathImg2 = mqNormalizeBgPath($('confImg2') ? $('confImg2').value : '', 1);
                     const prefix = $('confPrefix') ? $('confPrefix').value : 'exercice';
+                    const htmlFileName = getHtmlExportFileName();
                     mqEnsureAllVoiceKeys();
                     const voiceBaseExport = ($('confVoiceBase') ? $('confVoiceBase').value : '').trim();
 
@@ -11168,7 +11189,7 @@
                     }
 
                     // Chemin relatif pour iframe Moodle (// = même protocole que la page : HTTP ou HTTPS)
-                    const genFileName = (prefix || 'exercice').replace(/[^\w\u00C0-\u024F.-]+/gi, '_') + '.html';
+                    const genFileName = htmlFileName;
                     const moodleIframeSrc = `//VOTRE-DOMAINE/chemin/vers/${genFileName}`;
 
                     // 2. Début HTML
@@ -11575,7 +11596,7 @@
                     try {
                         if (window.showSaveFilePicker) {
                             const handle = await window.showSaveFilePicker({
-                                suggestedName: (prefix || 'exercice') + '.html',
+                                suggestedName: htmlFileName,
                                 types: [{ description: 'Page Web HTML', accept: { 'text/html': ['.html'] } }],
                             });
                             const writable = await handle.createWritable();
@@ -11590,7 +11611,7 @@
                             const url = URL.createObjectURL(blob);
                             const a = document.createElement('a');
                             a.href = url;
-                            a.download = (prefix || 'exercice') + '.html';
+                            a.download = htmlFileName;
                             document.body.appendChild(a);
                             a.click();
                             document.body.removeChild(a);
