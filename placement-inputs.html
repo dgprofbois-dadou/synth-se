@@ -944,6 +944,27 @@
             font-weight: 600;
         }
 
+        #topbar.mq-topbar .mq-crumb #confExportName,
+        #topbar.mq-topbar .mq-project-name {
+            width: min(220px, 28vw);
+            min-width: 120px;
+            margin: 0;
+            padding: 4px 8px;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--mq-text);
+            background: #fff;
+            border: 1px solid var(--mq-border, #d8dee6);
+            border-radius: 6px;
+            box-sizing: border-box;
+        }
+
+        #topbar.mq-topbar .mq-crumb #confExportName:focus {
+            outline: none;
+            border-color: #2196f3;
+            box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.2);
+        }
+
         #topbar.mq-topbar .mq-save-ind {
             display: inline-flex;
             align-items: center;
@@ -13308,7 +13329,7 @@
             stash.setAttribute('aria-hidden', 'true');
             document.body.appendChild(stash);
 
-            const stashIds = ['btnAdd', 'btnHs', 'btnHsFreehand', 'btnIframe', 'btnUndo', 'btnRedo', 'btnDup', 'btnDel', 'btnFront', 'btnBack', 'btnGenHTML', 'btnSaveLocal', 'btnLoadLocal', 'btnFit', 'zoomSlider', 'btnSpellCheck', 'btnSpellReview'];
+            const stashIds = ['btnAdd', 'btnHs', 'btnHsFreehand', 'btnIframe', 'btnUndo', 'btnRedo', 'btnDup', 'btnDel', 'btnFront', 'btnBack', 'btnGenHTML', 'btnSaveLocal', 'btnLoadLocal', 'btnFit', 'zoomSlider', 'btnSpellCheck', 'btnSpellReview', 'confExportName'];
             stashIds.forEach((sid) => {
                 const el = $(sid);
                 if (el && el.parentNode) stash.appendChild(el);
@@ -13335,7 +13356,24 @@
             }
 
             const brand = el('div', 'mq-brand');
-            brand.innerHTML = '<div class="mq-brand-mark" aria-hidden="true">M</div><div class="mq-crumb"><strong>Mes synthèses</strong> / Raboteuse — utilisation</div>';
+            const mark = el('div', 'mq-brand-mark');
+            mark.setAttribute('aria-hidden', 'true');
+            mark.textContent = 'M';
+            const crumb = el('div', 'mq-crumb');
+            crumb.innerHTML = '<strong>Mes synthèses</strong> / ';
+            const projectNameInput = $('confExportName');
+            if (projectNameInput) {
+                projectNameInput.classList.add('mq-project-name');
+                projectNameInput.removeAttribute('style');
+                projectNameInput.placeholder = 'Nom du projet';
+                projectNameInput.title = 'Nom du projet : fichier HTML + préfixe MP3 (ex. raboteuse-ch001.mp3)';
+                projectNameInput.setAttribute('aria-label', 'Nom du projet');
+                crumb.appendChild(projectNameInput);
+            } else {
+                crumb.innerHTML += '<span style="color:var(--mq-text);font-weight:600;">Raboteuse — utilisation</span>';
+            }
+            brand.appendChild(mark);
+            brand.appendChild(crumb);
 
             const saveInd = el('div', 'mq-save-ind');
             saveInd.innerHTML = '<span class="mq-save-dot" aria-hidden="true"></span><span class="mq-save-txt">Enregistré</span>';
