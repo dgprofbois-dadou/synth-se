@@ -7352,13 +7352,7 @@
                 return Math.max(6, Number(b.phSize != null ? b.phSize : Math.round((b.fontSize || 16) * 0.9)));
             }
 
-            function mqBoxContentWidth(b) {
-                const m = mqBoxTypoMetrics(b);
-                return Math.max(20, Number(b.w || 160) - m.pad - m.border - 4);
-            }
-
-            function mqBoxPhMeasureCtx(b) {
-                const fs = mqResolveBoxPhSize(b);
+            function mqBoxPhStyle(b) {
                 const fw = (b.phWeight && b.phWeight !== 'inherit')
                     ? String(b.phWeight)
                     : String(b.weight != null ? b.weight : 400);
@@ -7367,33 +7361,69 @@
                     : ((b.font && b.font !== 'inherit')
                         ? b.font
                         : 'system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif');
+                return { fw, ff };
+            }
+
+            function mqBoxContentWidth(b) {
+                const m = mqBoxTypoMetrics(b);
+                return Math.max(20, Number(b.w || 160) - m.pad - m.border - 4);
+            }
+
+            function mqBoxInnerSize(b) {
+                const m = mqBoxTypoMetrics(b);
+                return {
+                    w: mqBoxContentWidth(b),
+                    h: Math.max(10, Number(b.h || 34) - m.pad - m.border - 4)
+                };
+            }
+
+            function mqPhLineRatio(b) {
+                return b.multiline ? 1.15 : 1.35;
+            }
+
+            function mqPhMeasureCtx(b, fs) {
+                const { fw, ff } = mqBoxPhStyle(b);
                 const canvas = document.createElement('canvas');
                 const ctx = canvas.getContext('2d');
                 ctx.font = fw + ' ' + fs + 'px ' + ff;
-                return { ctx, fs, fw, ff };
+                return ctx;
             }
 
-            /** Placeholder affiché : typo + longueur adaptées à la box (underscores ou troncature). */
-            function mqFitPlaceholderToBox(b, raw) {
+            /** Le placeholder brut tient-il dans la box à cette taille de police ? */
+            function mqPlaceholderFitsInBox(b, src, fs, inner) {
+                const ctx = mqPhMeasureCtx(b, fs);
+                const lineH = fs * mqPhLineRatio(b);
+
+                if (/^_+$/.test(src)) {
+                    if (!b.multiline) return lineH <= inner.h;
+                    return Math.floor(inner.h / lineH) >= 1;
+                }
+
+                const lines = b.multiline ? src.split('\n') : [src];
+                const maxRows = b.multiline ? Math.max(1, Math.floor(inner.h / lineH)) : 1;
+                if (lines.length > maxRows) return false;
+                return lines.every((line) => !line || ctx.measureText(line).width <= inner.w);
+            }
+
+            /** Placeholder affiché à une taille typo donnée (underscores ou troncature). */
+            function mqFitPlaceholderToBoxAtSize(b, raw, fs) {
                 const src = (raw != null ? raw : b.placeholder || '_______').trim() || '_______';
-                const contentW = mqBoxContentWidth(b);
-                const { ctx, fs } = mqBoxPhMeasureCtx(b);
+                const inner = mqBoxInnerSize(b);
+                const ctx = mqPhMeasureCtx(b, fs);
+                const lineH = fs * mqPhLineRatio(b);
 
                 if (/^_+$/.test(src)) {
                     const uw = Math.max(1, ctx.measureText('_').width);
-                    const perLine = Math.max(1, Math.floor(contentW / uw));
+                    const perLine = Math.max(1, Math.floor(inner.w / uw));
                     if (!b.multiline) return '_'.repeat(perLine);
-                    const tm = mqBoxTypoMetrics(b);
-                    const innerH = Math.max(fs, Number(b.h || 34) - tm.pad - tm.border);
-                    const lineH = fs * 1.15;
-                    const rows = Math.max(1, Math.floor(innerH / lineH));
+                    const rows = Math.max(1, Math.floor(inner.h / lineH));
                     return Array.from({ length: rows }, () => '_'.repeat(perLine)).join('\n');
                 }
 
                 if (!b.multiline) {
-                    if (ctx.measureText(src).width <= contentW) return src;
+                    if (ctx.measureText(src).width <= inner.w) return src;
                     let out = src;
-                    while (out.length > 1 && ctx.measureText(out + '…').width > contentW) {
+                    while (out.length > 1 && ctx.measureText(out + '…').width > inner.w) {
                         out = out.slice(0, -1);
                     }
                     return out.length < src.length ? out + '…' : out;
@@ -7402,30 +7432,45 @@
                 const lines = src.split('\n');
                 const fitted = lines.map((line) => {
                     if (!line) return '';
-                    if (ctx.measureText(line).width <= contentW) return line;
+                    if (ctx.measureText(line).width <= inner.w) return line;
                     let out = line;
-                    while (out.length > 1 && ctx.measureText(out + '…').width > contentW) {
+                    while (out.length > 1 && ctx.measureText(out + '…').width > inner.w) {
                         out = out.slice(0, -1);
                     }
                     return out.length < line.length ? out + '…' : out;
                 });
-                const tm = mqBoxTypoMetrics(b);
-                const innerH = Math.max(fs, Number(b.h || 34) - tm.pad - tm.border);
-                const maxRows = Math.max(1, Math.floor(innerH / (fs * 1.15)));
+                const maxRows = Math.max(1, Math.floor(inner.h / lineH));
                 return fitted.slice(0, maxRows).join('\n');
+            }
+
+            /** Calcule typo + texte placeholder pour remplir la box (réduit la taille si besoin). */
+            function mqComputePlaceholderFit(b, raw) {
+                const src = (raw != null ? raw : b.placeholder || '_______').trim() || '_______';
+                const inner = mqBoxInnerSize(b);
+                const maxFs = Math.max(6, Math.min(
+                    mqResolveBoxPhSize(b),
+                    Math.round(Number(b.fontSize || 16) * 0.95)
+                ));
+                let fs = maxFs;
+                while (fs > 6 && !mqPlaceholderFitsInBox(b, src, fs, inner)) fs--;
+                return { fs, text: mqFitPlaceholderToBoxAtSize(b, src, fs) };
+            }
+
+            function mqFitPlaceholderToBox(b, raw) {
+                return mqComputePlaceholderFit(b, raw).text;
             }
 
             /** Applique placeholder + variables CSS typo sur un champ rendu. */
             function mqApplyFieldPlaceholder(b, field) {
                 if (!b || !field) return;
-                const phFs = mqResolveBoxPhSize(b);
+                const fit = mqComputePlaceholderFit(b);
                 const phFont = (b.phFont && b.phFont !== 'inherit') ? b.phFont : (b.font ?? 'inherit');
                 const phWeight = (b.phWeight && b.phWeight !== 'inherit') ? String(b.phWeight) : String(b.weight ?? 'inherit');
                 const phStyle = b.phStyle ?? 'normal';
-                field.placeholder = mqFitPlaceholderToBox(b);
+                field.placeholder = fit.text;
                 field.style.setProperty('--ph-color', b.phColor ?? '#b5b5b5');
                 field.style.setProperty('--ph-opacity', String(b.phOpacity ?? 1));
-                field.style.setProperty('--ph-size', phFs + 'px');
+                field.style.setProperty('--ph-size', fit.fs + 'px');
                 field.style.setProperty('--ph-font', phFont);
                 field.style.setProperty('--ph-weight', phWeight);
                 field.style.setProperty('--ph-style', phStyle);
@@ -11403,10 +11448,11 @@
                         const hPct = (b.h / containerBaseH) * 100;
                         const fsVw = (b.fontSize || 16) * pxToVw;
                         const padVw = (b.pad || 0) * pxToVw;
-                        const phFs = mqResolveBoxPhSize(b);
+                        const phFit = mqComputePlaceholderFit(b);
+                        const phFs = phFit.fs;
                         const phFont = (b.phFont && b.phFont !== 'inherit') ? b.phFont : (b.font || 'inherit');
                         const phWeight = (b.phWeight && b.phWeight !== 'inherit') ? String(b.phWeight) : String(b.weight ?? 400);
-                        const phDisplay = mqFitPlaceholderToBox(b).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/\n/g, '&#10;');
+                        const phDisplay = phFit.text.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/\n/g, '&#10;');
 
                         const styles = `width:100%; height:100%; font-family:${b.font}; font-size:${b.fontSize || 16}px; font-weight:${b.weight}; padding:${b.pad ?? 4}px; border:2px solid #666; border-radius:8px; box-sizing:border-box; --ph-size:${phFs}px; --ph-font:${phFont}; --ph-weight:${phWeight}; --ph-color:${b.phColor ?? '#b5b5b5'}; --ph-opacity:${b.phOpacity ?? 1};`;
                         const voiceFile = mqVoiceFileName(b).replace(/"/g, '&quot;');
@@ -11580,10 +11626,11 @@
                         const hPct = (b.h / containerBaseH) * 100;
                         const fsVw = (b.fontSize || 16) * pxToVw;
                         const padVw = (b.pad || 0) * pxToVw;
-                        const phFs = mqResolveBoxPhSize(b);
+                        const phFit = mqComputePlaceholderFit(b);
+                        const phFs = phFit.fs;
                         const phFont = (b.phFont && b.phFont !== 'inherit') ? b.phFont : (b.font || 'inherit');
                         const phWeight = (b.phWeight && b.phWeight !== 'inherit') ? String(b.phWeight) : String(b.weight ?? 400);
-                        const phDisplay = mqFitPlaceholderToBox(b).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/\n/g, '&#10;');
+                        const phDisplay = phFit.text.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/\n/g, '&#10;');
 
                         const styles = `width:100%; height:100%; font-family:${b.font}; font-size:${b.fontSize || 16}px; font-weight:${b.weight}; padding:${b.pad ?? 4}px; border:2px solid #666; border-radius:8px; box-sizing:border-box; --ph-size:${phFs}px; --ph-font:${phFont}; --ph-weight:${phWeight}; --ph-color:${b.phColor ?? '#b5b5b5'}; --ph-opacity:${b.phOpacity ?? 1};`;
                         const voiceFile = mqVoiceFileName(b).replace(/"/g, '&quot;');
