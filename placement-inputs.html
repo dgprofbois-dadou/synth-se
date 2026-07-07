@@ -934,9 +934,14 @@
         }
 
         #topbar.mq-topbar .mq-crumb {
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 4px 6px;
             font-size: 12px;
             color: var(--mq-muted);
-            white-space: nowrap;
+            white-space: normal;
+            min-width: 0;
         }
 
         #topbar.mq-topbar .mq-crumb strong {
@@ -959,10 +964,41 @@
             box-sizing: border-box;
         }
 
-        #topbar.mq-topbar .mq-crumb #confExportName:focus {
+        #topbar.mq-topbar .mq-crumb #confVoiceBase,
+        #topbar.mq-topbar .mq-voice-base-url {
+            width: min(300px, 34vw);
+            min-width: 160px;
+            margin: 0;
+            padding: 4px 8px;
+            font-size: 11px;
+            font-weight: 500;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+            color: #065f46;
+            background: #f0fdf4;
+            border: 1px solid #6ee7b7;
+            border-radius: 6px;
+            box-sizing: border-box;
+        }
+
+        #topbar.mq-topbar .mq-crumb-sep {
+            color: var(--mq-muted);
+            font-size: 11px;
+            font-weight: 500;
+        }
+
+        #topbar.mq-topbar .mq-crumb #confExportName:focus,
+        #topbar.mq-topbar .mq-crumb #confVoiceBase:focus {
             outline: none;
             border-color: #2196f3;
             box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.2);
+        }
+
+        #pVoiceBaseUrl {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+            font-size: 11.5px;
+            color: #065f46;
+            background: #fff !important;
+            border-color: #6ee7b7 !important;
         }
 
         #topbar.mq-topbar .mq-save-ind {
@@ -2394,13 +2430,11 @@
             <div class="mini" style="color:#666;">
                 Importez vos sous-cul (A3 paysage). Ils s'affichent aussitôt dans l'éditeur et sont intégrés au HTML généré (pas besoin de les déposer dans le dépôt).
             </div>
-            <div class="row">
-                <label>Voix — dossier FTP</label>
-                <input id="confVoiceBase" type="text" placeholder="https://monsite.fr/voices/" style="flex:1;">
+            <div class="mini" style="color:#666; margin:4px 0 8px;">
+                <strong>Dossier FTP des MP3</strong> : modifiable en haut à gauche (à côté du nom du projet) ou dans le panneau voix d’un champ. Une seule URL pour <strong>toutes</strong> les consignes : <code>nomprojet-ch001.mp3</code>, etc.
             </div>
-            <div class="mini" style="color:#666; margin-top:-4px;">
-                URL du dossier où vous déposez les MP3. Les noms suivent le <strong>nom du projet</strong> (barre du haut) : <code>nomprojet-ch001.mp3</code>, affichés sous chaque champ.
-            </div>
+            <input id="confVoiceBase" type="text" placeholder="https://monsite.fr/voices/" hidden
+                title="URL du dossier FTP pour tous les MP3 (commun à toutes les voix)">
             <button id="btnVoiceManifest" type="button" style="width:100%; margin:6px 0 4px; font-size:12px;">📋 Liste des MP3 à produire</button>
             <pre id="pVoiceManifest" style="display:none;"></pre>
 
@@ -2437,6 +2471,12 @@
             </div>
             <div id="pVoicePanel" style="margin:10px 0 14px; padding:10px; background:#f0fdf4; border:1px solid #6ee7b7; border-radius:8px;">
                 <div style="font-size:11px; font-weight:700; color:#047857; margin-bottom:8px;">🎙 Consigne vocale (MP3 sur FTP)</div>
+                <div class="row" style="margin-bottom:6px;">
+                    <label>Dossier FTP</label>
+                    <input id="pVoiceBaseUrl" type="text" placeholder="https://monsite.fr/voices/"
+                        title="URL commune pour tous les MP3 — modifiez ici pour l’ensemble des voix">
+                </div>
+                <div class="mini" style="color:#047857; margin:-2px 0 8px;">Même chemin pour toutes les consignes vocales.</div>
                 <div class="row" style="margin-bottom:6px;">
                     <label>Fichier MP3</label>
                     <input id="pVoiceFileDisplay" type="text" readonly title="Nom exact du fichier à déposer sur le FTP">
@@ -5121,6 +5161,23 @@
                 });
                 return lines.join('\n');
             }
+            function mqOnVoiceBaseChanged() {
+                mqRefreshVoicePanel(getSelected());
+                render();
+                scheduleSaveLocal();
+            }
+            function mqSyncVoiceBaseFields(from) {
+                const base = $('confVoiceBase');
+                const panel = $('pVoiceBaseUrl');
+                if (!base || !panel) return;
+                if (from === 'panel') {
+                    if (base.value !== panel.value) {
+                        base.value = panel.value;
+                    }
+                } else if (document.activeElement !== panel) {
+                    panel.value = base.value;
+                }
+            }
             function mqInitVoiceUi() {
                 if ($('btnVoiceManifest')) {
                     $('btnVoiceManifest').addEventListener('click', () => {
@@ -5149,7 +5206,7 @@
                         const b = getSelected();
                         if (!b || b.kind === 'iframe') return;
                         if (!($('confVoiceBase') && $('confVoiceBase').value.trim())) {
-                            if (window.mqToast) window.mqToast('Indiquez l\'URL du dossier FTP (Configuration de la page)', { warn: true });
+                            if (window.mqToast) window.mqToast('Indiquez l\'URL du dossier FTP (barre du haut ou panneau voix)', { warn: true });
                             return;
                         }
                         mqPlayVoiceForBox(b);
@@ -5179,6 +5236,19 @@
                         render();
                     });
                 }
+                if ($('confVoiceBase')) {
+                    $('confVoiceBase').addEventListener('input', () => {
+                        mqSyncVoiceBaseFields('base');
+                        mqOnVoiceBaseChanged();
+                    });
+                }
+                if ($('pVoiceBaseUrl')) {
+                    $('pVoiceBaseUrl').addEventListener('input', () => {
+                        mqSyncVoiceBaseFields('panel');
+                        mqOnVoiceBaseChanged();
+                    });
+                }
+                mqSyncVoiceBaseFields('base');
             }
 
             function addBox() {
@@ -9374,6 +9444,7 @@
                             $('confExportName').value = snap.exportConfig.htmlName || snap.exportConfig.prefix || 'exercice';
                         }
                         if ($('confVoiceBase')) $('confVoiceBase').value = snap.exportConfig.voiceBase || '';
+                        if (typeof mqSyncVoiceBaseFields === 'function') mqSyncVoiceBaseFields('base');
                     }
                     if (confLayout) {
                         confLayout.value = state.layout;
@@ -9798,6 +9869,7 @@
                         $('confExportName').value = obj.exportConfig.htmlName || obj.exportConfig.prefix || 'exercice';
                     }
                     if ($('confVoiceBase')) $('confVoiceBase').value = obj.exportConfig.voiceBase || '';
+                    if (typeof mqSyncVoiceBaseFields === 'function') mqSyncVoiceBaseFields('base');
                 }
 
                 mqEnsureAllVoiceKeys();
@@ -13329,7 +13401,7 @@
             stash.setAttribute('aria-hidden', 'true');
             document.body.appendChild(stash);
 
-            const stashIds = ['btnAdd', 'btnHs', 'btnHsFreehand', 'btnIframe', 'btnUndo', 'btnRedo', 'btnDup', 'btnDel', 'btnFront', 'btnBack', 'btnGenHTML', 'btnSaveLocal', 'btnLoadLocal', 'btnFit', 'zoomSlider', 'btnSpellCheck', 'btnSpellReview', 'confExportName'];
+            const stashIds = ['btnAdd', 'btnHs', 'btnHsFreehand', 'btnIframe', 'btnUndo', 'btnRedo', 'btnDup', 'btnDel', 'btnFront', 'btnBack', 'btnGenHTML', 'btnSaveLocal', 'btnLoadLocal', 'btnFit', 'zoomSlider', 'btnSpellCheck', 'btnSpellReview', 'confExportName', 'confVoiceBase'];
             stashIds.forEach((sid) => {
                 const el = $(sid);
                 if (el && el.parentNode) stash.appendChild(el);
@@ -13371,6 +13443,20 @@
                 crumb.appendChild(projectNameInput);
             } else {
                 crumb.innerHTML += '<span style="color:var(--mq-text);font-weight:600;">Raboteuse — utilisation</span>';
+            }
+            const voiceBaseInput = $('confVoiceBase');
+            if (voiceBaseInput) {
+                voiceBaseInput.removeAttribute('hidden');
+                voiceBaseInput.classList.add('mq-voice-base-url');
+                voiceBaseInput.removeAttribute('style');
+                voiceBaseInput.placeholder = 'https://…/dossier-mp3/';
+                voiceBaseInput.title = 'URL du dossier FTP pour tous les MP3 (commun à toutes les voix)';
+                voiceBaseInput.setAttribute('aria-label', 'Dossier FTP des voix');
+                const voiceSep = document.createElement('span');
+                voiceSep.className = 'mq-crumb-sep';
+                voiceSep.textContent = '· FTP';
+                crumb.appendChild(voiceSep);
+                crumb.appendChild(voiceBaseInput);
             }
             brand.appendChild(mark);
             brand.appendChild(crumb);
