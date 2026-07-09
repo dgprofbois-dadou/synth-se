@@ -2428,7 +2428,7 @@
             <input id="impBg1" type="file" accept="image/*" hidden>
             <input id="impBg2" type="file" accept="image/*" hidden>
             <div class="mini" style="color:#666;">
-                Importez vos sous-cul (A3 paysage). Ils s'affichent aussitôt dans l'éditeur et sont intégrés au HTML généré (pas besoin de les déposer dans le dépôt).
+                Importez vos sous-cul (toute résolution). Ils s'affichent aussitôt dans l'éditeur et sont intégrés au HTML généré (pas besoin de les déposer dans le dépôt).
             </div>
             <div class="mini" style="color:#666; margin:4px 0 8px;">
                 <strong>Dossier FTP des MP3</strong> : modifiable en haut à gauche (à côté du nom du projet) ou dans le panneau voix d’un champ. Une seule URL pour <strong>toutes</strong> les consignes : <code>nomprojet-ch001.mp3</code>, etc.
@@ -3381,6 +3381,10 @@
             window.appState = state;
             let _saveCycle = 0;
             let _updatingStageSize = false;
+            let _mqLastStageW = 0;
+            let _mqLastStageH = 0;
+            let _mqStageSizeReady = false;
+            let _mqImportStageRescaleFrom = null;
             console.log('🔧 DEBUG: state exposé globalement via window.appState');
 
             const normalize = (s) => (s || '')
@@ -4091,6 +4095,125 @@
                 });
             }
 
+            /** Dimensions affichées de chaque sous-cul dans le stage (flex stretch). */
+            function mqComputeImageLayouts(allImgs) {
+                if (!allImgs || !allImgs.length) return { layouts: [], stageW: 0, stageH: 0 };
+                const layouts = [];
+                let totalW = 0;
+                let totalH = 0;
+
+                if (state.layout === 'column') {
+                    const maxW = Math.max(...allImgs.map((i) => mqImgDim(i)), 0);
+                    let stageY = 0;
+                    allImgs.forEach((img, pageIndex) => {
+                        const nw = mqImgDim(img) || maxW || 1;
+                        const nh = mqImgDimH(img);
+                        const stageDrawW = maxW;
+                        const stageDrawH = Math.round(nh * (maxW / nw));
+                        layouts.push({
+                            pageIndex, stageX: 0, stageY, stageW: stageDrawW, stageH: stageDrawH,
+                            naturalW: nw, naturalH: nh
+                        });
+                        stageY += stageDrawH;
+                    });
+                    totalW = maxW;
+                    totalH = stageY;
+                } else {
+                    const maxH = Math.max(...allImgs.map((i) => mqImgDimH(i)), 0);
+                    let stageX = 0;
+                    allImgs.forEach((img, pageIndex) => {
+                        const nw = mqImgDim(img);
+                        const nh = mqImgDimH(img) || maxH || 1;
+                        const stageDrawH = maxH;
+                        const stageDrawW = Math.round(nw * (maxH / nh));
+                        layouts.push({
+                            pageIndex, stageX, stageY: 0, stageW: stageDrawW, stageH: stageDrawH,
+                            naturalW: nw, naturalH: nh
+                        });
+                        stageX += stageDrawW;
+                    });
+                    totalW = stageX;
+                    totalH = maxH;
+                }
+
+                if (totalW <= 0 || totalH <= 0) {
+                    const fbW = allImgs.length * 2400;
+                    const fbH = state.layout === 'column' ? allImgs.length * 1700 : 1700;
+                    if (totalW <= 0) totalW = fbW;
+                    if (totalH <= 0) totalH = fbH;
+                }
+                return { layouts, stageW: totalW, stageH: totalH };
+            }
+
+            function mqHotspotCentroid(h) {
+                const pts = (h && h.points) || [];
+                if (!pts.length) return { x: 0, y: 0 };
+                const x = pts.reduce((a, p) => a + p[0], 0) / pts.length;
+                const y = pts.reduce((a, p) => a + p[1], 0) / pts.length;
+                return { x, y };
+            }
+
+            function mqFindPageForPoint(x, y) {
+                const layouts = window._mqStageLayouts || [];
+                if (!layouts.length) {
+                    return { index: 0, layout: { stageX: 0, stageY: 0, stageW: 2400, stageH: 1700 } };
+                }
+                for (let i = 0; i < layouts.length; i++) {
+                    const lay = layouts[i];
+                    if (x >= lay.stageX && x < lay.stageX + lay.stageW
+                        && y >= lay.stageY && y < lay.stageY + lay.stageH) {
+                        return { index: i, layout: lay };
+                    }
+                }
+                if (state.layout === 'column') {
+                    return (y < layouts[0].stageH)
+                        ? { index: 0, layout: layouts[0] }
+                        : { index: 1, layout: layouts[1] || layouts[0] };
+                }
+                return (x < layouts[0].stageW)
+                    ? { index: 0, layout: layouts[0] }
+                    : { index: 1, layout: layouts[1] || layouts[0] };
+            }
+
+            function mqRescaleStageContent(oldW, oldH, newW, newH) {
+                if (!oldW || !oldH || !newW || !newH) return;
+                if (oldW === newW && oldH === newH) return;
+                const sx = newW / oldW;
+                const sy = newH / oldH;
+                const sTypo = Math.min(sx, sy);
+                state.boxes.forEach((b) => {
+                    b.x = Math.round(b.x * sx);
+                    b.y = Math.round(b.y * sy);
+                    b.w = Math.max(20, Math.round(b.w * sx));
+                    b.h = Math.max(14, Math.round(b.h * sy));
+                    if (b.fontSize) b.fontSize = Math.max(8, Math.round(b.fontSize * sTypo));
+                    if (b.phSize) b.phSize = Math.max(6, Math.round(b.phSize * sTypo));
+                    if (b.hintFontSize) b.hintFontSize = Math.max(8, Math.round(b.hintFontSize * sTypo));
+                });
+                state.hotspots.forEach((h) => {
+                    h.points = (h.points || []).map(([px, py]) => [Math.round(px * sx), Math.round(py * sy)]);
+                    if (h.tipFontSize) h.tipFontSize = Math.max(8, Math.round(h.tipFontSize * sTypo));
+                });
+                mqGameIds().forEach((gid) => {
+                    const g = state.dndGames[gid];
+                    if (!g) return;
+                    g.x = Math.round((g.x || 0) * sx);
+                    g.y = Math.round((g.y || 0) * sy);
+                    g.width = Math.max(40, Math.round((g.width || 800) * sx));
+                    g.height = Math.max(40, Math.round((g.height || 400) * sy));
+                });
+                if (state.selectedId) syncPropsFromSelected();
+                if (state.selectedHotspotId) syncHotspotUI();
+                render();
+                renderDndGamesPreview();
+                scheduleSaveLocal();
+                if (window.mqToast && (Math.abs(sx - 1) > 0.02 || Math.abs(sy - 1) > 0.02)) {
+                    window.mqToast('Éléments recalibrés au nouveau format du sous-cul.');
+                }
+            }
+            window.mqComputeImageLayouts = mqComputeImageLayouts;
+            window.mqFindPageForPoint = mqFindPageForPoint;
+
             function updateStageSize() {
                 if (_updatingStageSize) return;
                 _updatingStageSize = true;
@@ -4098,47 +4221,43 @@
                     const allImgs = Array.from(document.querySelectorAll('#stage img.bg'));
                     if (allImgs.length === 0) return;
 
-                    let totalW = 0;
-                    let totalH = 0;
+                    const oldW = parseFloat(stage.style.width) || (_mqStageSizeReady ? _mqLastStageW : 0);
+                    const oldH = parseFloat(stage.style.height) || (_mqStageSizeReady ? _mqLastStageH : 0);
+                    const { layouts, stageW: totalW, stageH: totalH } = mqComputeImageLayouts(allImgs);
+                    window._mqStageLayouts = layouts;
 
-                    // IMPORTANT : le stage est en display:flex (align-items:stretch) -> chaque image
-                    // est ÉTIRÉE à la dimension transversale max. On calcule donc la taille d'après
-                    // les dimensions AFFICHÉES (étirées), pas les dimensions naturelles, sinon le
-                    // viewBox du SVG ne correspond pas aux images quand elles ont des résolutions
-                    // différentes -> clics/points décalés.
-                    if (state.layout === 'column') {
-                        // empilées verticalement, étirées à la largeur max
-                        totalW = Math.max(...allImgs.map((i) => mqImgDim(i)), 0);
-                        totalH = allImgs.reduce((acc, i) => {
-                            const w = mqImgDim(i) || totalW || 1;
-                            return acc + Math.round(mqImgDimH(i) * (totalW / w));
-                        }, 0);
-                    } else {
-                        // côte à côte, étirées à la hauteur max
-                        totalH = Math.max(...allImgs.map((i) => mqImgDimH(i)), 0);
-                        totalW = allImgs.reduce((acc, i) => {
-                            const h = mqImgDimH(i) || totalH || 1;
-                            return acc + Math.round(mqImgDim(i) * (totalH / h));
-                        }, 0);
+                    if (_mqStageSizeReady && oldW > 0 && oldH > 0
+                        && (oldW !== totalW || oldH !== totalH) && !_mqImportStageRescaleFrom) {
+                        const hasContent = state.boxes.length > 0 || state.hotspots.length > 0;
+                        if (hasContent) mqRescaleStageContent(oldW, oldH, totalW, totalH);
                     }
 
-                    if (totalW <= 0 || totalH <= 0) {
-                        const fbW = allImgs.length * 2400;
-                        const fbH = state.layout === 'column' ? allImgs.length * 1700 : 1700;
-                        if (totalW <= 0) totalW = fbW;
-                        if (totalH <= 0) totalH = fbH;
-                    }
+                    _mqLastStageW = totalW;
+                    _mqLastStageH = totalH;
+                    _mqStageSizeReady = true;
 
                     stage.style.width = totalW + 'px';
                     stage.style.height = totalH + 'px';
 
+                    layouts.forEach((lay, i) => {
+                        const img = allImgs[i];
+                        if (!img) return;
+                        img.style.width = lay.stageW + 'px';
+                        img.style.height = lay.stageH + 'px';
+                        img.style.flexShrink = '0';
+                    });
+
                     svg.setAttribute('width', totalW);
                     svg.setAttribute('height', totalH);
                     svg.setAttribute('viewBox', `0 0 ${totalW} ${totalH}`);
+                    svg.style.width = '';
+                    svg.style.height = '';
                     if (svgUi) {
                         svgUi.setAttribute('width', totalW);
                         svgUi.setAttribute('height', totalH);
                         svgUi.setAttribute('viewBox', `0 0 ${totalW} ${totalH}`);
+                        svgUi.style.width = '';
+                        svgUi.style.height = '';
                     }
                     if (typeof window.mqOcrRefreshPositions === 'function') {
                         window.mqOcrRefreshPositions();
@@ -8230,49 +8349,49 @@
 
             function mqOcrComputeImageLayouts(allImgs) {
                 updateStageSize();
-                const stageW = parseFloat(stage.style.width) || 4800;
-                const stageH = parseFloat(stage.style.height) || 3400;
-                const layouts = [];
-
+                const base = mqComputeImageLayouts(allImgs);
+                const layouts = base.layouts.map((lay) => ({
+                    stageX: lay.stageX,
+                    stageY: lay.stageY,
+                    stageW: lay.stageW,
+                    stageH: lay.stageH,
+                    ocrX: lay.stageX === 0 && lay.stageY === 0 ? 0 : (state.layout === 'column' ? 0 : lay.stageX),
+                    ocrY: state.layout === 'column' ? lay.stageY : 0,
+                    ocrW: lay.naturalW,
+                    ocrH: lay.naturalH
+                }));
                 if (state.layout === 'column') {
-                    const maxW = Math.max(...allImgs.map((i) => mqImgDim(i)), stageW);
-                    let stageY = 0;
                     let ocrY = 0;
-                    let ocrH = 0;
-                    allImgs.forEach((img) => {
-                        const nw = mqImgDim(img) || maxW;
-                        const nh = mqImgDimH(img);
-                        const stageDrawW = maxW;
-                        const stageDrawH = Math.round(nh * (maxW / (nw || 1)));
-                        layouts.push({
-                            stageX: 0, stageY, stageW: stageDrawW, stageH: stageDrawH,
-                            ocrX: 0, ocrY, ocrW: nw, ocrH: nh
-                        });
-                        stageY += stageDrawH;
-                        ocrY += nh;
-                        ocrH += nh;
+                    layouts.forEach((lay, i) => {
+                        lay.ocrX = 0;
+                        lay.ocrY = ocrY;
+                        lay.ocrW = base.layouts[i].naturalW;
+                        lay.ocrH = base.layouts[i].naturalH;
+                        ocrY += lay.ocrH;
                     });
-                    return { layouts, ocrCanvasW: maxW, ocrCanvasH: ocrH, stageW, stageH };
+                    return {
+                        layouts,
+                        ocrCanvasW: base.stageW,
+                        ocrCanvasH: ocrY,
+                        stageW: base.stageW,
+                        stageH: base.stageH
+                    };
                 }
-
-                const maxH = Math.max(...allImgs.map((i) => mqImgDimH(i)), stageH);
-                let stageX = 0;
                 let ocrX = 0;
-                let ocrW = 0;
-                allImgs.forEach((img) => {
-                    const nw = mqImgDim(img);
-                    const nh = mqImgDimH(img) || maxH;
-                    const stageDrawH = maxH;
-                    const stageDrawW = Math.round(nw * (maxH / (nh || 1)));
-                    layouts.push({
-                        stageX, stageY: 0, stageW: stageDrawW, stageH: stageDrawH,
-                        ocrX, ocrY: 0, ocrW: nw, ocrH: nh
-                    });
-                    stageX += stageDrawW;
-                    ocrX += nw;
-                    ocrW += nw;
+                layouts.forEach((lay, i) => {
+                    lay.ocrX = ocrX;
+                    lay.ocrY = 0;
+                    lay.ocrW = base.layouts[i].naturalW;
+                    lay.ocrH = base.layouts[i].naturalH;
+                    ocrX += lay.ocrW;
                 });
-                return { layouts, ocrCanvasW: ocrW, ocrCanvasH: maxH, stageW, stageH };
+                return {
+                    layouts,
+                    ocrCanvasW: ocrX,
+                    ocrCanvasH: base.stageH,
+                    stageW: base.stageW,
+                    stageH: base.stageH
+                };
             }
 
             function mqOcrMapBboxToStage(bbox) {
@@ -9796,6 +9915,10 @@
                     hotspots: cloneProjectData(state.hotspots),
                     dndGames: cloneProjectData(state.dndGames),
                     view: { scale: state.scale, tx: state.tx, ty: state.ty },
+                    editorStage: {
+                        w: parseFloat(stage.style.width) || _mqLastStageW || 0,
+                        h: parseFloat(stage.style.height) || _mqLastStageH || 0
+                    },
                     exportConfig: {
                         img1: $('confImg1') ? $('confImg1').value : '',
                         img2: $('confImg2') ? $('confImg2').value : '',
@@ -9943,7 +10066,20 @@
                 loadDndGamesUI();
                 hydrateDndImages();
 
+                if (obj.editorStage && obj.editorStage.w > 0 && obj.editorStage.h > 0) {
+                    _mqImportStageRescaleFrom = { w: obj.editorStage.w, h: obj.editorStage.h };
+                }
+
                 refreshStageLayout(() => {
+                    if (_mqImportStageRescaleFrom) {
+                        const newW = parseFloat(stage.style.width) || 0;
+                        const newH = parseFloat(stage.style.height) || 0;
+                        const from = _mqImportStageRescaleFrom;
+                        _mqImportStageRescaleFrom = null;
+                        if (newW > 0 && newH > 0 && (from.w !== newW || from.h !== newH)) {
+                            mqRescaleStageContent(from.w, from.h, newW, newH);
+                        }
+                    }
                     render();
                     applyTransform();
                     setBodyMode();
@@ -11536,16 +11672,25 @@
                 <div style="display:block; position:absolute; top:0; left:0; width:100%; height:100%; z-index:6; mix-blend-mode:multiply; pointer-events:none;"></div>
 `;
 
-                    // CONVERSION EN POURCENTAGE (Fix Zoom)
-                    const containerBaseW = 4961;
-                    const containerBaseH = 3508;
-                    const pxToVw = 288 / 4961;
+                    updateStageSize();
+                    const expLayouts = window._mqStageLayouts || [];
+                    const expPage1 = expLayouts[0] || { stageX: 0, stageY: 0, stageW: 2400, stageH: 1700 };
+                    const expPage2 = expLayouts[1] || expPage1;
+
+                    // CONVERSION EN POURCENTAGE — dimensions réelles des sous-cul importés
+                    const containerBaseW = expPage1.stageW || 2400;
+                    const containerBaseH = expPage1.stageH || 1700;
+                    const page2BaseW = expPage2.stageW || containerBaseW;
+                    const page2BaseH = expPage2.stageH || containerBaseH;
+                    const pxToVw = 288 / containerBaseW;
 
                     // --- INPUTS PAGE 1 ---
-                    state.boxes.filter(b => b.y < 3500).forEach(b => {
+                    state.boxes.filter(b => mqFindPageForPoint(b.x + (b.w || 0) / 2, b.y + (b.h || 0) / 2).index === 0).forEach(b => {
                         if (b.kind === 'iframe') {
-                            const ileft = (b.x / containerBaseW) * 100;
-                            const itop = (b.y / containerBaseH) * 100;
+                            const localX = b.x - expPage1.stageX;
+                            const localY = b.y - expPage1.stageY;
+                            const ileft = (localX / containerBaseW) * 100;
+                            const itop = (localY / containerBaseH) * 100;
                             const iw = (b.w / containerBaseW) * 100;
                             const ih = (b.h / containerBaseH) * 100;
                             let iabs = b.src || '';
@@ -11564,9 +11709,11 @@
                         const group = (b.group || '').replace(/"/g, '&quot;');
                         let finalFont = (b.hintFont && b.hintFont !== 'inherit') ? b.hintFont : (b.font || 'inherit');
 
-                        // Calculs en % et vw
-                        const leftPct = (b.x / containerBaseW) * 100;
-                        const topPct = (b.y / containerBaseH) * 100;
+                        // Calculs en % et vw (coords locales page 1)
+                        const localX = b.x - expPage1.stageX;
+                        const localY = b.y - expPage1.stageY;
+                        const leftPct = (localX / containerBaseW) * 100;
+                        const topPct = (localY / containerBaseH) * 100;
                         const wPct = (b.w / containerBaseW) * 100;
                         const hPct = (b.h / containerBaseH) * 100;
                         const fsVw = (b.fontSize || 16) * pxToVw;
@@ -11588,9 +11735,9 @@
                     });
 
                     // --- HOTSPOTS PAGE 1 ---
-                    html += `<svg xmlns="http://www.w3.org/2000/svg" width="4961" height="3508" viewBox="0 0 4961 3508" style="position:absolute; top:0; left:0; width:100%; height:100%; z-index:7; pointer-events:none; overflow:visible; mix-blend-mode:multiply;">`;
+                    html += `<svg xmlns="http://www.w3.org/2000/svg" width="${containerBaseW}" height="${containerBaseH}" viewBox="0 0 ${containerBaseW} ${containerBaseH}" style="position:absolute; top:0; left:0; width:100%; height:100%; z-index:7; pointer-events:none; overflow:visible; mix-blend-mode:multiply;">`;
                     state.hotspots
-                        .filter(h => (!h.points[0] || h.points[0][1] < 3500))
+                        .filter(h => mqFindPageForPoint(mqHotspotCentroid(h).x, mqHotspotCentroid(h).y).index === 0)
                         .map((h, idx) => ({ h, idx }))
                         .sort((a, b) => {
                             const za = Number.isFinite(Number(a.h.z)) ? Number(a.h.z) : a.idx;
@@ -11599,7 +11746,7 @@
                         })
                         .map(x => x.h)
                         .forEach(h => {
-                            const pts = h.points.map(p => p.join(',')).join(' ');
+                            const pts = h.points.map(p => `${p[0] - expPage1.stageX},${p[1] - expPage1.stageY}`).join(' ');
                             const safeTip = ((h.tip && h.tip.trim()) ? h.tip : (h.label || '')).replace(/"/g, '&quot;');
                             const group = (h.group || '').replace(/"/g, '&quot;');
                             let filter = (h.shadowX || h.shadowBlur) ? `filter:drop-shadow(${h.shadowX}px ${h.shadowY}px ${h.shadowBlur}px ${h.shadowColor});` : '';
@@ -11620,18 +11767,13 @@
                     // --- JEU 1 (PAGE 1) ---
                     // ===============================================
 
-                    // CONVERSION EN POURCENTAGE (Fix Zoom)
-                    // Base: 4961 x 3508
-                    // (Déjà défini plus haut)
-
-
                     // === JEUX DnD (nombre illimité) — placés sur la Page 1 ===
                     mqGameIds().forEach((gameId) => {
                         const g = state.dndGames && state.dndGames[gameId];
                         if (!g || !g.enabled) return;
+                        if (mqFindPageForPoint((g.x || 0) + (g.width || 0) / 2, (g.y || 0) + (g.height || 0) / 2).index !== 0) return;
                         const n = mqGameNum(gameId);
                         const sfx = (n === 1) ? '' : String(n);
-                        const pxToVw = 288 / 4961;
                         const goodIds = g.goodIds || '';
                         const targetCount = parseInt(g.targetCount) || 0;
                         const ttFont = (g.tooltip && g.tooltip.font) ? g.tooltip.font : "'OpenDyslexic', sans-serif";
@@ -11641,8 +11783,10 @@
 
                         const G_W = g.width || 800;
                         const G_H = g.height || 400;
-                        const leftPct = (g.x / containerBaseW) * 100;
-                        const topPct = (g.y / containerBaseH) * 100;
+                        const localGx = (g.x || 0) - expPage1.stageX;
+                        const localGy = (g.y || 0) - expPage1.stageY;
+                        const leftPct = (localGx / containerBaseW) * 100;
+                        const topPct = (localGy / containerBaseH) * 100;
                         const widthPct = (G_W / containerBaseW) * 100;
                         const heightPct = (G_H / containerBaseH) * 100;
 
@@ -11719,13 +11863,15 @@
                 <div style="display:block; position:absolute; top:0; left:0; width:100%; height:100%; z-index:6; mix-blend-mode:multiply; pointer-events:none;"></div>
 `;
                     // --- INPUTS PAGE 2 ---
-                    state.boxes.filter(b => b.y >= 3500).forEach(b => {
-                        const localY = b.y - 3508;
+                    const pxToVwP2 = 288 / page2BaseW;
+                    state.boxes.filter(b => mqFindPageForPoint(b.x + (b.w || 0) / 2, b.y + (b.h || 0) / 2).index === 1).forEach(b => {
+                        const localX = b.x - expPage2.stageX;
+                        const localY = b.y - expPage2.stageY;
                         if (b.kind === 'iframe') {
-                            const ileft = (b.x / containerBaseW) * 100;
-                            const itop = (localY / containerBaseH) * 100;
-                            const iw = (b.w / containerBaseW) * 100;
-                            const ih = (b.h / containerBaseH) * 100;
+                            const ileft = (localX / page2BaseW) * 100;
+                            const itop = (localY / page2BaseH) * 100;
+                            const iw = (b.w / page2BaseW) * 100;
+                            const ih = (b.h / page2BaseH) * 100;
                             let iabs = b.src || '';
                             try { iabs = new URL(b.src || '', document.baseURI).href; } catch (e) { }
                             const isrc = iabs.replace(/"/g, '&quot;');
@@ -11742,13 +11888,13 @@
                         const group = (b.group || '').replace(/"/g, '&quot;');
                         let finalFont = (b.hintFont && b.hintFont !== 'inherit') ? b.hintFont : (b.font || 'inherit');
 
-                        // Calculs en % et vw
-                        const leftPct = (b.x / containerBaseW) * 100;
-                        const topPct = (localY / containerBaseH) * 100;
-                        const wPct = (b.w / containerBaseW) * 100;
-                        const hPct = (b.h / containerBaseH) * 100;
-                        const fsVw = (b.fontSize || 16) * pxToVw;
-                        const padVw = (b.pad || 0) * pxToVw;
+                        // Calculs en % (coords locales page 2)
+                        const leftPct = (localX / page2BaseW) * 100;
+                        const topPct = (localY / page2BaseH) * 100;
+                        const wPct = (b.w / page2BaseW) * 100;
+                        const hPct = (b.h / page2BaseH) * 100;
+                        const fsVw = (b.fontSize || 16) * pxToVwP2;
+                        const padVw = (b.pad || 0) * pxToVwP2;
                         const phFit = mqComputePlaceholderFit(b);
                         const phFs = phFit.fs;
                         const phFont = (b.phFont && b.phFont !== 'inherit') ? b.phFont : (b.font || 'inherit');
@@ -11766,9 +11912,9 @@
                     });
 
                     // --- HOTSPOTS PAGE 2 ---
-                    html += `<svg xmlns="http://www.w3.org/2000/svg" width="4961" height="3508" viewBox="0 0 4961 3508" style="position:absolute; top:0; left:0; width:100%; height:100%; z-index:7; pointer-events:none; overflow:visible; mix-blend-mode:multiply;">`;
+                    html += `<svg xmlns="http://www.w3.org/2000/svg" width="${page2BaseW}" height="${page2BaseH}" viewBox="0 0 ${page2BaseW} ${page2BaseH}" style="position:absolute; top:0; left:0; width:100%; height:100%; z-index:7; pointer-events:none; overflow:visible; mix-blend-mode:multiply;">`;
                     state.hotspots
-                        .filter(h => (h.points[0] && h.points[0][1] >= 3500))
+                        .filter(h => mqFindPageForPoint(mqHotspotCentroid(h).x, mqHotspotCentroid(h).y).index === 1)
                         .map((h, idx) => ({ h, idx }))
                         .sort((a, b) => {
                             const za = Number.isFinite(Number(a.h.z)) ? Number(a.h.z) : a.idx;
@@ -11777,7 +11923,7 @@
                         })
                         .map(x => x.h)
                         .forEach(h => {
-                            const pts = h.points.map(p => [p[0], p[1] - 3508].join(',')).join(' ');
+                            const pts = h.points.map(p => `${p[0] - expPage2.stageX},${p[1] - expPage2.stageY}`).join(' ');
                             const safeTip = ((h.tip && h.tip.trim()) ? h.tip : (h.label || '')).replace(/"/g, '&quot;');
                             const group = (h.group || '').replace(/"/g, '&quot;');
                             let filter = (h.shadowX || h.shadowBlur) ? `filter:drop-shadow(${h.shadowX}px ${h.shadowY}px ${h.shadowBlur}px ${h.shadowColor});` : '';
@@ -12784,42 +12930,6 @@
                 renderDndGamesPreview();
                 mqGameIds().forEach(gid => updateDraggablesUI(gid));
             }, 100);
-
-            // 🔧 FIX: Forcer la visibilité permanente des hotspots en mode ADMIN et STUDENT
-            setTimeout(() => {
-                const hotspotsSvg = document.getElementById('hotspots');
-                if (!hotspotsSvg) return;
-
-                // Fonction pour forcer la visibilité
-                const forceVisible = () => {
-                    if (hotspotsSvg.style.display === 'none' || hotspotsSvg.style.display === '') {
-                        hotspotsSvg.style.display = 'block';
-                        hotspotsSvg.style.width = '4961px';
-                        hotspotsSvg.style.height = '7016px';
-                        console.log('✅ Hotspots SVG forcé visible');
-                    }
-                };
-
-                // Forcer immédiatement
-                forceVisible();
-
-                // Observer pour empêcher que display:none soit réappliqué
-                const observer = new MutationObserver((mutations) => {
-                    mutations.forEach((mutation) => {
-                        if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
-                            forceVisible();
-                        }
-                    });
-                });
-
-                // Démarrer l'observation
-                observer.observe(hotspotsSvg, {
-                    attributes: true,
-                    attributeFilter: ['style']
-                });
-
-                console.log('🔧 MutationObserver activé pour les hotspots');
-            }, 150);
 
             // 🔧 DÉBOGAGE : Exposer les fonctions utiles globalement
             window.debugDnD = {
