@@ -3974,7 +3974,7 @@
                         const newH = parseFloat(stage.style.height) || 0;
                         if (refBefore.w > 0 && refBefore.h > 0 && newW > 0 && newH > 0
                             && (refBefore.w !== newW || refBefore.h !== newH)) {
-                            mqOfferStageRescale(refBefore.w, refBefore.h, newW, newH);
+                            mqTryOfferStageRescale(refBefore.w, refBefore.h);
                         } else if (newW > 0 && newH > 0) {
                             state.contentStageRef = { w: newW, h: newH };
                             mqRefreshStageSizeInfo();
@@ -4228,9 +4228,37 @@
                 el.textContent = txt;
             }
 
+            function mqStageDimensionsReliable() {
+                const imgs = Array.from(document.querySelectorAll('#stage img.bg'));
+                if (!imgs.length) return false;
+                return imgs.every((img) => (img.naturalWidth || 0) > 0 && (img.naturalHeight || 0) > 0);
+            }
+
+            function mqTryOfferStageRescale(oldW, oldH) {
+                const attempt = () => {
+                    if (!mqStageDimensionsReliable()) return false;
+                    updateStageSize();
+                    const newW = parseFloat(stage.style.width) || 0;
+                    const newH = parseFloat(stage.style.height) || 0;
+                    if (oldW > 0 && oldH > 0 && newW > 0 && newH > 0
+                        && (oldW !== newW || oldH !== newH)) {
+                        mqOfferStageRescale(oldW, oldH, newW, newH);
+                    } else if (newW > 0 && newH > 0) {
+                        state.contentStageRef = { w: newW, h: newH };
+                        mqRefreshStageSizeInfo();
+                    }
+                    return true;
+                };
+                if (attempt()) return;
+                Array.from(document.querySelectorAll('#stage img.bg')).forEach((img) => {
+                    img.addEventListener('load', () => { attempt(); }, { once: true });
+                });
+            }
+
             function mqOfferStageRescale(oldW, oldH, newW, newH) {
                 if (!oldW || !oldH || !newW || !newH) return;
                 if (oldW === newW && oldH === newH) return;
+                if (!mqStageDimensionsReliable()) return;
                 if (!state.boxes.length && !state.hotspots.length) {
                     state.contentStageRef = { w: newW, h: newH };
                     mqRefreshStageSizeInfo();
@@ -4240,8 +4268,8 @@
                     'Le format du sous-cul a changé :\n'
                     + oldW + ' × ' + oldH + ' px  →  ' + newW + ' × ' + newH + ' px\n\n'
                     + 'Recalibrer proportionnellement les champs et hotspots ?\n\n'
-                    + '• Oui = adapter au nouveau format\n'
-                    + '• Non = garder les positions actuelles (recommandé si la mise en page est déjà bonne)'
+                    + '• OK = adapter au nouveau format\n'
+                    + '• Annuler = garder les positions actuelles (recommandé si la mise en page est déjà bonne)'
                 );
                 if (ok) mqRescaleStageContent(oldW, oldH, newW, newH);
                 state.contentStageRef = { w: newW, h: newH };
@@ -10166,15 +10194,15 @@
                 }
 
                 refreshStageLayout(() => {
-                    const newW = parseFloat(stage.style.width) || 0;
-                    const newH = parseFloat(stage.style.height) || 0;
                     const ref = obj.editorStage && obj.editorStage.w > 0
                         ? { w: obj.editorStage.w, h: obj.editorStage.h }
                         : null;
-                    if (ref && newW > 0 && newH > 0 && (ref.w !== newW || ref.h !== newH)) {
-                        mqOfferStageRescale(ref.w, ref.h, newW, newH);
-                    } else if (newW > 0 && newH > 0) {
-                        state.contentStageRef = { w: newW, h: newH };
+                    if (ref) {
+                        mqTryOfferStageRescale(ref.w, ref.h);
+                    } else {
+                        const newW = parseFloat(stage.style.width) || 0;
+                        const newH = parseFloat(stage.style.height) || 0;
+                        if (newW > 0 && newH > 0) state.contentStageRef = { w: newW, h: newH };
                     }
                     render();
                     applyTransform();
