@@ -2430,6 +2430,15 @@
             <div class="mini" style="color:#666;">
                 Importez vos sous-cul (toute résolution). Ils s'affichent aussitôt dans l'éditeur et sont intégrés au HTML généré (pas besoin de les déposer dans le dépôt).
             </div>
+            <div class="mini" id="mqStageSizeInfo" style="color:#555; margin:4px 0 6px; font-family:ui-monospace,monospace; font-size:10px;"></div>
+            <button id="btnRescaleToStage" type="button"
+                style="width:100%; margin:0 0 8px; font-size:12px; background:#f3f4f6; border:1px solid #d1d5db; border-radius:6px; padding:7px;"
+                title="Uniquement si vous changez de format de sous-cul — jamais automatique">
+                ↔ Recalibrer champs/hotspots au format actuel…
+            </button>
+            <div class="mini" style="color:#666; margin-bottom:8px; line-height:1.4;">
+                Mise en page altérée par erreur ? <strong>↶ Annuler</strong> (Ctrl+Z) ou <strong>Charger</strong> une sauvegarde .json antérieure.
+            </div>
             <div class="mini" style="color:#666; margin:4px 0 8px;">
                 <strong>Dossier FTP des MP3</strong> : modifiable en haut à gauche (à côté du nom du projet) ou dans le panneau voix d’un champ. Une seule URL pour <strong>toutes</strong> les consignes : <code>nomprojet-ch001.mp3</code>, etc.
             </div>
@@ -3384,7 +3393,6 @@
             let _mqLastStageW = 0;
             let _mqLastStageH = 0;
             let _mqStageSizeReady = false;
-            let _mqImportStageRescaleFrom = null;
             console.log('🔧 DEBUG: state exposé globalement via window.appState');
 
             const normalize = (s) => (s || '')
@@ -3960,7 +3968,17 @@
                 const inp = $(id);
                 if (!inp) return;
                 inp.addEventListener('change', () => {
+                    const refBefore = mqGetContentStageRef();
                     refreshStageLayout(() => {
+                        const newW = parseFloat(stage.style.width) || 0;
+                        const newH = parseFloat(stage.style.height) || 0;
+                        if (refBefore.w > 0 && refBefore.h > 0 && newW > 0 && newH > 0
+                            && (refBefore.w !== newW || refBefore.h !== newH)) {
+                            mqOfferStageRescale(refBefore.w, refBefore.h, newW, newH);
+                        } else if (newW > 0 && newH > 0) {
+                            state.contentStageRef = { w: newW, h: newH };
+                            mqRefreshStageSizeInfo();
+                        }
                         render();
                         fitToScreen();
                         saveLocal();
@@ -3993,6 +4011,14 @@
                 }
                 wire('btnImportBg1', 'impBg1', 'confImg1', 'bg1Name');
                 wire('btnImportBg2', 'impBg2', 'confImg2', 'bg2Name');
+                const btnRescale = $('btnRescaleToStage');
+                if (btnRescale) {
+                    btnRescale.addEventListener('click', () => {
+                        if (typeof window.mqRescaleContentToCurrentStage === 'function') {
+                            window.mqRescaleContentToCurrentStage();
+                        }
+                    });
+                }
             })();
 
             zoomSlider.addEventListener('input', (e) => {
@@ -4175,6 +4201,72 @@
                     : { index: 1, layout: layouts[1] || layouts[0] };
             }
 
+            function mqGetContentStageRef() {
+                if (state.contentStageRef && state.contentStageRef.w > 0 && state.contentStageRef.h > 0) {
+                    return state.contentStageRef;
+                }
+                if (_mqLastStageW > 0 && _mqLastStageH > 0) {
+                    return { w: _mqLastStageW, h: _mqLastStageH };
+                }
+                return { w: 0, h: 0 };
+            }
+
+            function mqRefreshStageSizeInfo() {
+                const el = $('mqStageSizeInfo');
+                if (!el) return;
+                const curW = parseFloat(stage.style.width) || _mqLastStageW || 0;
+                const curH = parseFloat(stage.style.height) || _mqLastStageH || 0;
+                const ref = mqGetContentStageRef();
+                if (!curW || !curH) {
+                    el.textContent = '';
+                    return;
+                }
+                let txt = 'Canvas : ' + curW + ' × ' + curH + ' px';
+                if (ref.w > 0 && ref.h > 0 && (ref.w !== curW || ref.h !== curH)) {
+                    txt += ' · positions enregistrées pour ' + ref.w + ' × ' + ref.h;
+                }
+                el.textContent = txt;
+            }
+
+            function mqOfferStageRescale(oldW, oldH, newW, newH) {
+                if (!oldW || !oldH || !newW || !newH) return;
+                if (oldW === newW && oldH === newH) return;
+                if (!state.boxes.length && !state.hotspots.length) {
+                    state.contentStageRef = { w: newW, h: newH };
+                    mqRefreshStageSizeInfo();
+                    return;
+                }
+                const ok = confirm(
+                    'Le format du sous-cul a changé :\n'
+                    + oldW + ' × ' + oldH + ' px  →  ' + newW + ' × ' + newH + ' px\n\n'
+                    + 'Recalibrer proportionnellement les champs et hotspots ?\n\n'
+                    + '• Oui = adapter au nouveau format\n'
+                    + '• Non = garder les positions actuelles (recommandé si la mise en page est déjà bonne)'
+                );
+                if (ok) mqRescaleStageContent(oldW, oldH, newW, newH);
+                state.contentStageRef = { w: newW, h: newH };
+                mqRefreshStageSizeInfo();
+                scheduleSaveLocal();
+            }
+
+            window.mqRescaleContentToCurrentStage = function () {
+                updateStageSize();
+                const ref = mqGetContentStageRef();
+                const newW = parseFloat(stage.style.width) || 0;
+                const newH = parseFloat(stage.style.height) || 0;
+                if (!newW || !newH) {
+                    alert('Attendez le chargement des images de fond.');
+                    return;
+                }
+                if (!ref.w || !ref.h) {
+                    state.contentStageRef = { w: newW, h: newH };
+                    mqRefreshStageSizeInfo();
+                    if (window.mqToast) window.mqToast('Référence de format enregistrée.');
+                    return;
+                }
+                mqOfferStageRescale(ref.w, ref.h, newW, newH);
+            };
+
             function mqRescaleStageContent(oldW, oldH, newW, newH) {
                 if (!oldW || !oldH || !newW || !newH) return;
                 if (oldW === newW && oldH === newH) return;
@@ -4226,15 +4318,14 @@
                     const { layouts, stageW: totalW, stageH: totalH } = mqComputeImageLayouts(allImgs);
                     window._mqStageLayouts = layouts;
 
-                    if (_mqStageSizeReady && oldW > 0 && oldH > 0
-                        && (oldW !== totalW || oldH !== totalH) && !_mqImportStageRescaleFrom) {
-                        const hasContent = state.boxes.length > 0 || state.hotspots.length > 0;
-                        if (hasContent) mqRescaleStageContent(oldW, oldH, totalW, totalH);
-                    }
-
                     _mqLastStageW = totalW;
                     _mqLastStageH = totalH;
                     _mqStageSizeReady = true;
+
+                    if (totalW > 0 && totalH > 0
+                        && (!state.contentStageRef || !state.contentStageRef.w || !state.contentStageRef.h)) {
+                        state.contentStageRef = { w: totalW, h: totalH };
+                    }
 
                     stage.style.width = totalW + 'px';
                     stage.style.height = totalH + 'px';
@@ -4262,6 +4353,7 @@
                     if (typeof window.mqOcrRefreshPositions === 'function') {
                         window.mqOcrRefreshPositions();
                     }
+                    mqRefreshStageSizeInfo();
                 } finally {
                     _updatingStageSize = false;
                 }
@@ -9916,8 +10008,8 @@
                     dndGames: cloneProjectData(state.dndGames),
                     view: { scale: state.scale, tx: state.tx, ty: state.ty },
                     editorStage: {
-                        w: parseFloat(stage.style.width) || _mqLastStageW || 0,
-                        h: parseFloat(stage.style.height) || _mqLastStageH || 0
+                        w: (state.contentStageRef && state.contentStageRef.w) || parseFloat(stage.style.width) || _mqLastStageW || 0,
+                        h: (state.contentStageRef && state.contentStageRef.h) || parseFloat(stage.style.height) || _mqLastStageH || 0
                     },
                     exportConfig: {
                         img1: $('confImg1') ? $('confImg1').value : '',
@@ -10067,18 +10159,22 @@
                 hydrateDndImages();
 
                 if (obj.editorStage && obj.editorStage.w > 0 && obj.editorStage.h > 0) {
-                    _mqImportStageRescaleFrom = { w: obj.editorStage.w, h: obj.editorStage.h };
+                    state.contentStageRef = { w: obj.editorStage.w, h: obj.editorStage.h };
+                    _mqLastStageW = obj.editorStage.w;
+                    _mqLastStageH = obj.editorStage.h;
+                    _mqStageSizeReady = true;
                 }
 
                 refreshStageLayout(() => {
-                    if (_mqImportStageRescaleFrom) {
-                        const newW = parseFloat(stage.style.width) || 0;
-                        const newH = parseFloat(stage.style.height) || 0;
-                        const from = _mqImportStageRescaleFrom;
-                        _mqImportStageRescaleFrom = null;
-                        if (newW > 0 && newH > 0 && (from.w !== newW || from.h !== newH)) {
-                            mqRescaleStageContent(from.w, from.h, newW, newH);
-                        }
+                    const newW = parseFloat(stage.style.width) || 0;
+                    const newH = parseFloat(stage.style.height) || 0;
+                    const ref = obj.editorStage && obj.editorStage.w > 0
+                        ? { w: obj.editorStage.w, h: obj.editorStage.h }
+                        : null;
+                    if (ref && newW > 0 && newH > 0 && (ref.w !== newW || ref.h !== newH)) {
+                        mqOfferStageRescale(ref.w, ref.h, newW, newH);
+                    } else if (newW > 0 && newH > 0) {
+                        state.contentStageRef = { w: newW, h: newH };
                     }
                     render();
                     applyTransform();
