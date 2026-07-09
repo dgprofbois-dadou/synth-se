@@ -4234,15 +4234,66 @@
                 return imgs.every((img) => (img.naturalWidth || 0) > 0 && (img.naturalHeight || 0) > 0);
             }
 
+            function mqStageDimsClose(w1, h1, w2, h2) {
+                return Math.abs(w1 - w2) <= 2 && Math.abs(h1 - h2) <= 2;
+            }
+
+            /** Réaligne les coordonnées « décalées » d’un multiple de la hauteur du stage (bug recalibrage). */
+            function mqFoldCoordinatesToStage(stageH) {
+                if (!stageH || stageH <= 0) return 0;
+                let n = 0;
+                state.boxes.forEach((b) => {
+                    while (b.y >= stageH) { b.y -= stageH; n++; }
+                });
+                state.hotspots.forEach((h) => {
+                    h.points = (h.points || []).map(([px, py]) => {
+                        let y = py;
+                        while (y >= stageH) { y -= stageH; n++; }
+                        return [px, y];
+                    });
+                });
+                mqGameIds().forEach((gid) => {
+                    const g = state.dndGames[gid];
+                    if (!g) return;
+                    while ((g.y || 0) >= stageH) { g.y -= stageH; n++; }
+                });
+                return n;
+            }
+
+            function mqFinalizeImportLayout(savedEditorStage) {
+                updateStageSize();
+                const newW = parseFloat(stage.style.width) || 0;
+                const newH = parseFloat(stage.style.height) || 0;
+                const ref = savedEditorStage && savedEditorStage.w > 0 ? savedEditorStage : null;
+                const folded = mqFoldCoordinatesToStage(newH);
+                if (ref && newW > 0 && newH > 0) {
+                    if (mqStageDimsClose(ref.w, ref.h, newW, newH)) {
+                        state.contentStageRef = { w: newW, h: newH };
+                    } else if (mqStageDimensionsReliable()) {
+                        mqOfferStageRescale(ref.w, ref.h, newW, newH);
+                    }
+                } else if (newW > 0 && newH > 0) {
+                    state.contentStageRef = { w: newW, h: newH };
+                }
+                mqRefreshStageSizeInfo();
+                if (folded > 0 && window.mqToast) {
+                    window.mqToast('Positions réalignées sur le canvas ' + newW + ' × ' + newH);
+                }
+            }
+
             function mqTryOfferStageRescale(oldW, oldH) {
                 const attempt = () => {
                     if (!mqStageDimensionsReliable()) return false;
                     updateStageSize();
                     const newW = parseFloat(stage.style.width) || 0;
                     const newH = parseFloat(stage.style.height) || 0;
-                    if (oldW > 0 && oldH > 0 && newW > 0 && newH > 0
-                        && (oldW !== newW || oldH !== newH)) {
-                        mqOfferStageRescale(oldW, oldH, newW, newH);
+                    if (oldW > 0 && oldH > 0 && newW > 0 && newH > 0) {
+                        if (mqStageDimsClose(oldW, oldH, newW, newH)) {
+                            state.contentStageRef = { w: newW, h: newH };
+                            mqRefreshStageSizeInfo();
+                        } else {
+                            mqOfferStageRescale(oldW, oldH, newW, newH);
+                        }
                     } else if (newW > 0 && newH > 0) {
                         state.contentStageRef = { w: newW, h: newH };
                         mqRefreshStageSizeInfo();
@@ -10194,16 +10245,7 @@
                 }
 
                 refreshStageLayout(() => {
-                    const ref = obj.editorStage && obj.editorStage.w > 0
-                        ? { w: obj.editorStage.w, h: obj.editorStage.h }
-                        : null;
-                    if (ref) {
-                        mqTryOfferStageRescale(ref.w, ref.h);
-                    } else {
-                        const newW = parseFloat(stage.style.width) || 0;
-                        const newH = parseFloat(stage.style.height) || 0;
-                        if (newW > 0 && newH > 0) state.contentStageRef = { w: newW, h: newH };
-                    }
+                    mqFinalizeImportLayout(obj.editorStage);
                     render();
                     applyTransform();
                     setBodyMode();
