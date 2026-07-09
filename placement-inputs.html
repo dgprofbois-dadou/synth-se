@@ -3407,6 +3407,8 @@
 
             const normalize = (s) => (s || '')
                 .trim()
+                // Apostrophe typographique, dactylographique, prime, etc. → une seule forme
+                .replace(/[\u0027\u0060\u00B4\u2018\u2019\u201A\u201B\u2032\u02BC\u02B9\u02BB\uFF07]/g, "'")
                 .toUpperCase()
                 .normalize('NFD')
                 .replace(/\p{Diacritic}/gu, '')
