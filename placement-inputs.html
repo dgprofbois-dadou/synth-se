@@ -3078,6 +3078,10 @@
                     sans la réponse ni l'infobulle. Au dépôt, la <strong>largeur</strong> s'adapte à la
                     réponse du champ cible ou à la réponse du modèle enregistré (réf. interne).
                     <br><br>
+                    <strong>Modèles sur GitHub</strong> : dossier <code style="font-size:10px;">library-presets/</code>
+                    (<code style="font-size:10px;">catalog.json</code>) — téléchargez ci-dessous, remplacez le fichier
+                    dans le dépôt, commit + push, puis 🔄.
+                    <br><br>
                     <strong>Formes Inkscape</strong> : exportez en <code style="font-size:10px;">.svg</code>,
                     copiez dans <code style="font-size:10px;">library-shapes/</code>
                     puis double-cliquez <code style="font-size:10px;">MAJ-formes.bat</code>
@@ -3085,11 +3089,17 @@
                     Sur le canvas : taille (Ctrl+T), forme (poignées), épaisseur (Contour).
                 </p>
                 <div class="mq-lib-shape-tools" style="display:flex; gap:6px; flex-wrap:wrap; margin:8px 0;">
+                    <button id="btnPresetDownload" type="button" style="flex:1; min-width:110px;"
+                        title="Télécharger catalog.json pour library-presets/ sur GitHub">📥 catalog.json</button>
+                    <button id="btnPresetReload" type="button" style="min-width:36px;"
+                        title="Recharger library-presets/catalog.json depuis GitHub">🔄</button>
+                </div>
+                <div class="mq-lib-shape-tools" style="display:flex; gap:6px; flex-wrap:wrap; margin:8px 0;">
                     <button id="btnShapeImportSvg" type="button" style="flex:1; min-width:110px;">📄 Fichiers SVG…</button>
                     <button id="btnShapeImportFolder" type="button" style="flex:1; min-width:110px;"
                         title="Sélectionner le dossier library-shapes sur votre PC">📂 Dossier…</button>
                     <button id="btnShapeReload" type="button" style="min-width:36px;"
-                        title="Recharger catalog.json (après MAJ-formes.bat)">🔄</button>
+                        title="Recharger library-shapes/catalog.json (après MAJ-formes.bat)">🔄</button>
                 </div>
                 <input type="file" id="mqShapeFilePick" accept=".svg,image/svg+xml" multiple hidden>
                 <input type="file" id="mqShapeFolderPick" webkitdirectory directory multiple hidden>
@@ -7317,9 +7327,11 @@
                 'tip', 'tipMs', 'tipRender', 'tipFontSize', 'tipPad', 'tipFont'
             ];
             const MQ_SHAPE_BASE = 'library-shapes/';
+            const MQ_PRESET_BASE = 'library-presets/';
             let mqShapeCatalog = [];
             let mqShapeCatalogServer = [];
             let mqShapeCatalogSession = [];
+            let mqPresetCatalogServer = [];
             const MQ_SHAPE_DEFAULTS = {
                 defaultSize: 120,
                 preset: {
@@ -7332,6 +7344,88 @@
                 }
             };
 
+            function mqMergePresetCatalog(server, local) {
+                const map = new Map();
+                (server || []).forEach((e) => map.set(e.id, e));
+                (local || []).forEach((e) => map.set(e.id, e));
+                return Array.from(map.values());
+            }
+            function mqSanitizeLibPresetEntry(entry) {
+                if (!entry || typeof entry !== 'object') return null;
+                if (entry.kind !== 'box' && entry.kind !== 'hotspot') return null;
+                const copy = Object.assign({}, entry);
+                if (copy.kind === 'box' && copy.data) {
+                    const data = Object.assign({}, copy.data);
+                    MQ_BOX_LIB_CONTENT_KEYS.forEach((k) => { delete data[k]; });
+                    copy.data = data;
+                }
+                return copy;
+            }
+            function mqNormalizePresetCatalogEntries(arr) {
+                if (!Array.isArray(arr)) return [];
+                return arr.map((raw) => {
+                    const entry = mqSanitizeLibPresetEntry(raw);
+                    if (!entry || !entry.id) return null;
+                    entry.source = 'fichier';
+                    return entry;
+                }).filter(Boolean);
+            }
+            async function mqLoadPresetCatalog() {
+                let server = [];
+                try {
+                    const res = await fetch(MQ_PRESET_BASE + 'catalog.json', { cache: 'no-store' });
+                    if (!res.ok) throw new Error('catalog');
+                    const data = await res.json();
+                    server = mqNormalizePresetCatalogEntries(data.presets);
+                } catch (e) {
+                    console.warn('mqLoadPresetCatalog', e);
+                    server = [];
+                }
+                mqPresetCatalogServer = server;
+            }
+            function mqLibBuildCatalogObject() {
+                const presets = mqLibLoad().map((entry) => {
+                    const copy = Object.assign({}, entry);
+                    delete copy.source;
+                    if (copy.kind === 'box' && copy.data) {
+                        const data = Object.assign({}, copy.data);
+                        MQ_BOX_LIB_CONTENT_KEYS.forEach((k) => { delete data[k]; });
+                        copy.data = data;
+                    }
+                    return copy;
+                });
+                return {
+                    version: 1,
+                    generatedAt: new Date().toISOString(),
+                    presets
+                };
+            }
+            function mqLibDownloadCatalog() {
+                const json = JSON.stringify(mqLibBuildCatalogObject(), null, 2);
+                const blob = new Blob([json], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'catalog.json';
+                a.click();
+                URL.revokeObjectURL(url);
+                if (window.mqToast) {
+                    window.mqToast('catalog.json téléchargé → copiez dans library-presets/ puis push GitHub');
+                }
+            }
+            function mqInitPresetCatalogUi() {
+                const btnDl = document.getElementById('btnPresetDownload');
+                const btnReload = document.getElementById('btnPresetReload');
+                if (btnDl) btnDl.addEventListener('click', () => mqLibDownloadCatalog());
+                if (btnReload) {
+                    btnReload.addEventListener('click', () => {
+                        mqLoadPresetCatalog().then(() => {
+                            mqLibRenderList();
+                            if (window.mqToast) window.mqToast('Modèles rechargés depuis library-presets/');
+                        });
+                    });
+                }
+            }
             function mqMergeShapeCatalog(server, session) {
                 const map = new Map();
                 (server || []).forEach((e) => map.set(e.id, e));
@@ -7465,8 +7559,8 @@
                 return ({ box: 'champ texte', hotspot: 'hotspot', shape: 'forme SVG' })[kind] || kind;
             }
             function mqLibGetEntry(libId) {
-                const local = mqLibLoad().find(x => x.id === libId);
-                if (local) return local;
+                const preset = mqLibLoad().find(x => x.id === libId);
+                if (preset) return preset;
                 return mqShapeCatalog.find(x => x.id === libId) || null;
             }
             function mqShapeFileLabel(file) {
@@ -7624,7 +7718,7 @@
                 mqShapeCatalog = mqMergeShapeCatalog(server, mqShapeCatalogSession);
             }
 
-            function mqLibLoad() {
+            function mqLibLoadLocal() {
                 try {
                     const raw = localStorage.getItem(MQ_LIB_STORAGE_KEY);
                     const arr = raw ? JSON.parse(raw) : [];
@@ -7636,6 +7730,9 @@
                         return Object.assign({}, entry, { data });
                     });
                 } catch (_) { return []; }
+            }
+            function mqLibLoad() {
+                return mqMergePresetCatalog(mqPresetCatalogServer, mqLibLoadLocal());
             }
             function mqLibSave(list) {
                 try { localStorage.setItem(MQ_LIB_STORAGE_KEY, JSON.stringify(list)); } catch (e) { console.warn('mqLibSave', e); }
@@ -8018,7 +8115,7 @@
                     if (name === null || !name.trim()) return;
                     entry = { id: crypto.randomUUID(), kind: 'hotspot', name: name.trim(), createdAt: new Date().toISOString(), data };
                 }
-                const list = mqLibLoad();
+                const list = mqLibLoadLocal();
                 list.unshift(entry);
                 mqLibSave(list);
                 mqLibRenderList();
@@ -8370,6 +8467,7 @@
                     : ((entry.kind === 'box'
                         ? (hint ? hint.slice(0, 28) + (hint.length > 28 ? '…' : '') : 'Style uniquement')
                         : (hint ? hint.slice(0, 28) + (hint.length > 28 ? '…' : '') : 'Sans texte'))
+                        + (entry.source === 'fichier' ? ' · GitHub' : ' · local')
                         + ' · ' + (entry.createdAt || '').slice(0, 10));
                 body.appendChild(nameEl);
                 body.appendChild(meta);
@@ -8380,13 +8478,17 @@
                 del.textContent = '×';
                 del.addEventListener('click', (e) => {
                     e.stopPropagation();
+                    if (entry.source === 'fichier') {
+                        if (window.mqToast) window.mqToast('Modèle GitHub : supprimez-le de library-presets/catalog.json', { warn: true });
+                        return;
+                    }
                     if (!confirm('Supprimer le modèle « ' + entry.name + ' » ?')) return;
-                    mqLibSave(mqLibLoad().filter(x => x.id !== entry.id));
+                    mqLibSave(mqLibLoadLocal().filter(x => x.id !== entry.id));
                     mqLibRenderList();
                 });
                 row.appendChild(preview);
                 row.appendChild(body);
-                if (entry.kind !== 'shape') row.appendChild(del);
+                if (entry.kind !== 'shape' && entry.source !== 'fichier') row.appendChild(del);
                 if (entry.kind === 'box') mqLibWireBoxHover(row, entry);
                 row.addEventListener('dragstart', (e) => {
                     mqLibHideHoverPreview();
@@ -12215,9 +12317,10 @@
             if ($('btnHsTransform')) $('btnHsTransform').addEventListener('click', () => mqToggleHotspotTransform());
             mqLibInitDropTargets();
             mqInitShapeImportUi();
+            mqInitPresetCatalogUi();
             mqInitSpellcheckUi();
             mqInitVoiceUi();
-            mqLoadShapeCatalog().then(() => mqLibRenderList());
+            Promise.all([mqLoadShapeCatalog(), mqLoadPresetCatalog()]).then(() => mqLibRenderList());
             mqOcrInit();
             if ($('btnOcrApplyBoxes')) $('btnOcrApplyBoxes').addEventListener('click', () => mqOcrApplyToBoxes());
             // --- GESTION COPIER / COLLER DE STYLE ---
