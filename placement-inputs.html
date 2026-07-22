@@ -1338,6 +1338,31 @@
             border-color: var(--mq-border);
         }
 
+        /* Réponse attendue : textarea pour un spellcheck navigateur fiable (input text = souvent ignoré) */
+        #left .row textarea.mq-spell-text,
+        #left textarea.mq-spell-text {
+            min-height: 52px;
+            height: auto;
+            resize: vertical;
+            padding: 6px 8px;
+            border-radius: var(--mq-radius-sm);
+            font-size: 11.5px;
+            font-family: var(--mq-font);
+            border: 1px solid var(--mq-border);
+            line-height: 1.35;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        body.mq-spell-on #pAnswer,
+        body.mq-spell-on #pHint,
+        body.mq-spell-on #hsTip,
+        body.mq-spell-on #pPlaceholder,
+        body.mq-spell-on #pVoiceConsigne {
+            /* aide visuelle discrète quand Ortho est actif */
+            border-color: #86efac;
+        }
+
         #left .mq-tabs {
             position: sticky;
             top: 0;
@@ -2391,7 +2416,7 @@
         <button id="btnUndo" type="button" title="Annuler (Ctrl+Z)" disabled>↶</button>
         <button id="btnRedo" type="button" title="Rétablir (Ctrl+Y)" disabled>↷</button>
 
-        <button id="btnSpellCheck" type="button" class="mq-only-admin" title="Surlignage orthographique (français) dans les champs admin">✎ Ortho</button>
+        <button id="btnSpellCheck" type="button" class="mq-only-admin" title="Surlignage orthographique (français) : réponses attendues, indices, infobulles…">✎ Ortho</button>
         <button id="btnSpellReview" type="button" class="mq-only-admin" title="Revoir et corriger tous les textes pédagogiques">📋 Textes</button>
 
         <button id="btnDup" type="button">Dupliquer</button>
@@ -2483,7 +2508,8 @@
             </div>
             <div class="row">
                 <label>Réponse attendue</label>
-                <input id="pAnswer" type="text" placeholder="Ex: CHEVRON" />
+                <textarea id="pAnswer" class="mq-spell-text" rows="2" spellcheck="true" lang="fr"
+                    placeholder="Ex: chevron" title="Orthographe (bouton ✎ Ortho) — clic droit sur un mot souligné pour les suggestions"></textarea>
             </div>
             <div style="margin:-4px 0 10px;">
                 <button id="btnBrushBoxAnswerToHsTip" type="button"
@@ -4843,12 +4869,30 @@
             function mqApplyAdminSpellcheck(on) {
                 const enabled = !!on && state.mode === 'admin';
                 document.body.classList.toggle('mq-spell-on', enabled);
+                // Champs pédagogiques explicitement inclus (réponse attendue, indice, tip…)
+                const explicit = ['pAnswer', 'pHint', 'pPlaceholder', 'hsTip', 'hsLabel', 'pVoiceConsigne'];
+                explicit.forEach((id) => {
+                    const el = document.getElementById(id);
+                    if (!el) return;
+                    el.spellcheck = enabled;
+                    el.lang = enabled ? 'fr' : '';
+                    if (enabled) el.setAttribute('spellcheck', 'true');
+                    else el.setAttribute('spellcheck', 'false');
+                });
                 document.querySelectorAll(
                     '#left input[type="text"], #left textarea, #mqSpellList .mq-spell-input, #mqOcrListHost input.ocr-list-text'
                 ).forEach((el) => {
                     if (el.id === 'io') return;
+                    // Identifiants / URLs / clés techniques : pas d'ortho
+                    if (el.id === 'pVoiceKey' || el.id === 'pVoiceBaseUrl' || el.id === 'pVoiceFileDisplay' || el.id === 'pGroup' || el.id === 'hsGroup') {
+                        el.spellcheck = false;
+                        el.lang = '';
+                        el.setAttribute('spellcheck', 'false');
+                        return;
+                    }
                     el.spellcheck = enabled;
                     el.lang = enabled ? 'fr' : '';
+                    el.setAttribute('spellcheck', enabled ? 'true' : 'false');
                 });
                 const btn = document.getElementById('btnSpellCheck');
                 if (btn) btn.classList.toggle('is-on', enabled);
