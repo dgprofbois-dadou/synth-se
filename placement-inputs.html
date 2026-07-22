@@ -3423,11 +3423,17 @@
 
             const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
 
-            function applyTransform() {
+            function applyTransform(opts) {
+                opts = opts || {};
                 stage.style.transform = `translate(${state.tx}px, ${state.ty}px) scale(${state.scale})`;
-                const zs = $('zoomSlider');
-                if (zs) zs.value = state.scale;
-                if (typeof window.mqRefreshSelectionChrome === 'function') {
+                // Évite de retoucher le slider à chaque frame de PAN (coûteux / inutile)
+                if (!opts.skipZoomSlider) {
+                    const zs = $('zoomSlider');
+                    if (zs && String(zs.value) !== String(state.scale)) zs.value = state.scale;
+                }
+                if (!opts.skipChrome && typeof window.mqScheduleSelectionChrome === 'function') {
+                    window.mqScheduleSelectionChrome();
+                } else if (!opts.skipChrome && typeof window.mqRefreshSelectionChrome === 'function') {
                     requestAnimationFrame(window.mqRefreshSelectionChrome);
                 }
             }
@@ -6524,6 +6530,30 @@
 
             let panning = false;
             let lastX = 0, lastY = 0;
+            let _panRaf = 0;
+            let _panPendingDx = 0, _panPendingDy = 0;
+
+            function mqSetPanning(active) {
+                panning = !!active;
+                if (typeof window.mqSuspendSelectionChrome === 'function') {
+                    window.mqSuspendSelectionChrome(panning);
+                }
+                if (stage) {
+                    if (panning) stage.style.willChange = 'transform';
+                    else stage.style.willChange = '';
+                }
+            }
+
+            function mqFlushPanTransform() {
+                _panRaf = 0;
+                if (!_panPendingDx && !_panPendingDy) return;
+                state.tx += _panPendingDx;
+                state.ty += _panPendingDy;
+                _panPendingDx = 0;
+                _panPendingDy = 0;
+                applyTransform({ skipChrome: true, skipZoomSlider: true });
+            }
+
             viewport.addEventListener('pointerdown', (e) => {
                 // Pas de pan pendant le dessin de hotspot
                 if (drawingHotspot && state.mode === 'admin') return;
@@ -6541,7 +6571,7 @@
                     e.target.closest('#mqCtxBar')
                 )) return;
 
-                panning = true;
+                mqSetPanning(true);
                 lastX = e.clientX; lastY = e.clientY;
                 viewport.setPointerCapture(e.pointerId);
             });
@@ -6560,12 +6590,22 @@
                     return;
                 }
 
-                // 2. LOGIQUE D'INSERTION DE POINT (Shift + Survol ligne)
+                // 2. PAN en priorité : chemin minimal (pas d'insertion / render / chrome)
+                if (panning) {
+                    _panPendingDx += e.clientX - lastX;
+                    _panPendingDy += e.clientY - lastY;
+                    lastX = e.clientX;
+                    lastY = e.clientY;
+                    if (!_panRaf) _panRaf = requestAnimationFrame(mqFlushPanTransform);
+                    return;
+                }
+
+                // 3. LOGIQUE D'INSERTION DE POINT (Shift + Survol ligne)
                 // On réinitialise d'abord
                 const oldInsert = state.insertionData;
                 state.insertionData = null;
 
-                if (state.mode === 'admin' && state.selectedHotspotId && !panning && !state.draggingVertex && !state.hsTransform) {
+                if (state.mode === 'admin' && state.selectedHotspotId && !state.draggingVertex && !state.hsTransform) {
                     const h = state.hotspots.find(x => x.id === state.selectedHotspotId);
                     if (h) {
                         const { x, y } = stageToLocal(e.clientX, e.clientY);
@@ -6618,19 +6658,17 @@
                 }
 
                 // Si l'état d'insertion a changé, on redessine (pour afficher/cacher le point fantôme)
-                if ((oldInsert && !state.insertionData) || (!oldInsert && state.insertionData) ||
-                    (state.insertionData && e.shiftKey)) { // Refresh si shift change
+                // Évite un render à chaque mousemove quand le fantôme est déjà affiché (sauf Shift)
+                const insertAppeared = !oldInsert && state.insertionData;
+                const insertVanished = oldInsert && !state.insertionData;
+                const insertMoved = !!(oldInsert && state.insertionData && (
+                    oldInsert.index !== state.insertionData.index ||
+                    oldInsert.point[0] !== state.insertionData.point[0] ||
+                    oldInsert.point[1] !== state.insertionData.point[1]
+                ));
+                if (insertAppeared || insertVanished || (insertMoved && e.shiftKey)) {
                     render();
                 }
-
-
-                // 3. GESTION PAN (Déplacement du fond)
-                if (!panning) return;
-                const dx = e.clientX - lastX;
-                const dy = e.clientY - lastY;
-                lastX = e.clientX; lastY = e.clientY;
-                state.tx += dx; state.ty += dy;
-                applyTransform();
             });
             window.addEventListener('pointermove', (e) => {
                 if (!freehandTracing || !drawingHotspot || hotspotDrawMode !== 'freehand' || state.mode !== 'admin') return;
@@ -6679,9 +6717,22 @@
                     saveLocal(); // Save position after drag
                 }
                 if (!panning) return;
-                panning = false;
+                if (_panRaf) {
+                    cancelAnimationFrame(_panRaf);
+                    mqFlushPanTransform();
+                }
+                mqSetPanning(false);
+                applyTransform(); // sync slider + chrome une seule fois en fin de pan
             });
-            viewport.addEventListener('pointercancel', () => { panning = false; state.draggingVertex = null; state.draggingScale = null; });
+            viewport.addEventListener('pointercancel', () => {
+                if (_panRaf) {
+                    cancelAnimationFrame(_panRaf);
+                    mqFlushPanTransform();
+                }
+                mqSetPanning(false);
+                state.draggingVertex = null;
+                state.draggingScale = null;
+            });
 
 
             const hsTimers = new Map(); // id -> timer
@@ -14821,7 +14872,7 @@
             ctxBar.appendChild(ctxDel);
 
             function mqUpdateSelectionChrome() {
-                if (!viewport) return;
+                if (!viewport || _mqChromeSuspended) return;
                 const admin = document.body.dataset.mode === 'admin';
                 const box = viewport.querySelector('.box.selected');
                 if (!admin || !box) {
@@ -14850,13 +14901,49 @@
                 if (b && ctxMulti) ctxMulti.classList.toggle('mq-ctx-on', !!b.multiline);
             }
 
-            window.mqRefreshSelectionChrome = mqUpdateSelectionChrome;
+            let _mqChromeRaf = 0;
+            let _mqChromeSuspended = false;
 
-            const mo = new MutationObserver(() => requestAnimationFrame(mqUpdateSelectionChrome));
+            function mqScheduleSelectionChrome() {
+                if (_mqChromeSuspended) return;
+                if (_mqChromeRaf) return;
+                _mqChromeRaf = requestAnimationFrame(() => {
+                    _mqChromeRaf = 0;
+                    mqUpdateSelectionChrome();
+                });
+            }
+
+            function mqSuspendSelectionChrome(suspend) {
+                _mqChromeSuspended = !!suspend;
+                if (_mqChromeSuspended) {
+                    if (_mqChromeRaf) {
+                        cancelAnimationFrame(_mqChromeRaf);
+                        _mqChromeRaf = 0;
+                    }
+                    ctxBar.classList.remove('mq-show');
+                    selLabel.classList.remove('mq-show');
+                    return;
+                }
+                mqScheduleSelectionChrome();
+            }
+
+            window.mqRefreshSelectionChrome = mqUpdateSelectionChrome;
+            window.mqScheduleSelectionChrome = mqScheduleSelectionChrome;
+            window.mqSuspendSelectionChrome = mqSuspendSelectionChrome;
+
+            // Observer uniquement les changements de sélection (class), pas le transform du stage à chaque frame de PAN
+            const mo = new MutationObserver((mutations) => {
+                for (let i = 0; i < mutations.length; i++) {
+                    const t = mutations[i].target;
+                    if (t === ctxBar || t === selLabel) continue;
+                    if (t && t.closest && (t.closest('#mqCtxBar') || t.closest('#mqSelLabel'))) continue;
+                    mqScheduleSelectionChrome();
+                    return;
+                }
+            });
             if (viewport) mo.observe(viewport, { subtree: true, attributes: true, attributeFilter: ['class'], childList: true });
-            if ($('stage')) mo.observe($('stage'), { attributes: true, attributeFilter: ['style'] });
-            window.addEventListener('resize', mqUpdateSelectionChrome);
-            if (zoomSlider) zoomSlider.addEventListener('input', () => requestAnimationFrame(mqUpdateSelectionChrome));
+            window.addEventListener('resize', mqScheduleSelectionChrome);
+            if (zoomSlider) zoomSlider.addEventListener('input', mqScheduleSelectionChrome);
             mqUpdateSelectionChrome();
 
             /* ─── MQ UI · Menu contextuel (clic droit canvas) ─── */
