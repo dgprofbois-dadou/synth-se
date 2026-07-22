@@ -9416,7 +9416,47 @@
             };
 
             // Affiche un message de réussite puis restaure l'instruction du lien (mode multi-cibles)
-            /** Lie source → cible : si la cible a déjà un groupe, la source le rejoint ; sinon la cible rejoint le groupe source. */
+            function mqCountGroupMembers(groupName) {
+                const g = (groupName || '').trim();
+                if (!g) return 0;
+                let n = 0;
+                state.hotspots.forEach((h) => { if ((h.group || '').trim() === g) n++; });
+                state.boxes.forEach((b) => {
+                    if (b.kind === 'iframe') return;
+                    if ((b.group || '').trim() === g) n++;
+                });
+                return n;
+            }
+
+            /** Renomme tous les membres d'un groupe vers un autre (fusion). */
+            function mqRenameGroup(fromGroup, toGroup) {
+                const from = (fromGroup || '').trim();
+                const to = (toGroup || '').trim();
+                if (!from || !to || from === to) return;
+                state.hotspots.forEach((h) => {
+                    if ((h.group || '').trim() === from) h.group = to;
+                });
+                state.boxes.forEach((b) => {
+                    if (b.kind === 'iframe') return;
+                    if ((b.group || '').trim() === from) b.group = to;
+                });
+            }
+
+            function mqSetElementGroup(kind, id, grp) {
+                if (kind === 'hotspot') {
+                    const h = state.hotspots.find((x) => x.id === id);
+                    if (h) h.group = grp;
+                    return;
+                }
+                const b = state.boxes.find((x) => x.id === id);
+                if (b && b.kind !== 'iframe') b.group = grp;
+            }
+
+            /**
+             * Lie source → cible en AJOUTANT au groupe (ne casse jamais les partenaires déjà liés).
+             * Si la cible est déjà dans un autre groupe : fusion des deux groupes
+             * (on garde celui qui a le plus de membres, à égalité le groupe de la session Lier).
+             */
             function mqApplyLink(sourceKind, sourceId, targetKind, targetId) {
                 if (!mqHsLinkGroup || !sourceKind || !sourceId || !targetKind || !targetId) return null;
                 if (sourceKind === targetKind && sourceId === targetId) return null;
@@ -9432,43 +9472,35 @@
                     targetGroup = (t.group || '').trim();
                 }
 
-                if (sourceKind === 'hotspot') {
-                    const src = state.hotspots.find((x) => x.id === sourceId);
-                    if (!src) return null;
-                    if (targetGroup) {
-                        src.group = targetGroup;
-                        return targetGroup;
-                    }
-                    if (targetKind === 'hotspot') {
-                        const t = state.hotspots.find((x) => x.id === targetId);
-                        if (t) t.group = mqHsLinkGroup;
+                // Groupe de session = celui duquel on est parti (ex. hotspot 1-2)
+                let keepGroup = (mqHsLinkGroup || '').trim();
+                if (!keepGroup) return null;
+
+                // La source doit rester dans le groupe de session
+                mqSetElementGroup(sourceKind, sourceId, keepGroup);
+
+                if (targetGroup && targetGroup !== keepGroup) {
+                    const srcCount = mqCountGroupMembers(keepGroup);
+                    const tgtCount = mqCountGroupMembers(targetGroup);
+                    // Fusion : on conserve le groupe le plus peuplé (les liens existants restent)
+                    if (tgtCount > srcCount) {
+                        mqRenameGroup(keepGroup, targetGroup);
+                        keepGroup = targetGroup;
+                        mqHsLinkGroup = keepGroup;
                     } else {
-                        const t = state.boxes.find((x) => x.id === targetId);
-                        if (t && t.kind !== 'iframe') t.group = mqHsLinkGroup;
+                        mqRenameGroup(targetGroup, keepGroup);
                     }
-                    return mqHsLinkGroup;
                 }
 
-                const srcBox = state.boxes.find((x) => x.id === sourceId);
-                if (!srcBox || srcBox.kind === 'iframe') return null;
-                if (targetGroup) {
-                    srcBox.group = targetGroup;
-                    return targetGroup;
-                }
-                if (targetKind === 'hotspot') {
-                    const t = state.hotspots.find((x) => x.id === targetId);
-                    if (t) t.group = mqHsLinkGroup;
-                } else {
-                    const t = state.boxes.find((x) => x.id === targetId);
-                    if (t && t.kind !== 'iframe') t.group = mqHsLinkGroup;
-                }
-                return mqHsLinkGroup;
+                // Ajoute la cible au groupe conservé
+                mqSetElementGroup(targetKind, targetId, keepGroup);
+                return keepGroup;
             }
 
             function mqLinkFeedback(msg) {
                 mqHsBanner(msg);
                 setTimeout(() => {
-                    if (mqHsLinkGroup) mqHsBanner('🔗 Lien « ' + mqHsLinkGroup + ' » : cliquez un champ ou un hotspot à lier — Échap / clic droit pour terminer');
+                    if (mqHsLinkGroup) mqHsBanner('🔗 Lien « ' + mqHsLinkGroup + ' » : cliquez pour AJOUTER au groupe — Échap / clic droit pour terminer');
                 }, 1000);
             }
 
@@ -9615,7 +9647,7 @@
                 mqHsLinkSourceId = h.id;
                 mqHsLinkSourceKind = 'hotspot';
                 mqHsLinkGroup = grp;
-                mqHsBanner('🔗 Lien « ' + grp + ' » : cliquez un champ ou un hotspot à lier — Échap / clic droit pour terminer');
+                mqHsBanner('🔗 Lien « ' + grp + ' » : cliquez pour AJOUTER au groupe (les liens existants sont conservés) — Échap / clic droit pour terminer');
                 document.body.style.cursor = 'crosshair';
             };
 
@@ -9671,7 +9703,7 @@
                 mqHsLinkSourceId = b.id;
                 mqHsLinkSourceKind = 'box';
                 mqHsLinkGroup = grp;
-                mqHsBanner('🔗 Lien « ' + grp + ' » : cliquez un champ ou un hotspot à lier — Échap / clic droit pour terminer');
+                mqHsBanner('🔗 Lien « ' + grp + ' » : cliquez pour AJOUTER au groupe (les liens existants sont conservés) — Échap / clic droit pour terminer');
                 document.body.style.cursor = 'crosshair';
             };
 
