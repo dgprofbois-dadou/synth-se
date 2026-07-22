@@ -4085,7 +4085,9 @@
 
             function mqNormalizeBgPath(path, pageIndex) {
                 const p = (path || '').trim();
-                if (!p || p.indexOf('images_cours/') >= 0) return MQ_DEFAULT_BG[pageIndex] || p;
+                if (!p || p.indexOf('idb:') === 0 || p.indexOf('images_cours/') >= 0) {
+                    return MQ_DEFAULT_BG[pageIndex] || (p.indexOf('idb:') === 0 ? '' : p);
+                }
                 return p;
             }
 
@@ -4110,7 +4112,8 @@
                 const imgs = Array.from(document.querySelectorAll('#stage img.bg'));
                 imgs.forEach((img, i) => {
                     const next = paths[i];
-                    if (!next) return;
+                    // Ne jamais mettre un marqueur IndexedDB (idb:…) dans src — le navigateur plante (ERR_UNKNOWN_URL_SCHEME)
+                    if (!next || String(next).indexOf('idb:') === 0) return;
                     const cur = img.getAttribute('src') || '';
                     if (cur !== next) img.src = next;
                 });
@@ -6846,7 +6849,7 @@
                         const dw = drag.width || 250;
                         const dh = drag.height || 250;
                         const img = document.createElement('img');
-                        img.src = drag.src;
+                        if (drag.src && String(drag.src).indexOf('idb:') !== 0) img.src = drag.src;
                         img.className = 'draggable';
                         img.draggable = true;
                         img.dataset.id = drag.id;
@@ -10443,10 +10446,14 @@
 
             function flushProjectStateBeforeSave() {
                 if (confLayout) state.layout = confLayout.value || state.layout;
-                if (state.selectedId) syncPropsFromUI();
-                if (state.selectedHotspotId) syncHotspotFromUI();
-                syncDndGamesFromUI();
-                mqStampPageBindings();
+                if (state.selectedId) {
+                    try { syncPropsFromUI(); } catch (e) { console.warn('syncPropsFromUI', e); }
+                }
+                if (state.selectedHotspotId) {
+                    try { syncHotspotFromUI(); } catch (e) { console.warn('syncHotspotFromUI', e); }
+                }
+                try { syncDndGamesFromUI(); } catch (e) { console.warn('syncDndGamesFromUI', e); }
+                try { mqStampPageBindings(); } catch (e) { console.warn('mqStampPageBindings', e); }
             }
 
             function buildExportObject() {
@@ -10530,16 +10537,52 @@
             }
 
             function downloadJSON() {
-                if (!io.value.trim()) exportJSON();
-                const blob = new Blob([io.value], { type: 'application/json' });
+                try {
+                    if (!io.value.trim()) {
+                        try { exportJSON(); } catch (e) {
+                            io.value = JSON.stringify(buildExportObject(), null, 2);
+                        }
+                    }
+                    const text = io.value || '';
+                    if (!String(text).trim()) {
+                        alert('Rien à télécharger (JSON vide).');
+                        return;
+                    }
+                    const blob = new Blob([text], { type: 'application/json;charset=utf-8' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = getProjectExportFileName();
+                    a.rel = 'noopener';
+                    a.style.display = 'none';
+                    document.body.appendChild(a);
+                    a.click();
+                    setTimeout(() => {
+                        a.remove();
+                        URL.revokeObjectURL(url);
+                    }, 2500);
+                } catch (err) {
+                    console.error(err);
+                    alert('Échec du téléchargement JSON : ' + (err && err.message ? err.message : err));
+                }
+            }
+
+            /** Déclenche un téléchargement fichier de façon fiable (évite revoke trop tôt). */
+            function mqTriggerBlobDownload(text, filename) {
+                const blob = new Blob([text], { type: 'application/json;charset=utf-8' });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
-                a.download = getProjectExportFileName();
+                a.download = filename || getProjectExportFileName();
+                a.rel = 'noopener';
+                a.style.display = 'none';
                 document.body.appendChild(a);
-                a.click();
-                a.remove();
-                URL.revokeObjectURL(url);
+                // Certains navigateurs ignorent le click si l’élément n’est pas dans le DOM / revoke immédiat
+                a.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+                setTimeout(() => {
+                    try { a.remove(); } catch (_) { /* ignore */ }
+                    try { URL.revokeObjectURL(url); } catch (_) { /* ignore */ }
+                }, 2500);
             }
 
             function importJSON() {
@@ -11284,18 +11327,34 @@
 
             // Bouton Télécharger (.json)
             if (btnDownload) {
-                btnDownload.addEventListener('click', () => {
-                    const json = exportProjectJSON();
-                    const blob = new Blob([json], { type: "application/json" });
-                    const url = URL.createObjectURL(blob);
-
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = getProjectExportFileName();
-                    document.body.appendChild(a);
-                    a.click();
-                    document.body.removeChild(a);
-                    URL.revokeObjectURL(url);
+                btnDownload.addEventListener('click', (ev) => {
+                    if (ev && ev.preventDefault) ev.preventDefault();
+                    try {
+                        let json = '';
+                        try {
+                            json = exportProjectJSON();
+                        } catch (e1) {
+                            console.warn('exportProjectJSON échoué, repli textarea / buildExportObject', e1);
+                            json = (io && io.value && io.value.trim()) ? io.value : '';
+                            if (!json) {
+                                flushProjectStateBeforeSave();
+                                json = JSON.stringify(buildExportObject(), null, 2);
+                            }
+                        }
+                        if (!json || !String(json).trim()) {
+                            alert('Rien à télécharger (JSON vide).');
+                            return;
+                        }
+                        if (io) io.value = json;
+                        mqTriggerBlobDownload(json, getProjectExportFileName());
+                        const old = btnDownload.textContent;
+                        btnDownload.textContent = 'Téléchargé !';
+                        setTimeout(() => { btnDownload.textContent = old; }, 1500);
+                        if (window.mqToast) mqToast('Fichier JSON téléchargé');
+                    } catch (err) {
+                        console.error(err);
+                        alert('Échec du téléchargement JSON : ' + (err && err.message ? err.message : err));
+                    }
                 });
             }
 
@@ -13247,7 +13306,7 @@
                         imgContainer.appendChild(badge);
                     } else {
                         const img = document.createElement('img');
-                        img.src = d.src;
+                        if (d.src && String(d.src).indexOf('idb:') !== 0) img.src = d.src;
                         img.style.cssText = 'width:40px; height:40px; object-fit:contain; border:1px solid #ccc; background:#f0f0f0;';
                         imgContainer.appendChild(img);
 
