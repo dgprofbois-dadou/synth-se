@@ -4115,14 +4115,18 @@
                     if (cur !== next) img.src = next;
                 });
                 return Promise.all(imgs.map((img) => new Promise((resolve) => {
-                    if (img.complete) resolve(img);
-                    else {
-                        img.addEventListener('load', () => resolve(img), { once: true });
-                        img.addEventListener('error', () => {
-                            console.warn('Image de fond introuvable:', img.src);
-                            resolve(img);
-                        }, { once: true });
+                    const done = () => resolve(img);
+                    // Ne pas traiter « complete + naturalWidth 0 » comme prêt (sinon stage trop petit → fold page2→page1)
+                    if (img.complete && (img.naturalWidth || 0) > 0) {
+                        done();
+                        return;
                     }
+                    img.addEventListener('load', done, { once: true });
+                    img.addEventListener('error', () => {
+                        console.warn('Image de fond introuvable:', img.src);
+                        done();
+                    }, { once: true });
+                    if (img.complete) setTimeout(done, 0);
                 })));
             }
 
@@ -4250,7 +4254,9 @@
                 return Math.abs(w1 - w2) <= 2 && Math.abs(h1 - h2) <= 2;
             }
 
-            /** Réaligne les coordonnées « décalées » d’un multiple de la hauteur du stage (bug recalibrage). */
+            /** Réaligne les coordonnées « décalées » d’un multiple de la hauteur du canvas ENREGISTRÉ.
+             *  Ne jamais passer la hauteur temporaire du stage (souvent 1 page avant chargement IDB) :
+             *  sinon les hotspots page 2 (y ≥ page1H) sont rabattus sur la page 1. */
             function mqFoldCoordinatesToStage(stageH) {
                 if (!stageH || stageH <= 0) return 0;
                 let n = 0;
@@ -4272,12 +4278,260 @@
                 return n;
             }
 
+            /** Enregistre pageIndex + coords locales pour chaque élément (lien durable page 1 / page 2). */
+            function mqStampPageBindings() {
+                if (!mqStageDimensionsReliable()) return false;
+                const layouts = window._mqStageLayouts || [];
+                if (layouts.length < 1) return false;
+
+                // Évite de verrouiller pageIndex=0 si tout a déjà glissé sur la page 1 (projet corrompu)
+                if (layouts.length >= 2 && state.layout === 'column') {
+                    const p1H = layouts[0].stageH || 0;
+                    const fullH = layouts.reduce((s, l) => s + (l.stageH || 0), 0);
+                    let maxY = 0;
+                    let anyBound = false;
+                    state.hotspots.forEach((h) => {
+                        if (h.pageIndex != null) anyBound = true;
+                        maxY = Math.max(maxY, mqHotspotCentroid(h).y);
+                    });
+                    state.boxes.forEach((b) => {
+                        if (b.pageIndex != null) anyBound = true;
+                        maxY = Math.max(maxY, (b.y || 0) + (b.h || 0) / 2);
+                    });
+                    if (!anyBound && fullH > p1H * 1.35 && maxY < p1H && (state.hotspots.length + state.boxes.length) > 0) {
+                        return false;
+                    }
+                }
+
+                state.hotspots.forEach((h) => {
+                    const c = mqHotspotCentroid(h);
+                    const { index, layout } = mqFindPageForPoint(c.x, c.y);
+                    h.pageIndex = index;
+                    h.localPoints = (h.points || []).map(([px, py]) => [
+                        Math.round(px - layout.stageX),
+                        Math.round(py - layout.stageY)
+                    ]);
+                });
+                state.boxes.forEach((b) => {
+                    const cx = (b.x || 0) + (b.w || 0) / 2;
+                    const cy = (b.y || 0) + (b.h || 0) / 2;
+                    const { index, layout } = mqFindPageForPoint(cx, cy);
+                    b.pageIndex = index;
+                    b.localX = Math.round((b.x || 0) - layout.stageX);
+                    b.localY = Math.round((b.y || 0) - layout.stageY);
+                });
+                mqGameIds().forEach((gid) => {
+                    const g = state.dndGames[gid];
+                    if (!g) return;
+                    const cx = (g.x || 0) + (g.width || 0) / 2;
+                    const cy = (g.y || 0) + (g.height || 0) / 2;
+                    const { index, layout } = mqFindPageForPoint(cx, cy);
+                    g.pageIndex = index;
+                    g.localX = Math.round((g.x || 0) - layout.stageX);
+                    g.localY = Math.round((g.y || 0) - layout.stageY);
+                });
+                return true;
+            }
+
+            /** Repositionne les éléments selon pageIndex / localPoints (après chargement des fonds). */
+            function mqRemountElementsToPages() {
+                const layouts = window._mqStageLayouts || [];
+                if (!layouts.length) return 0;
+                let n = 0;
+
+                state.hotspots.forEach((h) => {
+                    const idx = (h.pageIndex != null) ? Number(h.pageIndex) : -1;
+                    if (idx < 0 || !layouts[idx]) return;
+                    const lay = layouts[idx];
+                    if (Array.isArray(h.localPoints) && h.localPoints.length) {
+                        const next = h.localPoints.map(([lx, ly]) => [
+                            Math.round(Number(lx) + lay.stageX),
+                            Math.round(Number(ly) + lay.stageY)
+                        ]);
+                        const same = next.length === (h.points || []).length
+                            && next.every((p, i) => p[0] === h.points[i][0] && p[1] === h.points[i][1]);
+                        if (!same) { h.points = next; n++; }
+                    } else if ((h.points || []).length) {
+                        // pageIndex connu mais coords absolues éventuellement rabattues sur page 1 :
+                        // on interprète les points comme locaux à la page courante (souvent 0) puis on ancre.
+                        const cur = mqFindPageForPoint(mqHotspotCentroid(h).x, mqHotspotCentroid(h).y);
+                        if (cur.index !== idx) {
+                            const ox = cur.layout.stageX;
+                            const oy = cur.layout.stageY;
+                            h.points = h.points.map(([px, py]) => [
+                                Math.round(px - ox + lay.stageX),
+                                Math.round(py - oy + lay.stageY)
+                            ]);
+                            h.localPoints = h.points.map(([px, py]) => [
+                                Math.round(px - lay.stageX),
+                                Math.round(py - lay.stageY)
+                            ]);
+                            n++;
+                        }
+                    }
+                });
+
+                state.boxes.forEach((b) => {
+                    const idx = (b.pageIndex != null) ? Number(b.pageIndex) : -1;
+                    if (idx < 0 || !layouts[idx]) return;
+                    const lay = layouts[idx];
+                    if (b.localX != null && b.localY != null) {
+                        const nx = Math.round(Number(b.localX) + lay.stageX);
+                        const ny = Math.round(Number(b.localY) + lay.stageY);
+                        if (nx !== b.x || ny !== b.y) { b.x = nx; b.y = ny; n++; }
+                    } else {
+                        const cur = mqFindPageForPoint(
+                            (b.x || 0) + (b.w || 0) / 2,
+                            (b.y || 0) + (b.h || 0) / 2
+                        );
+                        if (cur.index !== idx) {
+                            b.x = Math.round((b.x || 0) - cur.layout.stageX + lay.stageX);
+                            b.y = Math.round((b.y || 0) - cur.layout.stageY + lay.stageY);
+                            b.localX = Math.round(b.x - lay.stageX);
+                            b.localY = Math.round(b.y - lay.stageY);
+                            n++;
+                        }
+                    }
+                });
+
+                mqGameIds().forEach((gid) => {
+                    const g = state.dndGames[gid];
+                    if (!g) return;
+                    const idx = (g.pageIndex != null) ? Number(g.pageIndex) : -1;
+                    if (idx < 0 || !layouts[idx]) return;
+                    const lay = layouts[idx];
+                    if (g.localX != null && g.localY != null) {
+                        const nx = Math.round(Number(g.localX) + lay.stageX);
+                        const ny = Math.round(Number(g.localY) + lay.stageY);
+                        if (nx !== g.x || ny !== g.y) { g.x = nx; g.y = ny; n++; }
+                    } else {
+                        const cur = mqFindPageForPoint(
+                            (g.x || 0) + (g.width || 0) / 2,
+                            (g.y || 0) + (g.height || 0) / 2
+                        );
+                        if (cur.index !== idx) {
+                            g.x = Math.round((g.x || 0) - cur.layout.stageX + lay.stageX);
+                            g.y = Math.round((g.y || 0) - cur.layout.stageY + lay.stageY);
+                            g.localX = Math.round(g.x - lay.stageX);
+                            g.localY = Math.round(g.y - lay.stageY);
+                            n++;
+                        }
+                    }
+                });
+                return n;
+            }
+
+            /**
+             * Restaure les éléments page 2 déjà rabattus sur la page 1 (bug fold vs stage trop petit).
+             * 1) Remount via pageIndex / localPoints
+             * 2) Sinon, restauration depuis la sauvegarde « pagesafe » (dernier état où du contenu était sur P2)
+             */
+            function mqRecoverFoldedPage2Content(savedEditorStage) {
+                let n = mqRemountElementsToPages();
+                if (n > 0) return n;
+
+                const layouts = window._mqStageLayouts || [];
+                if (layouts.length < 2 || !mqStageDimensionsReliable()) return 0;
+
+                const p1 = layouts[0];
+                let maxY = 0;
+                let maxX = 0;
+                state.hotspots.forEach((h) => {
+                    const c = mqHotspotCentroid(h);
+                    maxY = Math.max(maxY, c.y);
+                    maxX = Math.max(maxX, c.x);
+                });
+                state.boxes.forEach((b) => {
+                    maxY = Math.max(maxY, (b.y || 0) + (b.h || 0) / 2);
+                    maxX = Math.max(maxX, (b.x || 0) + (b.w || 0) / 2);
+                });
+
+                const onSinglePage = (state.layout === 'column')
+                    ? (maxY < p1.stageH * 0.98)
+                    : (maxX < p1.stageW * 0.98);
+                if (!onSinglePage) return 0;
+
+                // Projet clairement multi-pages mais contenu uniquement sur page 1 → tenter le backup
+                const expectMulti = (savedEditorStage && (
+                    (state.layout === 'column' && savedEditorStage.h > p1.stageH * 1.35)
+                    || (state.layout !== 'column' && savedEditorStage.w > p1.stageW * 1.35)
+                ));
+                if (!expectMulti && !(state.hotspots.length + state.boxes.length)) return 0;
+
+                try {
+                    const raw = localStorage.getItem(PROJECT_STORAGE_KEY + '_pagesafe');
+                    if (!raw) {
+                        if (expectMulti && !window._mqPage2RecoverHint && window.mqToast) {
+                            window._mqPage2RecoverHint = true;
+                            window.mqToast('Hotspots page 2 manquants : replacez-les une fois — le bug de bascule est corrigé.');
+                        }
+                        return 0;
+                    }
+                    const bak = JSON.parse(raw);
+                    if (!bak || !Array.isArray(bak.hotspots)) return 0;
+
+                    let bakMaxY = 0;
+                    let bakMaxX = 0;
+                    bak.hotspots.forEach((h) => {
+                        const pts = h.points || [];
+                        if (!pts.length) return;
+                        const y = pts.reduce((a, p) => a + p[1], 0) / pts.length;
+                        const x = pts.reduce((a, p) => a + p[0], 0) / pts.length;
+                        bakMaxY = Math.max(bakMaxY, y);
+                        bakMaxX = Math.max(bakMaxX, x);
+                    });
+                    (bak.boxes || []).forEach((b) => {
+                        bakMaxY = Math.max(bakMaxY, (b.y || 0) + (b.h || 0) / 2);
+                        bakMaxX = Math.max(bakMaxX, (b.x || 0) + (b.w || 0) / 2);
+                    });
+                    const bakHasPage2 = (state.layout === 'column')
+                        ? (bakMaxY >= p1.stageH * 0.98)
+                        : (bakMaxX >= p1.stageW * 0.98);
+                    if (!bakHasPage2) return 0;
+
+                    // Restaurer coords (+ pageIndex) depuis le backup pour les mêmes ids
+                    const hsBak = new Map((bak.hotspots || []).map((h) => [h.id, h]));
+                    state.hotspots.forEach((h) => {
+                        const src = hsBak.get(h.id);
+                        if (!src || !Array.isArray(src.points) || !src.points.length) return;
+                        h.points = cloneProjectData(src.points);
+                        if (src.pageIndex != null) h.pageIndex = src.pageIndex;
+                        if (src.localPoints) h.localPoints = cloneProjectData(src.localPoints);
+                        n++;
+                    });
+                    const boxBak = new Map((bak.boxes || []).map((b) => [b.id, b]));
+                    state.boxes.forEach((b) => {
+                        const src = boxBak.get(b.id);
+                        if (!src) return;
+                        if (src.x != null) b.x = src.x;
+                        if (src.y != null) b.y = src.y;
+                        if (src.pageIndex != null) b.pageIndex = src.pageIndex;
+                        if (src.localX != null) b.localX = src.localX;
+                        if (src.localY != null) b.localY = src.localY;
+                        n++;
+                    });
+                    n += mqRemountElementsToPages();
+                } catch (e) {
+                    console.warn('mqRecoverFoldedPage2Content', e);
+                }
+                return n;
+            }
+
             function mqFinalizeImportLayout(savedEditorStage) {
                 updateStageSize();
                 const newW = parseFloat(stage.style.width) || 0;
                 const newH = parseFloat(stage.style.height) || 0;
                 const ref = savedEditorStage && savedEditorStage.w > 0 ? savedEditorStage : null;
-                const folded = mqFoldCoordinatesToStage(newH);
+
+                // Fold UNIQUEMENT contre la hauteur SAUVEGARDÉE (overflow d’un canvas entier),
+                // jamais contre newH (souvent sous-estimé avant chargement des images).
+                let folded = 0;
+                if (ref && ref.h > 0) {
+                    folded = mqFoldCoordinatesToStage(ref.h);
+                }
+
+                const remounted = mqRecoverFoldedPage2Content(savedEditorStage);
+
                 if (ref && newW > 0 && newH > 0) {
                     if (mqStageDimsClose(ref.w, ref.h, newW, newH)) {
                         state.contentStageRef = { w: newW, h: newH };
@@ -4291,6 +4545,10 @@
                 if (folded > 0 && window.mqToast) {
                     window.mqToast('Positions réalignées sur le canvas ' + newW + ' × ' + newH);
                 }
+                if (remounted > 0 && window.mqToast) {
+                    window.mqToast(remounted + ' élément(s) remis sur la bonne page');
+                }
+                return { folded, remounted };
             }
 
             function mqTryOfferStageRescale(oldW, oldH) {
@@ -6140,6 +6398,16 @@
                 };
                 if (lastHotspotStyle) Object.assign(h, lastHotspotStyle);
                 h.group = ''; // jamais hériter le groupe lien du précédent élément
+                // Ancrage page dès la création
+                if (mqStageDimensionsReliable() && (window._mqStageLayouts || []).length) {
+                    const c = mqHotspotCentroid(h);
+                    const { index, layout } = mqFindPageForPoint(c.x, c.y);
+                    h.pageIndex = index;
+                    h.localPoints = (h.points || []).map(([px, py]) => [
+                        Math.round(px - layout.stageX),
+                        Math.round(py - layout.stageY)
+                    ]);
+                }
                 state.hotspots.push(h);
                 state.selectedHotspotId = h.id;
                 lastHotspotStyle = extractHotspotStyle(h);
@@ -10178,6 +10446,7 @@
                 if (state.selectedId) syncPropsFromUI();
                 if (state.selectedHotspotId) syncHotspotFromUI();
                 syncDndGamesFromUI();
+                mqStampPageBindings();
             }
 
             function buildExportObject() {
@@ -10290,10 +10559,11 @@
                 }
                 state.boxes = obj.boxes;
 
-                // Restauration de la configuration Export HTML (AJOUT)
+                // Restauration de la configuration Export HTML — attendre IndexedDB avant le layout
+                const bgReady = [];
                 if (obj.exportConfig) {
-                    resolveBgInto('confImg1', obj.exportConfig.img1 || '', 0);
-                    resolveBgInto('confImg2', obj.exportConfig.img2 || '', 1);
+                    bgReady.push(resolveBgInto('confImg1', obj.exportConfig.img1 || '', 0));
+                    bgReady.push(resolveBgInto('confImg2', obj.exportConfig.img2 || '', 1));
                     if ($('confExportName')) {
                         $('confExportName').value = obj.exportConfig.htmlName || obj.exportConfig.prefix || 'exercice';
                     }
@@ -10348,16 +10618,29 @@
                     _mqStageSizeReady = true;
                 }
 
-                refreshStageLayout(() => {
-                    mqFinalizeImportLayout(obj.editorStage);
-                    render();
-                    applyTransform();
-                    setBodyMode();
-                    if (state.mode === 'student') fitToScreen();
-                    saveLocal();
-                    mqHistoryReset();
-                    _mqHistorySuspended--;
-                });
+                const finishImport = () => {
+                    refreshStageLayout(() => {
+                        // Attendre des dimensions fiables avant fold/remount (évite page2→page1)
+                        const runFinalize = (attempt) => {
+                            if (!mqStageDimensionsReliable() && attempt < 12) {
+                                setTimeout(() => runFinalize(attempt + 1), 80);
+                                return;
+                            }
+                            mqFinalizeImportLayout(obj.editorStage);
+                            mqStampPageBindings();
+                            render();
+                            applyTransform();
+                            setBodyMode();
+                            if (state.mode === 'student') fitToScreen();
+                            saveLocal();
+                            mqHistoryReset();
+                            _mqHistorySuspended--;
+                        };
+                        runFinalize(0);
+                    });
+                };
+
+                Promise.all(bgReady.length ? bgReady : [Promise.resolve()]).then(finishImport).catch(finishImport);
             }
 
             function stopAllHotspots() {
@@ -10446,10 +10729,10 @@
             // Restaure une image de fond dans son champ : data-URL/chemin direct, ou marqueur 'idb:bgX'
             function resolveBgInto(confId, value, pageIndex) {
                 const conf = $(confId);
-                if (!conf) return;
+                if (!conf) return Promise.resolve(null);
                 if (typeof value === 'string' && value.indexOf('idb:') === 0) {
                     const key = value.slice(4);
-                    idbGet(key).then(dataUrl => {
+                    return idbGet(key).then(dataUrl => {
                         if (dataUrl) {
                             _lastIdbBg[key] = dataUrl;
                             conf.value = dataUrl;
@@ -10457,10 +10740,14 @@
                             const nm = $(confId === 'confImg1' ? 'bg1Name' : 'bg2Name');
                             if (nm) nm.textContent = '✔ image enregistrée';
                         }
-                    }).catch(e => console.warn('resolveBgInto', e));
-                } else {
-                    conf.value = mqNormalizeBgPath(value || '', pageIndex);
+                        return dataUrl || null;
+                    }).catch(e => {
+                        console.warn('resolveBgInto', e);
+                        return null;
+                    });
                 }
+                conf.value = mqNormalizeBgPath(value || '', pageIndex);
+                return Promise.resolve(conf.value);
             }
 
             function saveLocal() {
@@ -10513,6 +10800,38 @@
                     }
                     const json = JSON.stringify(lite);
                     localStorage.setItem(PROJECT_STORAGE_KEY, json);
+
+                    // Backup « pagesafe » : dernier état où du contenu est bien sur la page 2
+                    try {
+                        const layouts = window._mqStageLayouts || [];
+                        if (layouts.length >= 2 && mqStageDimensionsReliable()) {
+                            const p1 = layouts[0];
+                            let maxY = 0, maxX = 0;
+                            (lite.hotspots || []).forEach((h) => {
+                                const pts = h.points || [];
+                                if (!pts.length) return;
+                                maxY = Math.max(maxY, pts.reduce((a, p) => a + p[1], 0) / pts.length);
+                                maxX = Math.max(maxX, pts.reduce((a, p) => a + p[0], 0) / pts.length);
+                            });
+                            (lite.boxes || []).forEach((b) => {
+                                maxY = Math.max(maxY, (b.y || 0) + (b.h || 0) / 2);
+                                maxX = Math.max(maxX, (b.x || 0) + (b.w || 0) / 2);
+                            });
+                            const hasPage2 = (lite.layout === 'column')
+                                ? (maxY >= p1.stageH * 0.98)
+                                : (maxX >= p1.stageW * 0.98);
+                            if (hasPage2) {
+                                localStorage.setItem(PROJECT_STORAGE_KEY + '_pagesafe', JSON.stringify({
+                                    savedAt: lite.savedAt,
+                                    layout: lite.layout,
+                                    hotspots: lite.hotspots,
+                                    boxes: lite.boxes,
+                                    editorStage: lite.editorStage
+                                }));
+                            }
+                        }
+                    } catch (_) { /* quota : ignorer le backup */ }
+
                     console.log('Saved to local storage (' + Math.round(json.length / 1024) + ' Ko)');
                     return { ok: true, bytes: json.length };
                 } catch (e) {
