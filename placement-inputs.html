@@ -13460,7 +13460,7 @@
 
                     // Image miniature
                     const img = document.createElement('img');
-                    img.src = d.src;
+                    if (d.src && String(d.src).indexOf('idb:') !== 0) img.src = d.src;
                     img.style.cssText = 'width:40px; height:40px; object-fit:contain; border:1px solid #ccc; background:#f0f0f0; margin-top:2px;';
                     div.appendChild(img);
 
