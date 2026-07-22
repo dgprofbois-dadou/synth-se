@@ -2161,6 +2161,13 @@
             box-shadow: 0 0 0 2px rgba(59, 108, 246, .18) !important;
         }
 
+        /* Champ mis en évidence au survol d'un hotspot lié */
+        .box.mq-link-lit {
+            outline: 3px solid #2196f3 !important;
+            box-shadow: 0 0 14px rgba(33, 150, 243, 0.55) !important;
+            z-index: 40 !important;
+        }
+
         #mqCtxBar {
             position: absolute;
             display: none;
@@ -3814,7 +3821,7 @@
 
                     // === Tooltip + Hotspot Linking au survol ===
                     field.addEventListener('mouseenter', (e) => {
-                        if (b.hint) showTooltip(b, e.clientX, e.clientY);
+                        showTooltip(b, e.clientX, e.clientY);
 
                         if (b.group) {
                             const groupName = b.group.trim();
@@ -5237,7 +5244,7 @@
 
                     // === Tooltip + Hotspot Linking au survol ===
                     field.addEventListener('mouseenter', (e) => {
-                        if (b.hint) showTooltip(b, e.clientX, e.clientY);
+                        showTooltip(b, e.clientX, e.clientY);
 
                         if (b.group) {
                             const groupName = b.group.trim();
@@ -6068,7 +6075,17 @@
             }
 
             function showTooltip(box, clientX, clientY) {
-                if (!box?.hint) return;
+                if (!box) return;
+                let text = (box.hint || '').trim();
+                // Sens hotspot → champ : si pas d'indice propre, reprendre l'infobulle du hotspot lié
+                if (!text) {
+                    const grp = (box.group || '').trim();
+                    if (grp) {
+                        const linkedHs = state.hotspots.find(h => (h.group || '').trim() === grp && (h.tip || '').trim());
+                        if (linkedHs) text = (linkedHs.tip || '').trim();
+                    }
+                }
+                if (!text) return;
                 if (tooltipTimer) clearTimeout(tooltipTimer);
 
                 const x = clientX + 12;
@@ -6083,12 +6100,12 @@
                 if ((box.hintRender || 'image') === 'text') {
                     // Si mode TEXTE, on applique le padding au style CSS
                     tooltipEl.style.padding = padding + 'px';
-                    tooltipEl.innerHTML = `<div class="ttext" style="font-family:${effectiveFont};font-size:${box.hintFontSize || 24}px">${escapeHtml(box.hint)}</div>`;
+                    tooltipEl.innerHTML = `<div class="ttext" style="font-family:${effectiveFont};font-size:${box.hintFontSize || 24}px">${escapeHtml(text)}</div>`;
                 } else {
                     // Si mode IMAGE, on remet le padding CSS à 0 (car inclus dans l'image)
                     tooltipEl.style.padding = '0px';
                     // On passe le padding et la police spécifique
-                    const url = hintToImageDataURL(box.hint, effectiveFont, box.hintFontSize || 24, padding);
+                    const url = hintToImageDataURL(text, effectiveFont, box.hintFontSize || 24, padding);
                     tooltipEl.innerHTML = `<img src="${url}" alt="">`;
                 }
                 // ... (reste de la fonction identique : positionnement et timer)
@@ -6171,7 +6188,21 @@
                 }
             }
             function showHotspotTooltip(h, clientX, clientY) {
-                const text = (h.tip && h.tip.trim()) ? h.tip.trim() : (h.label || '');
+                let text = (h.tip && h.tip.trim()) ? h.tip.trim() : '';
+                // Si pas d'infobulle propre : reprendre hint/réponse du champ lié (sens hotspot → champ)
+                if (!text) {
+                    const grp = (h.group || '').trim();
+                    if (grp) {
+                        const linkedBox = state.boxes.find(b => (b.group || '').trim() === grp && b.kind !== 'iframe');
+                        if (linkedBox) {
+                            text = (linkedBox.hint || '').trim() || (linkedBox.answer || '').trim();
+                        }
+                    }
+                }
+                if (!text) {
+                    const lab = (h.label || '').trim();
+                    if (lab && lab !== 'Hotspot') text = lab;
+                }
                 if (!text) return;
                 if (tooltipTimer) clearTimeout(tooltipTimer);
 
@@ -6201,6 +6232,17 @@
                 tooltipEl.style.display = 'block';
                 const ms = Math.max(200, Number(h.tipMs || 1500));
                 tooltipTimer = setTimeout(hideTooltip, ms);
+            }
+
+            function setLinkedBoxesLit(groupName, lit) {
+                const g = (groupName || '').trim();
+                if (!g) return;
+                state.boxes.forEach((b) => {
+                    if (b.kind === 'iframe') return;
+                    if ((b.group || '').trim() !== g) return;
+                    const el = stage.querySelector('.box[data-id="' + b.id + '"]');
+                    if (el) el.classList.toggle('mq-link-lit', !!lit);
+                });
             }
 
             // === FONCTION DE SUPPRESSION INTELLIGENTE ===
@@ -7220,28 +7262,38 @@
                     svg.appendChild(g);
 
                     // --- GESTION ÉVÉNEMENTS (Intégrée) ---
-
-                    // MODE ÉLÈVE
-                    if (state.mode !== 'admin') {
+                    // Survol : tip + allumage des champs liés (admin ET élève — le test liaison
+                    // doit marcher sans basculer en mode élève ; avant seuls les champs→hotspots
+                    // réagissaient en admin).
+                    {
                         const trig = h.trigger || 'hover';
-                        if (trig === 'hover') {
+                        if (trig === 'hover' || state.mode === 'admin') {
                             g.addEventListener('mouseenter', (e) => {
                                 const ids = getCoupledIds(h);
                                 ids.forEach(id => setHotspotLit(id, true));
+                                const grp = (h.group || '').trim();
+                                if (grp && typeof setLinkedBoxesLit === 'function') setLinkedBoxesLit(grp, true);
                                 showHotspotTooltip(h, e.clientX, e.clientY);
                             });
                             g.addEventListener('mousemove', (e) => moveTooltip(e.clientX, e.clientY));
                             g.addEventListener('mouseleave', () => {
                                 const ids = getCoupledIds(h);
                                 ids.forEach(id => { if (!hsTimers.has(id)) setHotspotLit(id, false); });
+                                const grp = (h.group || '').trim();
+                                if (grp && typeof setLinkedBoxesLit === 'function') setLinkedBoxesLit(grp, false);
                                 hideTooltip();
                             });
                         }
-                        if (trig === 'click') {
+                        if (trig === 'click' && state.mode !== 'admin') {
                             g.addEventListener('click', (e) => {
                                 e.stopPropagation();
                                 const ids = getCoupledIds(h);
                                 ids.forEach(id => activateHotspot(id));
+                                const grp = (h.group || '').trim();
+                                if (grp && typeof setLinkedBoxesLit === 'function') {
+                                    setLinkedBoxesLit(grp, true);
+                                    setTimeout(() => setLinkedBoxesLit(grp, false), Math.max(500, Number(h.tipMs || 1500)));
+                                }
                                 showHotspotTooltip(h, e.clientX, e.clientY);
                             });
                         }
@@ -9332,6 +9384,16 @@
                 const txt = prompt('Infobulle — texte à afficher :', h.tip || '');
                 if (txt === null) return;
                 h.tip = txt;
+                // Sync vers les champs liés sans indice
+                const tip = (h.tip || '').trim();
+                const grp = (h.group || '').trim();
+                if (tip && grp) {
+                    state.boxes.forEach((b) => {
+                        if (b.kind === 'iframe') return;
+                        if ((b.group || '').trim() !== grp) return;
+                        if (!(b.hint || '').trim()) b.hint = tip;
+                    });
+                }
                 syncHotspotUI();
                 render();
                 scheduleSaveLocal();
@@ -9383,15 +9445,43 @@
                 if (window.mqToast) window.mqToast('Infobulle mise à jour avec la réponse copiée.');
             };
 
-            // 2) Pinceau infobulle : capture l'infobulle, puis on la colle sur les hotspots cliqués
+            // 2) Pinceau infobulle : capture l'infobulle, puis on la colle sur hotspots OU champs (hint)
             window.mqStartHotspotTipBrush = function () {
                 const h = getSelectedHotspot();
                 if (!h) { alert('Sélectionnez d\'abord un hotspot source.'); return; }
                 mqCancelTools();
                 mqHsTipBrush = extractHotspotTip(h);
                 hotspotTipClipboard = mqHsTipBrush;
-                mqHsBanner('💬 Infobulle : cliquez les hotspots à remplir — Échap / clic droit pour terminer');
+                mqHsBanner('💬 Infobulle : cliquez un hotspot ou un champ à remplir — Échap / clic droit pour terminer');
                 document.body.style.cursor = 'copy';
+            };
+
+            /** Copie l'infobulle du hotspot sélectionné vers le hint des champs liés (même groupe). */
+            window.mqCopyHotspotTipToLinkedBoxes = function () {
+                const h = getSelectedHotspot();
+                if (!h) { alert('Sélectionnez d\'abord un hotspot.'); return; }
+                const tip = (h.tip || '').trim();
+                if (!tip) {
+                    if (window.mqToast) window.mqToast('Ce hotspot n\'a pas d\'infobulle.', { warn: true });
+                    return;
+                }
+                const grp = (h.group || '').trim();
+                if (!grp) {
+                    if (window.mqToast) window.mqToast('Liez d\'abord ce hotspot à un champ.', { warn: true });
+                    return;
+                }
+                let n = 0;
+                state.boxes.forEach((b) => {
+                    if (b.kind === 'iframe') return;
+                    if ((b.group || '').trim() !== grp) return;
+                    b.hint = tip;
+                    n++;
+                    if (typeof mqFlashBox === 'function') mqFlashBox(b.id);
+                });
+                if (state.selectedId && typeof syncPropsFromSelected === 'function') syncPropsFromSelected();
+                render();
+                scheduleSaveLocal();
+                if (window.mqToast) window.mqToast(n ? ('Infobulle copiée vers ' + n + ' champ(s).') : 'Aucun champ lié trouvé.');
             };
 
             // 3) Pinceau hotspot : capture CE style, puis on peint les hotspots cliqués
@@ -9593,9 +9683,50 @@
                     return;
                 }
 
-                // --- Pinceau infobulle : coller l'infobulle sur le hotspot cliqué ---
+                // --- Pinceau infobulle : coller sur hotspot OU champ (hint) ---
                 if (mqHsTipBrush) {
-                    const hsEl = e.target.closest && e.target.closest('.hotspot-group');
+                    const stack = (typeof document.elementsFromPoint === 'function')
+                        ? document.elementsFromPoint(e.clientX, e.clientY)
+                        : [e.target];
+                    let hsEl = null;
+                    let boxEl = null;
+                    for (const node of stack) {
+                        if (!node || !node.closest) continue;
+                        if (!hsEl) {
+                            const hHit = node.closest('.hotspot-group');
+                            if (hHit) hsEl = hHit;
+                        }
+                        if (!boxEl) {
+                            const bHit = node.closest('.box');
+                            if (bHit) boxEl = bHit;
+                        }
+                        if (hsEl && boxEl) break;
+                    }
+                    // Priorité champ si présent (souvent sous le SVG)
+                    if (boxEl) {
+                        e.preventDefault(); e.stopPropagation();
+                        const b = state.boxes.find(x => x.id === boxEl.dataset.id);
+                        if (b && b.kind !== 'iframe') {
+                            const tipText = (mqHsTipBrush.tip || '').trim();
+                            if (tipText) {
+                                b.hint = tipText;
+                                if (mqHsTipBrush.tipMs != null) b.hintMs = mqHsTipBrush.tipMs;
+                                if (mqHsTipBrush.tipFont) b.hintFont = mqHsTipBrush.tipFont;
+                                if (mqHsTipBrush.tipFontSize != null) b.hintFontSize = mqHsTipBrush.tipFontSize;
+                                if (mqHsTipBrush.tipPad != null) b.hintPad = mqHsTipBrush.tipPad;
+                                if (mqHsTipBrush.tipRender) b.hintRender = mqHsTipBrush.tipRender;
+                            }
+                            render();
+                            if (state.selectedId === b.id && typeof syncPropsFromSelected === 'function') syncPropsFromSelected();
+                            mqFlashBox(b.id);
+                            scheduleSaveLocal();
+                            mqHsBanner('✅ Infobulle collée sur le champ (indice)');
+                            setTimeout(() => {
+                                if (mqHsTipBrush) mqHsBanner('💬 Infobulle : cliquez un hotspot ou un champ à remplir — Échap / clic droit pour terminer');
+                            }, 900);
+                        }
+                        return;
+                    }
                     if (hsEl) {
                         e.preventDefault(); e.stopPropagation();
                         const h = state.hotspots.find(x => x.id === hsEl.dataset.hsid);
@@ -9647,38 +9778,107 @@
                     return;
                 }
 
-                // --- Lien : hotspot -> champ OU -> autre hotspot (même groupe) ---
+                // --- Lien : hotspot ↔ champ (elementsFromPoint : le SVG ne masque plus les champs) ---
                 if (mqHsLinkGroup) {
-                    const hsEl = e.target.closest && e.target.closest('.hotspot-group');
-                    if (hsEl) {
-                        e.preventDefault(); e.stopPropagation();
-                        const h = state.hotspots.find(x => x.id === hsEl.dataset.hsid);
-                        if (h) {
-                            const grp = mqApplyLink(mqHsLinkSourceKind, mqHsLinkSourceId, 'hotspot', h.id);
-                            if (grp) {
-                                mqHsLinkGroup = grp;
-                                if (state.selectedHotspotId === h.id) syncHotspotUI();
-                                if (mqHsLinkSourceKind === 'hotspot' && state.selectedHotspotId === mqHsLinkSourceId) syncHotspotUI();
-                                if (state.selectedId && typeof syncPropsFromSelected === 'function') syncPropsFromSelected();
-                                render(); mqFlashHotspot(h.id); scheduleSaveLocal();
-                                mqLinkFeedback('✅ Ajouté au groupe « ' + grp + ' »');
-                            }
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const stack = (typeof document.elementsFromPoint === 'function')
+                        ? document.elementsFromPoint(e.clientX, e.clientY)
+                        : [e.target];
+                    let hsEl = null;
+                    let boxEl = null;
+                    for (const node of stack) {
+                        if (!node || !node.closest) continue;
+                        if (!hsEl) {
+                            const hHit = node.closest('.hotspot-group');
+                            if (hHit) hsEl = hHit;
                         }
-                        return;
+                        if (!boxEl) {
+                            const bHit = node.closest('.box');
+                            if (bHit) boxEl = bHit;
+                        }
+                        if (hsEl && boxEl) break;
                     }
-                    const boxEl = e.target.closest && e.target.closest('.box');
-                    if (boxEl) {
-                        e.preventDefault(); e.stopPropagation();
+
+                    // Depuis un hotspot : privilégier le champ (souvent sous le calque SVG)
+                    // Depuis un champ : privilégier le hotspot
+                    let preferBox = (mqHsLinkSourceKind === 'hotspot');
+                    if (preferBox && boxEl) {
                         const b = state.boxes.find(x => x.id === boxEl.dataset.id);
                         if (b && b.kind !== 'iframe') {
                             const grp = mqApplyLink(mqHsLinkSourceKind, mqHsLinkSourceId, 'box', b.id);
                             if (grp) {
                                 mqHsLinkGroup = grp;
+                                // Sync infobulle hotspot → hint champ si le champ n'en a pas
+                                if (mqHsLinkSourceKind === 'hotspot') {
+                                    const srcHs = state.hotspots.find(x => x.id === mqHsLinkSourceId);
+                                    const tip = srcHs && (srcHs.tip || '').trim();
+                                    if (tip && !(b.hint || '').trim()) {
+                                        b.hint = tip;
+                                        if (state.selectedId === b.id && typeof pHint !== 'undefined' && pHint) pHint.value = tip;
+                                    }
+                                }
                                 if (state.selectedId === b.id && typeof pGroup !== 'undefined' && pGroup) pGroup.value = b.group;
                                 if (mqHsLinkSourceKind === 'box' && state.selectedId === mqHsLinkSourceId && typeof syncPropsFromSelected === 'function') syncPropsFromSelected();
                                 if (state.selectedId === b.id && typeof syncPropsFromSelected === 'function') syncPropsFromSelected();
-                                render(); mqFlashBox(b.id); scheduleSaveLocal();
-                                mqLinkFeedback('✅ Ajouté au groupe « ' + grp + ' »');
+                                if (mqHsLinkSourceKind === 'hotspot' && state.selectedHotspotId === mqHsLinkSourceId) syncHotspotUI();
+                                render();
+                                mqFlashBox(b.id);
+                                scheduleSaveLocal();
+                                mqLinkFeedback('✅ Champ lié au groupe « ' + grp + ' »');
+                            }
+                            return;
+                        }
+                    }
+
+                    if (hsEl) {
+                        const h = state.hotspots.find(x => x.id === hsEl.dataset.hsid);
+                        if (h) {
+                            const grp = mqApplyLink(mqHsLinkSourceKind, mqHsLinkSourceId, 'hotspot', h.id);
+                            if (grp) {
+                                mqHsLinkGroup = grp;
+                                // Sync réponse/hint champ → tip hotspot si vide
+                                if (mqHsLinkSourceKind === 'box') {
+                                    const srcBox = state.boxes.find(x => x.id === mqHsLinkSourceId);
+                                    if (srcBox && !(h.tip || '').trim()) {
+                                        const tipText = (srcBox.answer || '').trim() || (srcBox.hint || '').trim();
+                                        if (tipText) h.tip = tipText;
+                                    }
+                                }
+                                if (state.selectedHotspotId === h.id) syncHotspotUI();
+                                if (mqHsLinkSourceKind === 'hotspot' && state.selectedHotspotId === mqHsLinkSourceId) syncHotspotUI();
+                                if (state.selectedId && typeof syncPropsFromSelected === 'function') syncPropsFromSelected();
+                                render();
+                                mqFlashHotspot(h.id);
+                                scheduleSaveLocal();
+                                mqLinkFeedback('✅ Hotspot lié au groupe « ' + grp + ' »');
+                            }
+                        }
+                        return;
+                    }
+
+                    if (boxEl) {
+                        const b = state.boxes.find(x => x.id === boxEl.dataset.id);
+                        if (b && b.kind !== 'iframe') {
+                            const grp = mqApplyLink(mqHsLinkSourceKind, mqHsLinkSourceId, 'box', b.id);
+                            if (grp) {
+                                mqHsLinkGroup = grp;
+                                if (mqHsLinkSourceKind === 'hotspot') {
+                                    const srcHs = state.hotspots.find(x => x.id === mqHsLinkSourceId);
+                                    const tip = srcHs && (srcHs.tip || '').trim();
+                                    if (tip && !(b.hint || '').trim()) {
+                                        b.hint = tip;
+                                        if (state.selectedId === b.id && typeof pHint !== 'undefined' && pHint) pHint.value = tip;
+                                    }
+                                }
+                                if (state.selectedId === b.id && typeof pGroup !== 'undefined' && pGroup) pGroup.value = b.group;
+                                if (mqHsLinkSourceKind === 'box' && state.selectedId === mqHsLinkSourceId && typeof syncPropsFromSelected === 'function') syncPropsFromSelected();
+                                if (state.selectedId === b.id && typeof syncPropsFromSelected === 'function') syncPropsFromSelected();
+                                if (mqHsLinkSourceKind === 'hotspot' && state.selectedHotspotId === mqHsLinkSourceId) syncHotspotUI();
+                                render();
+                                mqFlashBox(b.id);
+                                scheduleSaveLocal();
+                                mqLinkFeedback('✅ Champ lié au groupe « ' + grp + ' »');
                             }
                         }
                     }
@@ -12352,7 +12552,17 @@
                         }
                         const tag = b.multiline ? 'textarea class="multiline"' : 'input type="text"';
                         const closeTag = b.multiline ? '</textarea>' : '>';
-                        const safeHint = (b.hint || '').replace(/"/g, '&quot;');
+                        const safeHint = (() => {
+                            let t = (b.hint || '').trim();
+                            if (!t) {
+                                const g = (b.group || '').trim();
+                                if (g) {
+                                    const hs = state.hotspots.find(h => (h.group || '').trim() === g && (h.tip || '').trim());
+                                    if (hs) t = (hs.tip || '').trim();
+                                }
+                            }
+                            return t.replace(/"/g, '&quot;');
+                        })();
                         const safeAns = (b.answer || '').replace(/"/g, '&quot;');
                         const group = (b.group || '').replace(/"/g, '&quot;');
                         let finalFont = (b.hintFont && b.hintFont !== 'inherit') ? b.hintFont : (b.font || 'inherit');
@@ -12395,7 +12605,18 @@
                         .map(x => x.h)
                         .forEach(h => {
                             const pts = h.points.map(p => `${p[0] - expPage1.stageX},${p[1] - expPage1.stageY}`).join(' ');
-                            const safeTip = ((h.tip && h.tip.trim()) ? h.tip : (h.label || '')).replace(/"/g, '&quot;');
+                            const safeTip = (() => {
+                                let t = (h.tip && h.tip.trim()) ? h.tip.trim() : '';
+                                if (!t) {
+                                    const g = (h.group || '').trim();
+                                    if (g) {
+                                        const box = state.boxes.find(b => (b.group || '').trim() === g && b.kind !== 'iframe');
+                                        if (box) t = (box.hint || '').trim() || (box.answer || '').trim();
+                                    }
+                                }
+                                if (!t) t = h.label || '';
+                                return t.replace(/"/g, '&quot;');
+                            })();
                             const group = (h.group || '').replace(/"/g, '&quot;');
                             let filter = (h.shadowX || h.shadowBlur) ? `filter:drop-shadow(${h.shadowX}px ${h.shadowY}px ${h.shadowBlur}px ${h.shadowColor});` : '';
                             const alphaIdle = (h.alphaIdle !== undefined) ? h.alphaIdle : 0.5;
@@ -12531,7 +12752,17 @@
                         }
                         const tag = b.multiline ? 'textarea class="multiline"' : 'input type="text"';
                         const closeTag = b.multiline ? '</textarea>' : '>';
-                        const safeHint = (b.hint || '').replace(/"/g, '&quot;');
+                        const safeHint = (() => {
+                            let t = (b.hint || '').trim();
+                            if (!t) {
+                                const g = (b.group || '').trim();
+                                if (g) {
+                                    const hs = state.hotspots.find(h => (h.group || '').trim() === g && (h.tip || '').trim());
+                                    if (hs) t = (hs.tip || '').trim();
+                                }
+                            }
+                            return t.replace(/"/g, '&quot;');
+                        })();
                         const safeAns = (b.answer || '').replace(/"/g, '&quot;');
                         const group = (b.group || '').replace(/"/g, '&quot;');
                         let finalFont = (b.hintFont && b.hintFont !== 'inherit') ? b.hintFont : (b.font || 'inherit');
@@ -12572,7 +12803,18 @@
                         .map(x => x.h)
                         .forEach(h => {
                             const pts = h.points.map(p => `${p[0] - expPage2.stageX},${p[1] - expPage2.stageY}`).join(' ');
-                            const safeTip = ((h.tip && h.tip.trim()) ? h.tip : (h.label || '')).replace(/"/g, '&quot;');
+                            const safeTip = (() => {
+                                let t = (h.tip && h.tip.trim()) ? h.tip.trim() : '';
+                                if (!t) {
+                                    const g = (h.group || '').trim();
+                                    if (g) {
+                                        const box = state.boxes.find(b => (b.group || '').trim() === g && b.kind !== 'iframe');
+                                        if (box) t = (box.hint || '').trim() || (box.answer || '').trim();
+                                    }
+                                }
+                                if (!t) t = h.label || '';
+                                return t.replace(/"/g, '&quot;');
+                            })();
                             const group = (h.group || '').replace(/"/g, '&quot;');
                             let filter = (h.shadowX || h.shadowBlur) ? `filter:drop-shadow(${h.shadowX}px ${h.shadowY}px ${h.shadowBlur}px ${h.shadowColor});` : '';
                             const alphaIdle = (h.alphaIdle !== undefined) ? h.alphaIdle : 0.5;
@@ -14706,6 +14948,7 @@
                     ctxMenu.appendChild(title);
                     mqAddMenuItem('📏 Épaisseur…', () => window.mqHotspotEditThickness && window.mqHotspotEditThickness());
                     mqAddMenuItem('💬 Infobulle…', () => window.mqHotspotEditTip && window.mqHotspotEditTip());
+                    mqAddMenuItem('💬 Infobulle → champs liés', () => window.mqCopyHotspotTipToLinkedBoxes && window.mqCopyHotspotTipToLinkedBoxes());
                     const ctxPasteAnsTip = mqAddMenuItem(
                         '💬 Coller réponse comme infobulle',
                         () => window.mqPasteBoxAnswerAsHotspotTip && window.mqPasteBoxAnswerAsHotspotTip()
