@@ -15112,12 +15112,6 @@
                     mqAddMenuItem('📏 Épaisseur…', () => window.mqHotspotEditThickness && window.mqHotspotEditThickness());
                     mqAddMenuItem('💬 Infobulle…', () => window.mqHotspotEditTip && window.mqHotspotEditTip());
                     mqAddMenuItem('💬 Infobulle → champs liés', () => window.mqCopyHotspotTipToLinkedBoxes && window.mqCopyHotspotTipToLinkedBoxes());
-                    const ctxPasteAnsTip = mqAddMenuItem(
-                        '💬 Coller réponse comme infobulle',
-                        () => window.mqPasteBoxAnswerAsHotspotTip && window.mqPasteBoxAnswerAsHotspotTip()
-                    );
-                    const ansClip = window.mqBoxAnswerTipClipboard;
-                    ctxPasteAnsTip.disabled = !(ansClip && ansClip.text);
                     mqAddMenuItem('💬 Copier l\'infobulle (pinceau)', () => window.mqStartHotspotTipBrush && window.mqStartHotspotTipBrush());
                     mqAddMenuItem('🖌️ Pinceau de style', () => window.mqStartHotspotBrush && window.mqStartHotspotBrush());
                     mqAddMenuItem('🧪 Pipette de style', () => window.mqStartHotspotPipette && window.mqStartHotspotPipette());
