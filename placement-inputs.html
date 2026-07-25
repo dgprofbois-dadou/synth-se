@@ -2192,38 +2192,45 @@
         }
 
         #mqContextMenu .mq-ctx-chain {
-            flex: 0 0 22px;
-            width: 22px;
-            min-width: 22px;
+            flex: 0 0 26px;
+            width: 26px;
+            min-width: 26px;
             padding: 0;
             margin: 2px 2px 2px 0;
             display: flex;
             align-items: center;
             justify-content: center;
-            border: 1px solid var(--mq-border);
-            border-radius: 6px;
-            background: #f8fafc;
+            border: 2px solid #94a3b8;
+            border-radius: 7px;
+            background: #f1f5f9;
             color: #64748b;
             cursor: pointer;
             align-self: stretch;
+            transition: background .12s, border-color .12s, color .12s, box-shadow .12s;
         }
 
         #mqContextMenu .mq-ctx-chain svg {
-            width: 12px;
-            height: 12px;
+            width: 14px;
+            height: 14px;
             display: block;
         }
 
         #mqContextMenu .mq-ctx-chain:hover {
-            background: var(--mq-hover);
-            color: var(--mq-text);
+            background: #e2e8f0;
+            color: #334155;
+            border-color: #64748b;
         }
 
         #mqContextMenu .mq-ctx-chain.is-on {
-            background: #e0f2fe;
-            border-color: #38bdf8;
-            color: #0369a1;
-            box-shadow: inset 0 0 0 1px rgba(14, 165, 233, .35);
+            background: #0284c7 !important;
+            border-color: #0369a1 !important;
+            color: #fff !important;
+            box-shadow: 0 0 0 2px rgba(14, 165, 233, .45), inset 0 1px 0 rgba(255, 255, 255, .25);
+        }
+
+        #mqContextMenu .mq-ctx-chain.is-on:hover {
+            background: #0369a1 !important;
+            color: #fff !important;
         }
 
         #viewport {
@@ -9678,6 +9685,10 @@
                 return next;
             }
 
+            // Exposé pour le menu contextuel (autre bloc <script>)
+            window.mqIsHsTipLinkChained = mqIsHsTipLinkChained;
+            window.mqToggleHsTipLinkChain = mqToggleHsTipLinkChain;
+
             function mqRestoreTipLinkBanner() {
                 if (mqHsTipBrush && mqHsLinkGroup) {
                     mqHsBanner('🔗💬 Infobulle + Lien « ' + mqHsLinkGroup + ' » : cliquez un champ ou hotspot — Échap / clic droit pour terminer');
@@ -15198,13 +15209,15 @@
                 const col = document.createElement('div');
                 col.className = 'mq-ctx-pair-col';
 
+                const isChained = () => !!(window.mqIsHsTipLinkChained && window.mqIsHsTipLinkChained());
+
                 const tipBtn = document.createElement('button');
                 tipBtn.type = 'button';
                 tipBtn.setAttribute('role', 'menuitem');
                 tipBtn.textContent = '💬 Copier l\'infobulle (pinceau)';
                 tipBtn.addEventListener('click', () => {
                     mqCloseContextMenu();
-                    if (typeof mqIsHsTipLinkChained === 'function' && mqIsHsTipLinkChained()) {
+                    if (isChained()) {
                         if (window.mqStartHotspotTipAndLink) window.mqStartHotspotTipAndLink();
                     } else if (window.mqStartHotspotTipBrush) {
                         window.mqStartHotspotTipBrush();
@@ -15217,7 +15230,7 @@
                 linkBtn.textContent = '🔗 Lier (champ ou hotspot)';
                 linkBtn.addEventListener('click', () => {
                     mqCloseContextMenu();
-                    if (typeof mqIsHsTipLinkChained === 'function' && mqIsHsTipLinkChained()) {
+                    if (isChained()) {
                         if (window.mqStartHotspotTipAndLink) window.mqStartHotspotTipAndLink();
                     } else if (window.mqStartHotspotLink) {
                         window.mqStartHotspotLink();
@@ -15226,16 +15239,19 @@
 
                 const chain = document.createElement('button');
                 chain.type = 'button';
-                chain.className = 'mq-ctx-chain' + ((typeof mqIsHsTipLinkChained === 'function' && mqIsHsTipLinkChained()) ? ' is-on' : '');
+                const chainedNow = isChained();
+                chain.className = 'mq-ctx-chain' + (chainedNow ? ' is-on' : '');
                 chain.title = 'Enchaîner : infobulle (pinceau) + lier en une seule action';
                 chain.setAttribute('aria-label', 'Enchaîner infobulle et lier');
-                chain.setAttribute('aria-pressed', (typeof mqIsHsTipLinkChained === 'function' && mqIsHsTipLinkChained()) ? 'true' : 'false');
+                chain.setAttribute('aria-pressed', chainedNow ? 'true' : 'false');
                 chain.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M17 7h-3a1 1 0 1 0 0 2h3a3 3 0 0 1 0 6h-3a1 1 0 1 0 0 2h3a5 5 0 0 0 0-10zm-7 0H7a5 5 0 0 0 0 10h3a1 1 0 1 0 0-2H7a3 3 0 0 1 0-6h3a1 1 0 1 0 0-2zm-1 4h6a1 1 0 1 0 0-2H9a1 1 0 1 0 0 2z"/></svg>';
                 chain.addEventListener('click', (ev) => {
                     ev.preventDefault();
                     ev.stopPropagation();
-                    const on = typeof mqToggleHsTipLinkChain === 'function' ? mqToggleHsTipLinkChain() : false;
-                    chain.classList.toggle('is-on', on);
+                    const on = window.mqToggleHsTipLinkChain
+                        ? window.mqToggleHsTipLinkChain()
+                        : false;
+                    chain.classList.toggle('is-on', !!on);
                     chain.setAttribute('aria-pressed', on ? 'true' : 'false');
                     if (window.mqToast) {
                         window.mqToast(on
