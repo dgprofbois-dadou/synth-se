@@ -2172,6 +2172,60 @@
             color: var(--mq-muted-soft);
         }
 
+        /* Duo Infobulle + Lier avec bouton chaîne (hotspot) */
+        #mqContextMenu .mq-ctx-pair {
+            display: flex;
+            align-items: stretch;
+            gap: 2px;
+            margin: 1px 0;
+        }
+
+        #mqContextMenu .mq-ctx-pair-col {
+            flex: 1;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+        }
+
+        #mqContextMenu .mq-ctx-pair-col > button {
+            width: 100%;
+        }
+
+        #mqContextMenu .mq-ctx-chain {
+            flex: 0 0 22px;
+            width: 22px;
+            min-width: 22px;
+            padding: 0;
+            margin: 2px 2px 2px 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid var(--mq-border);
+            border-radius: 6px;
+            background: #f8fafc;
+            color: #64748b;
+            cursor: pointer;
+            align-self: stretch;
+        }
+
+        #mqContextMenu .mq-ctx-chain svg {
+            width: 12px;
+            height: 12px;
+            display: block;
+        }
+
+        #mqContextMenu .mq-ctx-chain:hover {
+            background: var(--mq-hover);
+            color: var(--mq-text);
+        }
+
+        #mqContextMenu .mq-ctx-chain.is-on {
+            background: #e0f2fe;
+            border-color: #38bdf8;
+            color: #0369a1;
+            box-shadow: inset 0 0 0 1px rgba(14, 165, 233, .35);
+        }
+
         #viewport {
             outline: none;
         }
@@ -9500,7 +9554,8 @@
             function mqLinkFeedback(msg) {
                 mqHsBanner(msg);
                 setTimeout(() => {
-                    if (mqHsLinkGroup) mqHsBanner('🔗 Lien « ' + mqHsLinkGroup + ' » : cliquez pour AJOUTER au groupe — Échap / clic droit pour terminer');
+                    if (typeof mqRestoreTipLinkBanner === 'function') mqRestoreTipLinkBanner();
+                    else if (mqHsLinkGroup) mqHsBanner('🔗 Lien « ' + mqHsLinkGroup + ' » : cliquez pour AJOUTER au groupe — Échap / clic droit pour terminer');
                 }, 1000);
             }
 
@@ -9609,6 +9664,50 @@
                 render();
                 scheduleSaveLocal();
                 if (window.mqToast) window.mqToast(n ? ('Infobulle copiée vers ' + n + ' champ(s).') : 'Aucun champ lié trouvé.');
+            };
+
+            function mqIsHsTipLinkChained() {
+                try { return localStorage.getItem('mq_hs_tip_link_chain_v1') === '1'; }
+                catch (_) { return false; }
+            }
+
+            function mqToggleHsTipLinkChain() {
+                const next = !mqIsHsTipLinkChained();
+                try { localStorage.setItem('mq_hs_tip_link_chain_v1', next ? '1' : '0'); }
+                catch (_) { /* ignore */ }
+                return next;
+            }
+
+            function mqRestoreTipLinkBanner() {
+                if (mqHsTipBrush && mqHsLinkGroup) {
+                    mqHsBanner('🔗💬 Infobulle + Lien « ' + mqHsLinkGroup + ' » : cliquez un champ ou hotspot — Échap / clic droit pour terminer');
+                } else if (mqHsTipBrush) {
+                    mqHsBanner('💬 Infobulle : cliquez un hotspot ou un champ à remplir — Échap / clic droit pour terminer');
+                } else if (mqHsLinkGroup) {
+                    mqHsBanner('🔗 Lien « ' + mqHsLinkGroup + ' » : cliquez pour AJOUTER au groupe — Échap / clic droit pour terminer');
+                }
+            }
+
+            /** Mode combiné : pinceau infobulle + lier en même temps. */
+            window.mqStartHotspotTipAndLink = function () {
+                const h = getSelectedHotspot();
+                if (!h) { alert('Sélectionnez d\'abord un hotspot source.'); return; }
+                let grp = (h.group || '').trim();
+                if (!grp) {
+                    grp = 'lien-' + Math.random().toString(36).slice(2, 6);
+                    h.group = grp;
+                    syncHotspotUI();
+                    render();
+                    scheduleSaveLocal();
+                }
+                mqCancelTools();
+                mqHsTipBrush = extractHotspotTip(h);
+                hotspotTipClipboard = mqHsTipBrush;
+                mqHsLinkSourceId = h.id;
+                mqHsLinkSourceKind = 'hotspot';
+                mqHsLinkGroup = grp;
+                mqHsBanner('🔗💬 Infobulle + Lien « ' + grp + ' » : cliquez un champ ou hotspot — Échap / clic droit pour terminer');
+                document.body.style.cursor = 'copy';
             };
 
             // 3) Pinceau hotspot : capture CE style, puis on peint les hotspots cliqués
@@ -9811,6 +9910,7 @@
                 }
 
                 // --- Pinceau infobulle : coller sur hotspot OU champ (hint) ---
+                // (peut être combiné avec le mode Lier via le bouton chaîne du menu)
                 if (mqHsTipBrush) {
                     const stack = (typeof document.elementsFromPoint === 'function')
                         ? document.elementsFromPoint(e.clientX, e.clientY)
@@ -9829,6 +9929,13 @@
                         }
                         if (hsEl && boxEl) break;
                     }
+                    const combo = !!(mqHsLinkGroup && mqHsLinkSourceId);
+                    const applyComboLink = (kind, id) => {
+                        if (!combo) return null;
+                        const grp = mqApplyLink(mqHsLinkSourceKind, mqHsLinkSourceId, kind, id);
+                        if (grp) mqHsLinkGroup = grp;
+                        return grp;
+                    };
                     // Priorité champ si présent (souvent sous le SVG)
                     if (boxEl) {
                         e.preventDefault(); e.stopPropagation();
@@ -9843,14 +9950,16 @@
                                 if (mqHsTipBrush.tipPad != null) b.hintPad = mqHsTipBrush.tipPad;
                                 if (mqHsTipBrush.tipRender) b.hintRender = mqHsTipBrush.tipRender;
                             }
+                            const grp = applyComboLink('box', b.id);
                             render();
                             if (state.selectedId === b.id && typeof syncPropsFromSelected === 'function') syncPropsFromSelected();
+                            if (grp && state.selectedHotspotId === mqHsLinkSourceId) syncHotspotUI();
                             mqFlashBox(b.id);
                             scheduleSaveLocal();
-                            mqHsBanner('✅ Infobulle collée sur le champ (indice)');
-                            setTimeout(() => {
-                                if (mqHsTipBrush) mqHsBanner('💬 Infobulle : cliquez un hotspot ou un champ à remplir — Échap / clic droit pour terminer');
-                            }, 900);
+                            mqHsBanner(grp
+                                ? ('✅ Infobulle + lien « ' + grp + ' »')
+                                : '✅ Infobulle collée sur le champ (indice)');
+                            setTimeout(() => { if (typeof mqRestoreTipLinkBanner === 'function') mqRestoreTipLinkBanner(); }, 900);
                         }
                         return;
                     }
@@ -9859,10 +9968,16 @@
                         const h = state.hotspots.find(x => x.id === hsEl.dataset.hsid);
                         if (h) {
                             applyHotspotTip(h, mqHsTipBrush);
+                            const grp = applyComboLink('hotspot', h.id);
                             render();
                             if (state.selectedHotspotId === h.id) syncHotspotUI();
+                            if (grp && state.selectedHotspotId === mqHsLinkSourceId) syncHotspotUI();
                             mqFlashHotspot(h.id);
                             scheduleSaveLocal();
+                            if (grp) {
+                                mqHsBanner('✅ Infobulle + lien « ' + grp + ' »');
+                                setTimeout(() => { if (typeof mqRestoreTipLinkBanner === 'function') mqRestoreTipLinkBanner(); }, 900);
+                            }
                         }
                     }
                     return;
@@ -15076,6 +15191,67 @@
                 ctxMenu.appendChild(s);
             }
 
+            function mqAddHotspotTipLinkPair() {
+                const wrap = document.createElement('div');
+                wrap.className = 'mq-ctx-pair';
+
+                const col = document.createElement('div');
+                col.className = 'mq-ctx-pair-col';
+
+                const tipBtn = document.createElement('button');
+                tipBtn.type = 'button';
+                tipBtn.setAttribute('role', 'menuitem');
+                tipBtn.textContent = '💬 Copier l\'infobulle (pinceau)';
+                tipBtn.addEventListener('click', () => {
+                    mqCloseContextMenu();
+                    if (typeof mqIsHsTipLinkChained === 'function' && mqIsHsTipLinkChained()) {
+                        if (window.mqStartHotspotTipAndLink) window.mqStartHotspotTipAndLink();
+                    } else if (window.mqStartHotspotTipBrush) {
+                        window.mqStartHotspotTipBrush();
+                    }
+                });
+
+                const linkBtn = document.createElement('button');
+                linkBtn.type = 'button';
+                linkBtn.setAttribute('role', 'menuitem');
+                linkBtn.textContent = '🔗 Lier (champ ou hotspot)';
+                linkBtn.addEventListener('click', () => {
+                    mqCloseContextMenu();
+                    if (typeof mqIsHsTipLinkChained === 'function' && mqIsHsTipLinkChained()) {
+                        if (window.mqStartHotspotTipAndLink) window.mqStartHotspotTipAndLink();
+                    } else if (window.mqStartHotspotLink) {
+                        window.mqStartHotspotLink();
+                    }
+                });
+
+                const chain = document.createElement('button');
+                chain.type = 'button';
+                chain.className = 'mq-ctx-chain' + ((typeof mqIsHsTipLinkChained === 'function' && mqIsHsTipLinkChained()) ? ' is-on' : '');
+                chain.title = 'Enchaîner : infobulle (pinceau) + lier en une seule action';
+                chain.setAttribute('aria-label', 'Enchaîner infobulle et lier');
+                chain.setAttribute('aria-pressed', (typeof mqIsHsTipLinkChained === 'function' && mqIsHsTipLinkChained()) ? 'true' : 'false');
+                chain.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M17 7h-3a1 1 0 1 0 0 2h3a3 3 0 0 1 0 6h-3a1 1 0 1 0 0 2h3a5 5 0 0 0 0-10zm-7 0H7a5 5 0 0 0 0 10h3a1 1 0 1 0 0-2H7a3 3 0 0 1 0-6h3a1 1 0 1 0 0-2zm-1 4h6a1 1 0 1 0 0-2H9a1 1 0 1 0 0 2z"/></svg>';
+                chain.addEventListener('click', (ev) => {
+                    ev.preventDefault();
+                    ev.stopPropagation();
+                    const on = typeof mqToggleHsTipLinkChain === 'function' ? mqToggleHsTipLinkChain() : false;
+                    chain.classList.toggle('is-on', on);
+                    chain.setAttribute('aria-pressed', on ? 'true' : 'false');
+                    if (window.mqToast) {
+                        window.mqToast(on
+                            ? 'Chaîne ON : infobulle + lier ensemble'
+                            : 'Chaîne OFF : commandes séparées');
+                    }
+                });
+
+                col.appendChild(tipBtn);
+                col.appendChild(linkBtn);
+                wrap.appendChild(col);
+                wrap.appendChild(chain);
+                ctxMenu.appendChild(wrap);
+                return wrap;
+            }
+
             function mqShowContextMenu(x, y, type) {
                 ctxMenu.innerHTML = '';
                 ctxMenuType = type;
@@ -15111,11 +15287,10 @@
                     ctxMenu.appendChild(title);
                     mqAddMenuItem('📏 Épaisseur…', () => window.mqHotspotEditThickness && window.mqHotspotEditThickness());
                     mqAddMenuItem('💬 Infobulle…', () => window.mqHotspotEditTip && window.mqHotspotEditTip());
-                    mqAddMenuItem('💬 Copier l\'infobulle (pinceau)', () => window.mqStartHotspotTipBrush && window.mqStartHotspotTipBrush());
+                    mqAddHotspotTipLinkPair();
                     mqAddMenuItem('🖌️ Pinceau de style', () => window.mqStartHotspotBrush && window.mqStartHotspotBrush());
                     mqAddMenuItem('🧪 Pipette de style', () => window.mqStartHotspotPipette && window.mqStartHotspotPipette());
                     mqAddMenuItem('↔️ Transformer (taille)', () => window.mqToggleHotspotTransform && window.mqToggleHotspotTransform(), { kbd: 'Maj+T' });
-                    mqAddMenuItem('🔗 Lier (champ ou hotspot)', () => window.mqStartHotspotLink && window.mqStartHotspotLink());
                     const ctxHsBreak = mqAddMenuItem('✂️ Rompre', () => window.mqBreakHotspotLink && window.mqBreakHotspotLink());
                     const hsData = window.appState && window.appState.selectedHotspotId
                         ? window.appState.hotspots.find(x => x.id === window.appState.selectedHotspotId) : null;
