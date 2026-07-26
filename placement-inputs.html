@@ -397,6 +397,16 @@
             pointer-events: auto;
         }
 
+        /* Pendant le tracé d'un nouveau hotspot : ignorer survol / clic des hotspots existants */
+        body.mq-drawing-hs .hotspot-group {
+            pointer-events: none !important;
+        }
+
+        body.mq-drawing-hs .box.mq-link-lit {
+            outline: none !important;
+            box-shadow: none !important;
+        }
+
         #hotspots {
             position: absolute;
             left: 0;
@@ -3914,6 +3924,7 @@
 
                     // === Tooltip + Hotspot Linking au survol ===
                     field.addEventListener('mouseenter', (e) => {
+                        if (drawingHotspot) return;
                         showTooltip(b, e.clientX, e.clientY);
 
                         if (b.group) {
@@ -5355,9 +5366,9 @@
 
                     // === Tooltip + Hotspot Linking au survol ===
                     field.addEventListener('mouseenter', (e) => {
-                        showTooltip(b, e.clientX, e.clientY);
+                        if (!drawingHotspot) showTooltip(b, e.clientX, e.clientY);
 
-                        if (b.group) {
+                        if (!drawingHotspot && b.group) {
                             const groupName = b.group.trim();
                             if (groupName) {
                                 const toLight = state.hotspots.filter(h => (h.group || '').trim() === groupName);
@@ -5382,6 +5393,7 @@
 
                     field.addEventListener('mousemove', (e) => {
                         if (state.mode !== 'student') return;
+                        if (drawingHotspot) return;
                         moveTooltip(e.clientX, e.clientY);
                     });
 
@@ -6299,6 +6311,7 @@
                 }
             }
             function showHotspotTooltip(h, clientX, clientY) {
+                if (drawingHotspot) return;
                 let text = (h.tip && h.tip.trim()) ? h.tip.trim() : '';
                 // Si pas d'infobulle propre : reprendre hint/réponse du champ lié (sens hotspot → champ)
                 if (!text) {
@@ -6523,8 +6536,27 @@
                 return out;
             }
 
+            function mqClearHotspotHoverEffects() {
+                try {
+                    if (typeof hideTooltip === 'function') hideTooltip();
+                    if (hsTimers && typeof hsTimers.clear === 'function') hsTimers.clear();
+                    (state.hotspots || []).forEach((h) => {
+                        if (typeof setHotspotLit === 'function') setHotspotLit(h.id, false);
+                        const grp = (h.group || '').trim();
+                        if (grp && typeof setLinkedBoxesLit === 'function') setLinkedBoxesLit(grp, false);
+                    });
+                    document.querySelectorAll('.box.mq-link-lit').forEach((el) => el.classList.remove('mq-link-lit'));
+                } catch (_) { /* ignore */ }
+            }
+
+            function mqSetDrawingHotspot(active) {
+                drawingHotspot = !!active;
+                document.body.classList.toggle('mq-drawing-hs', drawingHotspot);
+                if (drawingHotspot) mqClearHotspotHoverEffects();
+            }
+
             function mqCancelHotspotDraw() {
-                drawingHotspot = false;
+                mqSetDrawingHotspot(false);
                 freehandTracing = false;
                 hotspotDrawMode = 'points';
                 state.hotspotDraft = null;
@@ -6582,7 +6614,7 @@
                     if (pts.length < 3) pts = draft.slice();
                 }
                 mqCreateHotspotFromDraft(pts);
-                drawingHotspot = false;
+                mqSetDrawingHotspot(false);
                 freehandTracing = false;
                 hotspotDrawMode = 'points';
                 state.hotspotDraft = null;
@@ -6617,7 +6649,7 @@
             function mqStartHotspotDraw(mode) {
                 if (state.mode !== 'admin') return;
                 if (typeof mqCancelTools === 'function') mqCancelTools();
-                drawingHotspot = true;
+                mqSetDrawingHotspot(true);
                 hotspotDrawMode = mode === 'freehand' ? 'freehand' : 'points';
                 freehandTracing = false;
                 state.hotspotDraft = [];
@@ -6892,6 +6924,7 @@
             }
 
             function setHotspotLit(id, lit) {
+                if (drawingHotspot && lit) return; // pas d'éclairage pendant le tracé
                 const group = svg.querySelector(`g[data-hsid="${id}"]`);
                 if (!group) return;
                 const h = state.hotspots.find(x => x.id === id);
@@ -7425,14 +7458,19 @@
                         const trig = h.trigger || 'hover';
                         if (trig === 'hover' || state.mode === 'admin') {
                             g.addEventListener('mouseenter', (e) => {
+                                if (drawingHotspot) return;
                                 const ids = getCoupledIds(h);
                                 ids.forEach(id => setHotspotLit(id, true));
                                 const grp = (h.group || '').trim();
                                 if (grp && typeof setLinkedBoxesLit === 'function') setLinkedBoxesLit(grp, true);
                                 showHotspotTooltip(h, e.clientX, e.clientY);
                             });
-                            g.addEventListener('mousemove', (e) => moveTooltip(e.clientX, e.clientY));
+                            g.addEventListener('mousemove', (e) => {
+                                if (drawingHotspot) return;
+                                moveTooltip(e.clientX, e.clientY);
+                            });
                             g.addEventListener('mouseleave', () => {
+                                if (drawingHotspot) return;
                                 const ids = getCoupledIds(h);
                                 ids.forEach(id => { if (!hsTimers.has(id)) setHotspotLit(id, false); });
                                 const grp = (h.group || '').trim();
@@ -7458,6 +7496,7 @@
                     // MODE ADMIN
                     if (state.mode === 'admin') {
                         g.addEventListener('pointerdown', (e) => {
+                            if (drawingHotspot) return; // laisser le clic pour le tracé
                             e.preventDefault();
                             e.stopPropagation();
                             state.selectedId = null;
@@ -10457,7 +10496,7 @@
                         } else {
                             state.hotspotDraft.pop();
                             if (state.hotspotDraft.length === 0) {
-                                drawingHotspot = false;
+                                mqSetDrawingHotspot(false);
                                 state.hotspotDraft = null;
                             }
                             render();
@@ -10583,7 +10622,11 @@
                     state.hsTransform = null;
                     state.draggingVertex = null;
                     state.draggingScale = null;
-                    drawingHotspot = false;
+                    if (typeof mqSetDrawingHotspot === 'function') mqSetDrawingHotspot(false);
+                    else {
+                        drawingHotspot = false;
+                        document.body.classList.remove('mq-drawing-hs');
+                    }
                     freehandTracing = false;
 
                     if (snap.exportConfig) {
