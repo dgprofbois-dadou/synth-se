@@ -12396,8 +12396,6 @@
                         const r = await fetch('mq-export-runtime.js', { cache: 'no-store' });
                         if (r.ok) {
                             const code = await r.text();
-                            const runner = new Function(code + '\n;return window.MQ_EXPORT_RUNTIME;');
-                            // new Function n'a pas window — injecter via eval global
                             const prev = window.MQ_EXPORT_RUNTIME;
                             // eslint-disable-next-line no-eval
                             (0, eval)(code);
