@@ -12391,6 +12391,24 @@
                     if (window.MQ_EXPORT_RUNTIME && window.MQ_EXPORT_RUNTIME.scriptJs) {
                         return window.MQ_EXPORT_RUNTIME;
                     }
+                    // Rechargement dynamique si le <script src> a échoué (cache / syntaxe)
+                    try {
+                        const r = await fetch('mq-export-runtime.js', { cache: 'no-store' });
+                        if (r.ok) {
+                            const code = await r.text();
+                            const runner = new Function(code + '\n;return window.MQ_EXPORT_RUNTIME;');
+                            // new Function n'a pas window — injecter via eval global
+                            const prev = window.MQ_EXPORT_RUNTIME;
+                            // eslint-disable-next-line no-eval
+                            (0, eval)(code);
+                            if (window.MQ_EXPORT_RUNTIME && window.MQ_EXPORT_RUNTIME.scriptJs) {
+                                return window.MQ_EXPORT_RUNTIME;
+                            }
+                            window.MQ_EXPORT_RUNTIME = prev;
+                        }
+                    } catch (err) {
+                        console.warn('mq-export-runtime.js reload failed', err);
+                    }
                     const bases = [
                         '../synthèse factorisé/',
                         '../synth%C3%A8se%20factoris%C3%A9/',
