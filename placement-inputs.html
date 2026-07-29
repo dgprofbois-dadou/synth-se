@@ -729,19 +729,61 @@
             box-shadow: 0 0 0 2px rgba(232,82,31,.45);
         }
         /* Steppers +/- pour dim/pos des zones DnD */
-        .mq-step { display:flex; align-items:center; gap:5px; }
+        .mq-step {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            width: 100%;
+            min-width: 0;
+        }
         .mq-step button {
-            flex:0 0 auto; width:28px; height:28px; border:1px solid #cfd6df;
-            background:#fff; border-radius:7px; font-size:18px; line-height:1;
-            cursor:pointer; color:#2c3848; padding:0;
+            flex: 0 0 30px;
+            width: 30px;
+            height: 30px;
+            border: 1px solid #cfd6df;
+            background: #fff;
+            border-radius: 7px;
+            font-size: 16px;
+            line-height: 1;
+            cursor: pointer;
+            color: #2c3848;
+            padding: 0;
+            box-sizing: border-box;
         }
-        .mq-step button:hover { background:#eef2f7; border-color:#9fb0c3; }
-        .mq-step button:active { background:#e2e8f0; }
-        .mq-step input {
-            flex:1 1 auto; min-width:0; width:100%; height:28px; padding:2px 6px;
-            font-size:14px; border:1px solid #cfd6df; border-radius:7px; text-align:center;
+        .mq-step button:hover { background: #eef2f7; border-color: #9fb0c3; }
+        .mq-step button:active { background: #e2e8f0; }
+        .mq-step input[type="number"] {
+            flex: 1 1 56px;
+            min-width: 52px;
+            width: auto;
+            max-width: 100%;
+            height: 30px;
+            padding: 2px 4px;
+            font-size: 13px;
+            font-weight: 600;
+            border: 1px solid #cfd6df;
+            border-radius: 7px;
+            text-align: center;
+            box-sizing: border-box;
+            background: #fff;
+            color: #1a2332;
+            /* Masquer les flèches natives (les +/- suffisent) */
+            -moz-appearance: textfield;
+            appearance: textfield;
         }
-        .mq-field-label { display:block; font-size:12px; color:#5a6573; margin-bottom:3px; font-weight:bold; }
+        .mq-step input[type="number"]::-webkit-outer-spin-button,
+        .mq-step input[type="number"]::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        .mq-field-label {
+            display: block;
+            font-size: 11px;
+            color: #5a6573;
+            margin-bottom: 3px;
+            font-weight: 700;
+            letter-spacing: .2px;
+        }
 
         .dnd-element:hover {
             border-color: #4a90e2;
@@ -1979,7 +2021,7 @@
         }
 
         #left .mq-dnd-draggables {
-            max-height: 150px;
+            max-height: 320px;
             overflow-y: auto;
             background: rgba(255, 255, 255, .85) !important;
             padding: 8px !important;
@@ -2048,6 +2090,50 @@
             width: 100% !important;
             box-sizing: border-box !important;
             background: #fff !important;
+        }
+
+        /* Steppers dim/pos : ne pas forcer width:100% (sinon le champ entre +/- disparaît) */
+        #left .mq-dnd-card .mq-step {
+            gap: 4px !important;
+        }
+        #left .mq-dnd-card .mq-step input[type="number"] {
+            width: auto !important;
+            flex: 1 1 58px !important;
+            min-width: 54px !important;
+            max-width: 88px !important;
+            height: 32px !important;
+            padding: 0 4px !important;
+            font-size: 13px !important;
+            font-weight: 700 !important;
+            text-align: center !important;
+            color: #0f172a !important;
+            border: 1px solid var(--mq-border-strong) !important;
+            border-radius: 8px !important;
+            background: #fff !important;
+        }
+        #left .mq-dnd-card .mq-step button {
+            flex: 0 0 32px !important;
+            width: 32px !important;
+            height: 32px !important;
+            border: 1px solid var(--mq-border-strong) !important;
+            border-radius: 8px !important;
+            background: #fff !important;
+            font-size: 16px !important;
+            font-weight: 700 !important;
+            color: #334155 !important;
+        }
+        #left .mq-dnd-card .mq-step button:hover {
+            background: #eef2ff !important;
+            border-color: #93c5fd !important;
+            color: #1d4ed8 !important;
+        }
+        #left .mq-dnd-card .mq-field-label {
+            font-size: 10px !important;
+            font-weight: 700 !important;
+            text-transform: uppercase;
+            letter-spacing: .4px;
+            color: var(--mq-muted) !important;
+            margin-bottom: 4px !important;
         }
 
         #left .mq-dnd-card input[type="color"] {
@@ -11535,7 +11621,7 @@
                             <button type="button" onclick="window.editDraggableTitle('${gameId}', ${index})" style="padding:2px 6px; font-size:10px; background:#4a90e2; color:white; border:none; border-radius:3px; cursor:pointer;" title="Modifier la description">✏️</button>
                             <button type="button" onclick="window.removeDraggable('${gameId}', ${index})" style="padding:2px 6px; font-size:10px; background:#ff4444; color:white; border:none; border-radius:3px; cursor:pointer;" title="Supprimer">✕</button>
                         </div>
-                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px 8px; margin-top:6px; padding:8px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px;">
                             ${mqDimPosField('X', d.x || 0, 'updateDraggablePosition', gameId, index, 'x', 5)}
                             ${mqDimPosField('Y', d.y || 0, 'updateDraggablePosition', gameId, index, 'y', 5)}
                             ${mqDimPosField('Largeur', d.width || 250, 'updateDraggablePosition', gameId, index, 'width', 10)}
@@ -11563,7 +11649,7 @@
                         <div style="display:flex; align-items:center; gap:5px; margin-bottom:5px;">
                             <span style="font-weight:bold; font-size:11px; color:#666;">Zone ${dz.id}</span>
                         </div>
-                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px 8px; margin-top:6px; padding:8px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px;">
                             ${mqDimPosField('X', dz.x || 0, 'updateDropzonePosition', gameId, index, 'x', 5)}
                             ${mqDimPosField('Y', dz.y || 0, 'updateDropzonePosition', gameId, index, 'y', 5)}
                             ${mqDimPosField('Largeur', dz.width || 80, 'updateDropzonePosition', gameId, index, 'width', 10)}
@@ -11745,7 +11831,7 @@
                     <div style="padding:6px; border-bottom:1px solid #eee; background:#fff; display:flex; gap:6px; align-items:flex-start;">
                         <img src="${d.src}" style="width:42px; height:42px; object-fit:contain; border:1px solid #ccc; background:#f0f0f0;">
                         <div style="flex:1; display:flex; flex-direction:column; gap:5px;">
-                            <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px;">
+                            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px 8px; padding:8px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px;">
                                 ${mqDimPosField('Largeur', d.width || 300, 'updateDecorPosition', gameId, index, 'width', 10)}
                                 ${mqDimPosField('Hauteur', d.height || 200, 'updateDecorPosition', gameId, index, 'height', 10)}
                                 ${mqDimPosField('Plan (z)', d.z || 0, 'updateDecorPosition', gameId, index, 'z', 1)}
@@ -13990,7 +14076,8 @@
 
                     // Ligne 3 : Dimensions et position (steppers lisibles)
                     const rowDim = document.createElement('div');
-                    rowDim.style.cssText = 'display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:4px;';
+                    rowDim.className = 'mq-dnd-dim-grid';
+                    rowDim.style.cssText = 'display:grid; grid-template-columns:1fr 1fr; gap:10px 8px; margin-top:8px; padding:8px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px;';
                     rowDim.innerHTML =
                         mqDimPosField('Largeur', d.width || 250, 'updateDraggablePosition', gameId, index, 'width', 10) +
                         mqDimPosField('Hauteur', d.height || 250, 'updateDraggablePosition', gameId, index, 'height', 10) +
