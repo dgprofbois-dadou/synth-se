@@ -143,6 +143,22 @@ test('cardUse reusable conservé', () => {
   assert.strictEqual(Engine.computeGameScore(g, { '1': ['x'], '2': ['x'] }), 2);
 });
 
+test('cardUse retry conservé et distinct de unique/reusable', () => {
+  const g = Engine.applyGameDefaults({
+    gameType: 'exact',
+    cardUse: 'retry',
+    dropzones: [
+      { id: 1, acceptedIds: ['a'], capacity: 1 },
+      { id: 2, acceptedIds: ['b'], capacity: 1 }
+    ]
+  });
+  assert.strictEqual(g.cardUse, 'retry');
+  assert.strictEqual(Engine.isSingleUse('retry'), true);
+  assert.strictEqual(Engine.isSingleUse('unique'), true);
+  assert.strictEqual(Engine.isSingleUse('reusable'), false);
+  assert.strictEqual(Engine.normalizeCardUse('unique-retry'), 'retry');
+});
+
 console.log('\n=== Test 6 — grille 7×3 ===');
 test('21 zones, coords, row/col, roundtrip', () => {
   const zones = Engine.generateGrid({

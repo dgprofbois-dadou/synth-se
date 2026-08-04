@@ -86,6 +86,10 @@ function rebuild() {
   border-radius: 8px;
   box-shadow: 0 2px 8px rgba(0,0,0,0.25);
 }
+.dnd-placed.dnd-retry-movable {
+  outline: 2px dashed #ef6c00;
+  cursor: grab !important;
+}
 .dropzone {
   flex-wrap: wrap;
   gap: 4px;

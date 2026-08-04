@@ -16,7 +16,7 @@
   var MQ_DND_MAX_ZONES = 100;
   var GAME_TYPES = ['selection', 'exact', 'classification', 'mindmap'];
   var FEEDBACK_MODES = ['immediate', 'deferred'];
-  var CARD_USES = ['unique', 'reusable'];
+  var CARD_USES = ['unique', 'retry', 'reusable'];
 
   function parseIdList(raw) {
     if (Array.isArray(raw)) {
@@ -44,7 +44,13 @@
 
   function normalizeCardUse(t) {
     var v = String(t || 'unique').toLowerCase();
+    if (v === 'unique-retry' || v === 'unique_retry') v = 'retry';
     return CARD_USES.indexOf(v) >= 0 ? v : 'unique';
+  }
+
+  function isSingleUse(cardUse) {
+    var u = normalizeCardUse(cardUse);
+    return u === 'unique' || u === 'retry';
   }
 
   function normalizeDropzone(dz, index) {
@@ -490,61 +496,7 @@
       zone.classList.remove('dropzone-correct', 'dropzone-wrong');
     }
 
-    function placeInZone(zone, id, opts) {
-      opts = opts || {};
-      var zid = zone.getAttribute('data-zone-id');
-      var zcfg = findZoneConfig(zid);
-      if (!zcfg) return false;
-      if (cardUse === 'unique' && used.has(id) && !opts.allowMove) return false;
-
-      var orig = findOrig(id);
-      if (!orig) return false;
-
-      var capacity = Math.max(1, parseInt(zcfg.capacity, 10) || 1);
-      var current = getZonePlacements(zone);
-
-      // Si déjà dans cette zone : ignore
-      if (current.indexOf(id) >= 0) return false;
-
-      // Capacité atteinte : remplacer la dernière si capacity 1, sinon refuser
-      if (current.length >= capacity) {
-        if (capacity === 1) {
-          var oldId = current[0];
-          removeFromZone(zone, oldId, true);
-        } else {
-          return false;
-        }
-      }
-
-      // Retirer d'une autre zone si unique
-      if (cardUse === 'unique') {
-        Array.prototype.forEach.call(gameContainer.querySelectorAll('.dropzone'), function (oz) {
-          if (oz === zone) return;
-          if (getZonePlacements(oz).indexOf(id) >= 0) {
-            removeFromZone(oz, id, false);
-          }
-        });
-      }
-
-      var clone = orig.cloneNode(true);
-      clone.classList.remove('draggable', 'used', 'dnd-selected');
-      clone.classList.add('dnd-placed');
-      clone.removeAttribute('draggable');
-      clone.setAttribute('draggable', 'false');
-      clone.style.cursor = 'pointer';
-      clone.style.opacity = '1';
-      clone.style.filter = 'none';
-      clone.style.position = 'static';
-      clone.style.left = 'auto';
-      clone.style.top = 'auto';
-      clone.style.margin = '0';
-      clone.style.maxWidth = '100%';
-      clone.style.maxHeight = '100%';
-      clone.style.pointerEvents = 'auto';
-      clone.setAttribute('tabindex', '0');
-      clone.setAttribute('role', 'button');
-      clone.setAttribute('aria-label', 'Carte ' + id + ' déposée — Entrée pour retirer');
-
+    function bindPlacedCardInteractions(clone, zone, id) {
       function onRemove() {
         removeFromZone(zone, id, true);
         clearSelection();
@@ -555,10 +507,8 @@
         e.preventDefault();
         e.stopPropagation();
         if (selectedId && selectedId !== id) {
-          // remplacer / ajouter la sélection
-          placeInZone(zone, selectedId);
+          placeInZone(zone, selectedId, { allowMove: true });
           clearSelection();
-          refreshUI();
           return;
         }
         if (selectedId === id) {
@@ -574,19 +524,102 @@
         }
       });
 
+      // Mode retry : glisser une mauvaise carte vers une autre zone
+      if (cardUse === 'retry' && clone.draggable) {
+        clone.addEventListener('dragstart', function (e) {
+          e.dataTransfer.setData('text/plain', id);
+          e.dataTransfer.effectAllowed = 'move';
+          selectCard(id, clone);
+          clone.style.opacity = '0.6';
+        });
+        clone.addEventListener('dragend', function () {
+          clone.style.opacity = '1';
+        });
+      }
+    }
+
+    function placeInZone(zone, id, opts) {
+      opts = opts || {};
+      var zid = zone.getAttribute('data-zone-id');
+      var zcfg = findZoneConfig(zid);
+      if (!zcfg) return false;
+      if (isSingleUse(cardUse) && used.has(id) && !opts.allowMove) return false;
+
+      var orig = findOrig(id);
+      if (!orig) return false;
+
+      var capacity = Math.max(1, parseInt(zcfg.capacity, 10) || 1);
+      var current = getZonePlacements(zone);
+
+      if (current.indexOf(id) >= 0) return false;
+
+      if (current.length >= capacity) {
+        if (capacity === 1) {
+          var oldId = current[0];
+          removeFromZone(zone, oldId, true);
+        } else {
+          return false;
+        }
+      }
+
+      // Une seule présence à la fois (unique + retry)
+      if (isSingleUse(cardUse)) {
+        Array.prototype.forEach.call(gameContainer.querySelectorAll('.dropzone'), function (oz) {
+          if (oz === zone) return;
+          if (getZonePlacements(oz).indexOf(id) >= 0) {
+            removeFromZone(oz, id, false);
+          }
+        });
+      }
+
+      var correctHere = isCardAcceptedInZone(game, zcfg, id);
+      var clone = orig.cloneNode(true);
+      clone.classList.remove('draggable', 'used', 'dnd-selected', 'dnd-retry-movable');
+      clone.classList.add('dnd-placed');
+      clone.removeAttribute('draggable');
+      // Retry + erreur : carte repositionnable ; sinon figée jusqu'au retrait
+      var movable = (cardUse === 'retry' && !correctHere);
+      if (movable) {
+        clone.setAttribute('draggable', 'true');
+        clone.draggable = true;
+        clone.classList.add('dnd-retry-movable');
+        clone.style.cursor = 'grab';
+        clone.setAttribute('aria-label', 'Carte ' + id + ' incorrecte — déplacez-la vers une autre zone (malus à chaque erreur)');
+      } else {
+        clone.setAttribute('draggable', 'false');
+        clone.draggable = false;
+        clone.style.cursor = 'pointer';
+        clone.setAttribute('aria-label', 'Carte ' + id + ' déposée — Entrée pour retirer');
+      }
+      clone.style.opacity = '1';
+      clone.style.filter = 'none';
+      clone.style.position = 'static';
+      clone.style.left = 'auto';
+      clone.style.top = 'auto';
+      clone.style.margin = '0';
+      clone.style.maxWidth = '100%';
+      clone.style.maxHeight = '100%';
+      clone.style.pointerEvents = 'auto';
+      clone.setAttribute('tabindex', '0');
+      clone.setAttribute('role', 'button');
+
+      bindPlacedCardInteractions(clone, zone, id);
+
       zone.appendChild(clone);
-      if (cardUse === 'unique') setUsed(id, true);
+      if (isSingleUse(cardUse)) setUsed(id, true);
       clearSelection();
 
-      if (feedbackMode === 'immediate') {
-        applyZoneFeedback(zone, zcfg, true);
-        if (!isCardAcceptedInZone(game, zcfg, id)) {
-          nbErreurs += 1;
+      // Malus à chaque dépôt incorrect (tous modes), y compris repositionnements
+      if (!correctHere) {
+        nbErreurs += 1;
+        if (feedbackMode === 'immediate') {
+          applyZoneFeedback(zone, zcfg, true);
           if (typeof hooks.playSound === 'function') hooks.playSound('error');
-        } else {
-          if (typeof hooks.playSound === 'function') hooks.playSound('success');
-          if (typeof hooks.showFloating === 'function') hooks.showFloating(zone);
         }
+      } else if (feedbackMode === 'immediate') {
+        applyZoneFeedback(zone, zcfg, true);
+        if (typeof hooks.playSound === 'function') hooks.playSound('success');
+        if (typeof hooks.showFloating === 'function') hooks.showFloating(zone);
       }
 
       refreshUI();
@@ -688,8 +721,7 @@
     function tryPlaceSelectedOnZone(zone) {
       if (!selectedId) return;
       var id = selectedId;
-      if (cardUse === 'unique' && used.has(id)) {
-        // peut être déjà dans une zone — autoriser le déplacement
+      if (isSingleUse(cardUse) && used.has(id)) {
         placeInZone(zone, id, { allowMove: true });
       } else {
         placeInZone(zone, id);
@@ -706,7 +738,7 @@
       img.setAttribute('role', 'button');
 
       img.addEventListener('dragstart', function (e) {
-        if (cardUse === 'unique' && img.classList.contains('used')) {
+        if (isSingleUse(cardUse) && img.classList.contains('used')) {
           e.preventDefault();
           return;
         }
@@ -725,14 +757,14 @@
       img.addEventListener('click', function (e) {
         e.preventDefault();
         e.stopPropagation();
-        if (cardUse === 'unique' && img.classList.contains('used')) return;
+        if (isSingleUse(cardUse) && img.classList.contains('used')) return;
         if (selectedId === id) clearSelection();
         else selectCard(id, img);
       });
       img.addEventListener('keydown', function (e) {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
-          if (cardUse === 'unique' && img.classList.contains('used')) return;
+          if (isSingleUse(cardUse) && img.classList.contains('used')) return;
           if (selectedId === id) clearSelection();
           else selectCard(id, img);
         }
@@ -828,6 +860,7 @@
     normalizeGameType: normalizeGameType,
     normalizeFeedbackMode: normalizeFeedbackMode,
     normalizeCardUse: normalizeCardUse,
+    isSingleUse: isSingleUse,
     normalizeDropzone: normalizeDropzone,
     applyGameDefaults: applyGameDefaults,
     isCardAcceptedInZone: isCardAcceptedInZone,

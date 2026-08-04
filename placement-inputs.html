@@ -861,6 +861,10 @@
         .dnd-dropzone.mq-dnd-selected .dnd-dropzone-label {
             background: rgba(232, 82, 31, 0.95);
         }
+        .dnd-placed.dnd-retry-movable {
+            outline: 2px dashed #ef6c00;
+            cursor: grab !important;
+        }
         .mq-dz-chip-row {
             display: flex;
             flex-wrap: wrap;
@@ -14479,6 +14483,7 @@
                     + '<div class="row"><label>Usage carte</label>'
                     + '<select id="dndGame' + n + 'CardUse" style="width:100%;">'
                     + '<option value="unique">Utilisable une fois</option>'
+                    + '<option value="retry">Une fois — repositionnable si erreur</option>'
                     + '<option value="reusable">Réutilisable</option>'
                     + '</select></div>'
                     + '<div class="row" style="gap:12px;flex-wrap:wrap;">'
