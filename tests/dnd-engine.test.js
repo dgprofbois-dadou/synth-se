@@ -249,6 +249,24 @@ test('sync jusqu’à 21 zones', () => {
   assert.strictEqual(g.dropzones.length, 21);
 });
 
+console.log('\n=== Test instructions ===');
+test('applyGameDefaults instructions', () => {
+  const g = Engine.applyGameDefaults({ gameType: 'selection', goodIds: '1', targetCount: 1, dropzones: [{ id: 1 }] });
+  assert.strictEqual(g.instructions, '');
+  assert.strictEqual(g.showInstructions, true);
+  const g2 = Engine.applyGameDefaults({ instructions: '  Placez les cartes  ', showInstructions: false });
+  assert.strictEqual(g2.instructions, '  Placez les cartes  ');
+  assert.strictEqual(g2.showInstructions, false);
+});
+
+test('UI consignes dans placement-inputs.html', () => {
+  const html = fs.readFileSync(path.join(__dirname, '..', 'placement-inputs.html'), 'utf8');
+  assert.ok(html.includes('Instructions'));
+  assert.ok(html.includes('ShowInstructions'));
+  assert.ok(html.includes('dnd-instructions'));
+  assert.ok(html.includes('Consignes (affichées pendant le jeu)'));
+});
+
 console.log('\n--------------------------------');
 console.log('Résultat:', passed, 'ok,', failed, 'échec(s)');
 process.exit(failed ? 1 : 0);

@@ -19,8 +19,11 @@ Pour ré-extraire les sources depuis le runtime actuel :
 node rebuild-mq-export-runtime.js --extract
 ```
 
-## Tests
+## Propriétés jeu (extra)
 
-```bash
-node tests/dnd-engine.test.js
-```
+| Propriété | Description |
+|-----------|-------------|
+| `instructions` | Texte de consignes affiché pendant le jeu |
+| `showInstructions` | Afficher les consignes (défaut `true`) |
+
+Les consignes restent visibles jusqu’à la réussite de l’étape (`dnd-game-complete`), puis sont masquées.

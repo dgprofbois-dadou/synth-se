@@ -87,6 +87,9 @@
     if (typeof g.showMalus !== 'boolean') g.showMalus = true;
     if (typeof g.revealLinksOnComplete !== 'boolean') g.revealLinksOnComplete = true;
     if (typeof g.hideBordersOnComplete !== 'boolean') g.hideBordersOnComplete = true;
+    if (g.instructions == null) g.instructions = '';
+    else g.instructions = String(g.instructions);
+    if (typeof g.showInstructions !== 'boolean') g.showInstructions = true;
     if (g.goodIds == null) g.goodIds = '';
     if (!Array.isArray(g.dropzones)) g.dropzones = [];
     g.dropzones = g.dropzones.map(normalizeDropzone);
@@ -419,6 +422,50 @@
     var resultDiv = gameContainer.querySelector('.dnd-result') || gameContainer.querySelector('[id^="result"]');
     var scoreContainer = gameContainer.querySelector('.score-malus-container') ||
       gameContainer.querySelector('[id^="score-malus"]');
+    var instructionsEl = gameContainer.querySelector('.dnd-instructions');
+    var instructionsText = String(game.instructions || '').trim();
+    var showInstructions = game.showInstructions !== false && !!instructionsText;
+
+    if (showInstructions && !instructionsEl) {
+      instructionsEl = document.createElement('div');
+      instructionsEl.className = 'dnd-instructions';
+      instructionsEl.setAttribute('role', 'status');
+      instructionsEl.setAttribute('aria-live', 'polite');
+      gameContainer.appendChild(instructionsEl);
+    }
+    if (instructionsEl) {
+      var tbPos = game.titleBox || gameConfig.titleBox || null;
+      var gH = game.height || gameContainer.clientHeight || 400;
+      var topPct = 8;
+      if (tbPos && typeof tbPos.y === 'number') {
+        topPct = (((tbPos.y || 0) + (tbPos.height || 0) + 10) / Math.max(1, gH)) * 100;
+        if (topPct < 2) topPct = 2;
+        if (topPct > 70) topPct = 70;
+      }
+      if (!instructionsEl.style.top) instructionsEl.style.top = topPct + '%';
+      if (showInstructions) {
+        instructionsEl.textContent = instructionsText;
+        instructionsEl.hidden = false;
+        instructionsEl.style.display = '';
+      } else {
+        instructionsEl.hidden = true;
+        instructionsEl.style.display = 'none';
+      }
+    }
+
+    function updateInstructionsVisibility(isComplete) {
+      if (!instructionsEl || !showInstructions) return;
+      if (isComplete) {
+        instructionsEl.classList.add('dnd-instructions-done');
+        instructionsEl.hidden = true;
+        instructionsEl.style.display = 'none';
+      } else {
+        instructionsEl.classList.remove('dnd-instructions-done');
+        instructionsEl.hidden = false;
+        instructionsEl.style.display = '';
+      }
+    }
+    updateInstructionsVisibility(false);
 
     function sourceRoot() {
       return gameContainer.querySelector('[id^="source"]') || gameContainer;
@@ -660,6 +707,7 @@
 
       if (ev.isComplete) {
         gameContainer.classList.add('dnd-game-complete');
+        updateInstructionsVisibility(true);
         if (game.hideBordersOnComplete !== false) {
           Array.prototype.forEach.call(gameContainer.querySelectorAll('.dropzone.dropzone-correct'), function (z) {
             z.classList.add('dnd-border-hidden');
@@ -672,6 +720,7 @@
         }
       } else {
         gameContainer.classList.remove('dnd-game-complete');
+        updateInstructionsVisibility(false);
         Array.prototype.forEach.call(gameContainer.querySelectorAll('.dnd-border-hidden'), function (z) {
           z.classList.remove('dnd-border-hidden');
         });
