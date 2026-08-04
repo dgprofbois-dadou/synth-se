@@ -912,7 +912,25 @@
         }
 
         @import url('https://fonts.cdnfonts.com/css/open-dyslexic');
-    </style>
+    /* DnD v3 */
+        .draggable.dnd-selected, .dnd-placed.dnd-selected {
+            outline: 4px solid #1565c0 !important;
+            outline-offset: 2px;
+        }
+        .dropzone.dnd-group-complete { box-shadow: 0 0 18px rgba(46,125,50,.55); }
+        .dnd-game-complete .dropzone.dnd-border-hidden {
+            border-color: transparent !important;
+            background: transparent !important;
+            box-shadow: none !important;
+        }
+        .mq-dz-cards { display:flex; flex-wrap:wrap; gap:4px; margin-top:6px; }
+        .mq-dz-card {
+            width:52px; text-align:center; font-size:9px; border:1px solid #ccc;
+            border-radius:4px; padding:2px; background:#fafafa; cursor:pointer;
+        }
+        .mq-dz-card img { width:40px; height:40px; object-fit:contain; display:block; margin:0 auto; }
+        .mq-dz-card.on { border-color:#1565c0; background:#e3f2fd; }
+        </style>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -3052,8 +3070,9 @@
                 </div>
                 <div class="row">
                     <label>Nombre de zones</label>
-                    <input id="dndGame1TargetCount" type="number" min="1" max="10" value="5">
+                    <input id="dndGame1TargetCount" type="number" min="1" max="100" value="5">
                 </div>
+                <div id="dndGame1AdvancedHost" data-mq-dnd-adv="1"></div>
                 <div class="row">
                     <label style="font-size:11px;">Zones (L x H | Gap)</label>
                     <div style="display:flex; gap:3px; align-items:center;">
@@ -3152,8 +3171,9 @@
                 </div>
                 <div class="row">
                     <label>Nombre de zones</label>
-                    <input id="dndGame2TargetCount" type="number" min="1" max="10" value="4">
+                    <input id="dndGame2TargetCount" type="number" min="1" max="100" value="4">
                 </div>
+                <div id="dndGame2AdvancedHost" data-mq-dnd-adv="2"></div>
                 <div class="row">
                     <label style="font-size:11px;">Zones (L x H | Gap)</label>
                     <div style="display:flex; gap:3px; align-items:center;">
@@ -3344,6 +3364,7 @@
 
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     <script src="ocr-addon.js"></script>
+    <script src="mq-dnd-engine.js"></script>
     <script src="mq-export-runtime.js"></script>
     <script>
         // Plafond technique du nombre de jeux DnD — sur window pour être partagé entre les blocs <script>.
@@ -3519,6 +3540,11 @@
                 dndGames: {
                     game1: {
                         enabled: false,
+                        gameType: 'selection',
+                        feedbackMode: 'immediate',
+                        cardUse: 'unique',
+                        showScore: true,
+                        showMalus: true,
                         title: 'Risques liés à la machine',
                         goodIds: '1,4,5,6,8',
                         targetCount: 5,
@@ -3547,6 +3573,11 @@
                     },
                     game2: {
                         enabled: false,
+                        gameType: 'selection',
+                        feedbackMode: 'immediate',
+                        cardUse: 'unique',
+                        showScore: true,
+                        showMalus: true,
                         title: 'Les Obligations liées à la machine',
                         goodIds: '1,2,4,8',
                         targetCount: 4,
@@ -4920,7 +4951,7 @@
                 mqGameIds().forEach(gId => {
                     const g = state.dndGames[gId];
                     if (g && g.enabled) {
-                        dndTotal += (g.targetCount || 0);
+                        dndTotal += (window.MqDndEngine && MqDndEngine.computeGameMaxScore) ? MqDndEngine.computeGameMaxScore(g) : (g.targetCount || 0);
                         dndOk += (state.dndGames.dndResults?.[gId] || 0);
                     }
                 });
@@ -7097,17 +7128,9 @@
             function renderDndGames() {
                 const container = document.getElementById('dndGamesPreview');
                 if (!container) return;
+                if (state.mode !== 'student') return;
 
-                // En mode admin, l'aperçu est géré par renderDndGamesPreview() :
-                // ne pas effacer/masquer ici (sinon le jeu disparaît à chaque render()).
-                if (state.mode !== 'student') {
-                    return;
-                }
-
-                // Nettoyer le contenu précédent (mode élève)
                 container.innerHTML = '';
-
-                // Le container reste dans le stage (absolute) — pointer-events none sauf sur les jeux
                 container.style.position = 'absolute';
                 container.style.display = 'block';
                 container.style.pointerEvents = 'none';
@@ -7117,299 +7140,122 @@
                 container.style.top = '0';
                 container.style.left = '0';
 
-                // Vérifier si au moins un jeu est activé
                 const hasActiveGame = mqGameIds().some(gid => state.dndGames[gid] && state.dndGames[gid].enabled);
-
                 if (!hasActiveGame) {
-                    container.innerHTML = '';
                     container.style.display = 'none';
-                    container.style.pointerEvents = 'none';
                     return;
                 }
 
-                // Rendu de chaque jeu activé
                 mqGameIds().forEach((gameId, index) => {
                     const gameConfig = state.dndGames[gameId];
                     if (!gameConfig || !gameConfig.enabled) return;
 
-                    // Créer le conteneur du jeu (placement libre — identique à l'éditeur admin)
                     const gameEl = document.createElement('div');
                     gameEl.className = 'drag-game';
-                    gameEl.id = `dnd-${gameId}`;
-                    // pointer-events:none sur le conteneur -> les zones vides du jeu laissent passer le survol
-                    // vers les hotspots/inputs en dessous ; seules les images et les zones (auto) sont interactives.
-                    gameEl.style.cssText = `position:absolute; left:${gameConfig.x || 100}px; top:${(typeof gameConfig.y === 'number') ? gameConfig.y : (100 + index * 500)}px; width:${gameConfig.width || 800}px; height:${gameConfig.height || 400}px; padding:0; transform:none; background:transparent; box-shadow:none; border-radius:0; pointer-events:none; overflow:visible;`;
+                    gameEl.id = 'dnd-' + gameId;
+                    gameEl.setAttribute('data-dnd-gameid', gameId);
+                    gameEl.style.cssText = 'position:absolute; left:' + (gameConfig.x || 100) + 'px; top:' + ((typeof gameConfig.y === 'number') ? gameConfig.y : (100 + index * 500)) + 'px; width:' + (gameConfig.width || 800) + 'px; height:' + (gameConfig.height || 400) + 'px; padding:0; transform:none; background:transparent; box-shadow:none; border-radius:0; pointer-events:none; overflow:visible;';
 
-                    // Fond opaque (multiply, arrondi) comme l'admin
                     const bgEl = document.createElement('div');
-                    bgEl.style.cssText = `position:absolute; inset:0; background:${gameConfig.bgColor || 'rgba(255,255,255,1)'}; border-radius:30px; box-shadow:0 4px 12px rgba(0,0,0,0.3); z-index:0; mix-blend-mode:multiply;`;
+                    bgEl.style.cssText = 'position:absolute; inset:0; background:' + (gameConfig.bgColor || 'rgba(255,255,255,1)') + '; border-radius:30px; box-shadow:0 4px 12px rgba(0,0,0,0.3); z-index:0; mix-blend-mode:multiply;';
                     gameEl.appendChild(bgEl);
 
-                    // Titre (placement libre via titleBox, comme l'admin)
                     const tb = gameConfig.titleBox || { x: 10, y: 10, width: 600, height: 80 };
                     const hdr = gameConfig.header || {};
                     const titleEl = document.createElement('div');
                     titleEl.className = 'carre_marron';
-                    titleEl.style.cssText = `position:absolute; left:${tb.x}px; top:${tb.y}px; width:${tb.width}px; height:${tb.height}px; display:flex; align-items:center; justify-content:center; box-sizing:border-box; background:#a58871; border-radius:10px; color:white; z-index:2;`;
-                    titleEl.innerHTML = `<h2 style="margin:0; width:100%; color:white; font-family:${hdr.font || 'Verdana, sans-serif'}; font-size:${hdr.fontSize || 60}px; font-weight:${hdr.bold ? 'bold' : 'normal'}; font-style:${hdr.italic ? 'italic' : 'normal'}; text-align:${hdr.align || 'center'}; text-shadow:11px 9px 12px rgb(0 0 0);">${gameConfig.title || 'Jeu DnD'}</h2>`;
+                    titleEl.style.cssText = 'position:absolute; left:' + tb.x + 'px; top:' + tb.y + 'px; width:' + tb.width + 'px; height:' + tb.height + 'px; display:flex; align-items:center; justify-content:center; box-sizing:border-box; background:#a58871; border-radius:10px; color:white; z-index:2;';
+                    titleEl.innerHTML = '<h2 style="margin:0; width:100%; color:white; font-family:' + (hdr.font || 'Verdana, sans-serif') + '; font-size:' + (hdr.fontSize || 60) + 'px; font-weight:' + (hdr.bold ? 'bold' : 'normal') + '; font-style:' + (hdr.italic ? 'italic' : 'normal') + '; text-align:' + (hdr.align || 'center') + '; text-shadow:11px 9px 12px rgb(0 0 0);">' + (gameConfig.title || 'Jeu DnD') + '</h2>';
                     gameEl.appendChild(titleEl);
 
-                    // Zone source (images draggables) — placement absolu (comme l'admin)
+                    (gameConfig.decorImages || []).forEach((dc) => {
+                        const img = document.createElement('img');
+                        if (dc.src && String(dc.src).indexOf('idb:') !== 0) img.src = dc.src;
+                        img.alt = '';
+                        img.style.cssText = 'position:absolute; left:' + (dc.x || 0) + 'px; top:' + (dc.y || 0) + 'px; width:' + (dc.width || 300) + 'px; height:' + (dc.height || 200) + 'px; object-fit:contain; pointer-events:none; z-index:' + (dc.z || 0) + ';';
+                        gameEl.appendChild(img);
+                    });
+
                     const sourceEl = document.createElement('div');
-                    sourceEl.id = `source-${gameId}`;
+                    sourceEl.id = 'source-' + gameId;
                     sourceEl.style.cssText = 'position:absolute; inset:0; z-index:3; pointer-events:none;';
 
-                    // Ajouter les images draggables
                     (gameConfig.draggables || []).forEach((drag, idx) => {
                         const dx = (typeof drag.x === 'number') ? drag.x : (10 + idx * 70);
                         const dy = (typeof drag.y === 'number') ? drag.y : 120;
                         const dw = drag.width || 250;
                         const dh = drag.height || 250;
-                        const img = document.createElement('img');
-                        if (drag.src && String(drag.src).indexOf('idb:') !== 0) img.src = drag.src;
-                        img.className = 'draggable';
-                        img.draggable = true;
-                        img.dataset.id = drag.id;
-                        img.title = drag.title || drag.tooltip || '';
-                        img.style.cssText = `position:absolute; left:${dx}px; top:${dy}px; width:${dw}px; height:${dh}px; object-fit:contain; cursor:grab; pointer-events:auto; opacity:1; transition:opacity 0.2s, transform 0.2s; box-sizing:border-box;`;
-
-                        // Events drag
-                        img.addEventListener('dragstart', (e) => {
-                            if (img.classList.contains('used')) {
-                                e.preventDefault();
-                                return;
-                            }
-                            e.dataTransfer.setData('text/plain', drag.id);
-                            e.dataTransfer.effectAllowed = 'move';
-
-                            // Centrer l'image de drag sur le curseur pour éviter le décalage
-                            const rect = img.getBoundingClientRect();
-                            e.dataTransfer.setDragImage(img, rect.width / 2, rect.height / 2);
-
-                            img.style.opacity = '0.5';
-                        });
-
-                        img.addEventListener('dragend', () => {
-                            img.style.opacity = '0.3';
-                        });
-
-                        sourceEl.appendChild(img);
+                        let el;
+                        if (drag.src && String(drag.src).indexOf('idb:') !== 0) {
+                            el = document.createElement('img');
+                            el.src = drag.src;
+                            el.style.objectFit = 'contain';
+                        } else {
+                            el = document.createElement('div');
+                            el.textContent = drag.label || drag.title || drag.id;
+                            el.style.display = 'flex';
+                            el.style.alignItems = 'center';
+                            el.style.justifyContent = 'center';
+                            el.style.background = '#fff';
+                            el.style.border = '1px solid #666';
+                            el.style.borderRadius = '6px';
+                            el.style.fontSize = '18px';
+                        }
+                        el.className = 'draggable';
+                        el.draggable = true;
+                        el.dataset.id = drag.id;
+                        el.title = drag.title || drag.tooltip || '';
+                        el.setAttribute('data-tooltip', drag.title || drag.tooltip || '');
+                        el.setAttribute('tabindex', '0');
+                        el.setAttribute('role', 'button');
+                        el.setAttribute('aria-label', 'Carte ' + drag.id);
+                        el.style.cssText += ';position:absolute; left:' + dx + 'px; top:' + dy + 'px; width:' + dw + 'px; height:' + dh + 'px; cursor:grab; pointer-events:auto; opacity:1; transition:opacity 0.2s, transform 0.2s; box-sizing:border-box;';
+                        sourceEl.appendChild(el);
                     });
-
                     gameEl.appendChild(sourceEl);
 
-                    // Zone targets (dropzones) — placement absolu depuis le tableau dropzones
                     const targetsEl = document.createElement('div');
-                    targetsEl.id = `targets-${gameId}`;
+                    targetsEl.id = 'targets-' + gameId;
                     targetsEl.style.cssText = 'position:absolute; inset:0; z-index:1; pointer-events:none;';
 
-                    const targetCount = gameConfig.targetCount || 5;
-                    const goodIds = (gameConfig.goodIds || '').split(',').map(s => s.trim()).filter(Boolean);
-                    const goodSet = new Set(goodIds);
-                    const used = new Set();
-                    let nbErreurs = 0;
-
-                    // Créer les dropzones EN PLACEMENT LIBRE (depuis le tableau dropzones, comme l'admin)
                     (gameConfig.dropzones || []).forEach((dz, i) => {
                         const zone = document.createElement('div');
                         zone.className = 'dropzone';
                         zone.dataset.pos = String(i + 1);
-                        zone.style.cssText = `position:absolute; left:${dz.x || 0}px; top:${dz.y || 0}px; width:${dz.width || (gameConfig.zoneWidth || 80)}px; height:${dz.height || (gameConfig.zoneHeight || 80)}px; border:3px dashed #666; border-radius:8px; background:rgba(255,255,255,0.5); display:flex; align-items:center; justify-content:center; transition:all 0.3s ease; pointer-events:auto; box-sizing:border-box;`;
-
-                        // Events drop
-                        zone.addEventListener('dragover', (e) => {
-                            e.preventDefault();
-                            e.dataTransfer.dropEffect = 'move';
-                            zone.classList.add('drag-over');
-                            zone.style.borderColor = '#007bff';
-                            zone.style.background = '#eaf5ff';
-                        });
-
-                        zone.addEventListener('dragleave', () => {
-                            zone.classList.remove('drag-over');
-                            zone.style.borderColor = '';
-                            zone.style.background = '';
-                        });
-
-                        zone.addEventListener('drop', (e) => {
-                            e.preventDefault();
-                            zone.classList.remove('drag-over');
-
-                            const id = e.dataTransfer.getData('text/plain');
-                            if (!id || used.has(id)) return;
-
-                            const orig = sourceEl.querySelector(`.draggable[data-id="${id}"]`);
-                            if (!orig) return;
-
-                            // Si la zone avait déjà une image, la réactiver
-                            const already = zone.querySelector('img');
-                            if (already && already.dataset.id) {
-                                const oldId = already.dataset.id;
-                                used.delete(oldId);
-                                const oldOrig = sourceEl.querySelector(`.draggable[data-id="${oldId}"]`);
-                                if (oldOrig) {
-                                    oldOrig.classList.remove('used');
-                                    oldOrig.draggable = true;
-                                    oldOrig.style.opacity = '1';
-                                    oldOrig.style.filter = 'none';
-                                }
-                            }
-
-
-                            // Placer le clone
-                            zone.innerHTML = '';
-                            const clone = orig.cloneNode(true);
-                            clone.classList.remove('draggable');
-                            clone.draggable = false;
-                            clone.style.cursor = 'pointer';
-                            clone.style.opacity = '1';
-                            clone.style.filter = 'none';
-                            // Garder la TAILLE D'ORIGINE de l'image (ne pas l'agrandir à la taille de la zone)
-                            if (orig.style.width) clone.style.width = orig.style.width;
-                            if (orig.style.height) clone.style.height = orig.style.height;
-                            clone.style.maxWidth = 'none';
-                            clone.style.maxHeight = 'none';
-                            clone.style.objectFit = 'contain'; // Garde les proportions
-                            // Annuler le placement absolu hérité de l'image d'origine (sinon le clone s'affiche à côté)
-                            clone.style.position = 'static';
-                            clone.style.left = 'auto';
-                            clone.style.top = 'auto';
-                            clone.style.right = 'auto';
-                            clone.style.bottom = 'auto';
-                            // Réinitialiser les marges pour éviter le décalage
-                            clone.style.margin = '0';
-                            clone.style.marginTop = '0';
-                            clone.style.marginLeft = '0';
-                            clone.style.marginRight = '0';
-                            clone.style.marginBottom = '0';
-
-                            // Clic pour retirer
-                            clone.addEventListener('click', () => {
-                                used.delete(id);
-                                orig.classList.remove('used');
-                                orig.draggable = true;
-                                orig.style.opacity = '1';
-                                orig.style.filter = 'none';
-                                zone.innerHTML = '';
-                                zone.classList.remove('dropzone-correct', 'dropzone-wrong');
-                                zone.style.borderColor = '';
-                                zone.style.background = '';
-                                zone.style.boxShadow = '';
-                                updateGameScore();
-                            });
-
-                            zone.appendChild(clone);
-
-                            // Marquer l'original comme utilisé
-                            used.add(id);
-                            orig.classList.add('used');
-                            orig.draggable = false;
-                            orig.style.opacity = '0.3';
-                            orig.style.filter = 'grayscale(100%)';
-
-                            // === FEEDBACK VISUEL ET SONORE ===
-                            const isCorrect = goodSet.has(id);
-
-                            zone.classList.remove('dropzone-correct', 'dropzone-wrong');
-                            zone.style.borderColor = '';
-                            zone.style.background = '';
-                            zone.style.boxShadow = '';
-
-                            if (isCorrect) {
-                                // ✅ BONNE RÉPONSE
-                                zone.classList.add('dropzone-correct');
-                                zone.style.borderColor = '#4caf50';
-                                zone.style.background = 'rgba(76, 175, 80, 0.15)';
-                                zone.style.boxShadow = '0 0 20px rgba(76, 175, 80, 0.6), inset 0 0 10px rgba(76, 175, 80, 0.2)';
-                                playSound('success');
-                                showFloatingFeedback(zone);
-
-                                // Animation
-                                void zone.offsetWidth;
-                                zone.style.animation = 'none';
-                                setTimeout(() => {
-                                    zone.style.animation = 'successPulse 0.6s ease-out';
-                                }, 10);
-                            } else {
-                                // ❌ MAUVAISE RÉPONSE
-                                zone.classList.add('dropzone-wrong');
-                                zone.style.borderColor = '#f44336';
-                                zone.style.background = 'rgba(244, 67, 54, 0.15)';
-                                zone.style.boxShadow = '0 0 15px rgba(244, 67, 54, 0.5)';
-                                playSound('error');
-
-                                // Animation shake
-                                void zone.offsetWidth;
-                                zone.style.animation = 'none';
-                                setTimeout(() => {
-                                    zone.style.animation = 'shake 0.4s ease-in-out';
-                                }, 10);
-
-                                nbErreurs++;
-                            }
-
-                            updateGameScore();
-                        });
-
+                        zone.setAttribute('data-zone-id', String(dz.id != null ? dz.id : (i + 1)));
+                        if (dz.groupId) zone.setAttribute('data-group-id', dz.groupId);
+                        if (dz.label) zone.setAttribute('data-label', dz.label);
+                        zone.style.cssText = 'position:absolute; left:' + (dz.x || 0) + 'px; top:' + (dz.y || 0) + 'px; width:' + (dz.width || (gameConfig.zoneWidth || 80)) + 'px; height:' + (dz.height || (gameConfig.zoneHeight || 80)) + 'px; border:3px dashed #666; border-radius:8px; background:rgba(255,255,255,0.5); display:flex; align-items:center; justify-content:center; flex-wrap:wrap; gap:4px; transition:all 0.3s ease; pointer-events:auto; box-sizing:border-box; overflow:hidden;';
                         targetsEl.appendChild(zone);
                     });
-
                     gameEl.appendChild(targetsEl);
 
-                    // Zone de résultat et score (en bas du conteneur, placement absolu)
                     const resultEl = document.createElement('div');
-                    resultEl.id = `result-${gameId}`;
+                    resultEl.className = 'dnd-result';
+                    resultEl.id = 'result-' + gameId;
                     resultEl.style.cssText = 'position:absolute; left:0; right:0; bottom:40px; text-align:center; font-weight:bold; min-height:30px; z-index:4; pointer-events:none;';
                     gameEl.appendChild(resultEl);
 
                     const scoreContainer = document.createElement('div');
-                    scoreContainer.id = `score-malus-${gameId}`;
+                    scoreContainer.id = 'score-malus-' + gameId;
+                    scoreContainer.className = 'score-malus-container';
                     scoreContainer.style.cssText = 'position:absolute; left:0; right:0; bottom:1%; display:flex; justify-content:center; gap:15px; font-weight:bold; font-size:50px; z-index:4; pointer-events:none;';
-
                     gameEl.appendChild(scoreContainer);
 
-                    // Fonction de mise à jour du score
-                    function updateGameScore() {
-                        let bonnes = 0;
-                        targetsEl.querySelectorAll('.dropzone').forEach(z => {
-                            const img = z.querySelector('img');
-                            if (img && goodSet.has(img.dataset.id)) bonnes++;
-                        });
-
-                        const scoreBrut = bonnes - nbErreurs * 0.5;
-                        const scoreFinal = Math.max(0, scoreBrut);
-                        const scoreArrondi = Math.round(scoreFinal * 10) / 10;
-
-                        scoreContainer.innerHTML = `
-                            <div style="color: #2e7d32;">Score: ${scoreArrondi} / ${targetCount}</div>
-                            ${nbErreurs > 0 ? `<div style="color: #d32f2f;">Malus: -${(nbErreurs * 0.5).toFixed(1)}</div>` : ''}
-                        `;
-
-                        // Vérifier si tout est correct
-                        if (bonnes === targetCount && bonnes === goodIds.length) {
-                            const allCorrect = Array.from(targetsEl.querySelectorAll('.dropzone img'))
-                                .every(img => goodSet.has(img.dataset.id));
-
-                            if (allCorrect) {
-                                resultEl.textContent = '✅ Parfait !';
-                                resultEl.style.color = '#2e7d32';
-                            } else {
-                                resultEl.textContent = '❌ Vérifiez vos réponses';
-                                resultEl.style.color = '#d32f2f';
-                            }
-                        } else {
-                            resultEl.textContent = '';
-                        }
-
-                        // Mettre à jour les résultats globaux pour le score-widget
-                        if (!state.dndGames.dndResults) state.dndGames.dndResults = {};
-                        state.dndGames.dndResults[gameId] = bonnes;
-
-                        updateScore(); // Refresh global score-widget
-                    }
-
-                    updateGameScore();
                     container.appendChild(gameEl);
+
+                    const cfg = Object.assign({}, gameConfig, { _gameId: gameId });
+                    if (window.MqDndEngine && MqDndEngine.initPlayableDndGame) {
+                        MqDndEngine.initPlayableDndGame(gameEl, cfg, {
+                            playSound: typeof playSound === 'function' ? playSound : null,
+                            showFloating: typeof showFloatingFeedback === 'function' ? showFloatingFeedback : null,
+                            onScore: function (info) {
+                                if (!state.dndGames.dndResults) state.dndGames.dndResults = {};
+                                state.dndGames.dndResults[gameId] = info.score;
+                                updateScore();
+                            }
+                        });
+                    }
                 });
             }
 
@@ -10856,6 +10702,11 @@
                 for (let i = 3; i <= MQ_MAX_GAMES; i++) {
                     tpl['game' + i] = {
                         enabled: false,
+                        gameType: 'selection',
+                        feedbackMode: 'immediate',
+                        cardUse: 'unique',
+                        showScore: true,
+                        showMalus: true,
                         title: 'Jeu ' + i,
                         goodIds: '',
                         targetCount: 4,
@@ -10885,7 +10736,7 @@
 
             function mqSyncDropzonesToTargetCount(g) {
                 if (!g) return false;
-                const target = Math.max(1, Math.min(10, parseInt(g.targetCount, 10) || 4));
+                const target = Math.max(1, Math.min((window.MqDndEngine && MqDndEngine.MQ_DND_MAX_ZONES) || 100, parseInt(g.targetCount, 10) || 4));
                 g.targetCount = target;
                 if (!Array.isArray(g.dropzones)) g.dropzones = [];
                 const before = g.dropzones.length;
@@ -10958,6 +10809,23 @@
                 if (typeof g.width !== 'number') g.width = defaults.width;
                 if (typeof g.height !== 'number') g.height = defaults.height;
                 if (!g.bgColor) g.bgColor = defaults.bgColor;
+                const preservedGoodIds = (saved && saved.goodIds != null) ? saved.goodIds : g.goodIds;
+                if (window.MqDndEngine) {
+                    MqDndEngine.applyGameDefaults(g);
+                    g.dropzones = (g.dropzones || []).map(MqDndEngine.normalizeDropzone);
+                } else {
+                    if (!g.gameType) g.gameType = 'selection';
+                    if (!g.feedbackMode) g.feedbackMode = 'immediate';
+                    if (!g.cardUse) g.cardUse = 'unique';
+                    if (typeof g.showScore !== 'boolean') g.showScore = true;
+                    if (typeof g.showMalus !== 'boolean') g.showMalus = true;
+                    g.dropzones = (g.dropzones || []).map(function (dz) {
+                        const z = Object.assign({ label: '', acceptedIds: [], capacity: 1, required: true, groupId: '', successMessage: '', errorMessage: '' }, dz);
+                        if (!Array.isArray(z.acceptedIds)) z.acceptedIds = [];
+                        return z;
+                    });
+                }
+                if (preservedGoodIds != null) g.goodIds = preservedGoodIds;
                 mqSyncDropzonesToTargetCount(g);
                 return g;
             }
@@ -10995,8 +10863,13 @@
                     const val = (suffix) => { const e = el(suffix); return e ? e.value : undefined; };
                     g.enabled = enEl.checked;
                     g.title = val('Title') || ('Jeu ' + n);
-                    g.goodIds = val('GoodIds') || '1,2,3';
+                    g.goodIds = (val('GoodIds') != null) ? val('GoodIds') : (g.goodIds || '');
                     g.targetCount = parseInt(val('TargetCount'), 10) || 4;
+                    if (el('GameType')) g.gameType = val('GameType') || 'selection';
+                    if (el('FeedbackMode')) g.feedbackMode = val('FeedbackMode') || 'immediate';
+                    if (el('CardUse')) g.cardUse = val('CardUse') || 'unique';
+                    if (el('ShowScore')) g.showScore = el('ShowScore').checked;
+                    if (el('ShowMalus')) g.showMalus = el('ShowMalus').checked;
                     g.zoneWidth = parseInt(val('ZoneWidth'), 10) || 250;
                     g.zoneHeight = parseInt(val('ZoneHeight'), 10) || 250;
                     g.zoneGap = parseInt(val('ZoneGap'), 10) || 10;
@@ -11040,7 +10913,7 @@
 
             function buildExportObject() {
                 return {
-                    version: 2,
+                    version: 3,
                     savedAt: new Date().toISOString(),
                     layout: state.layout,
                     mode: state.mode,
@@ -11636,28 +11509,103 @@
                 const listId = 'dndGame' + mqGameNum(gameId) + 'DropzonesList';
                 const list = document.getElementById(listId);
                 if (!list) return;
-
-                const dropzones = state.dndGames[gameId].dropzones;
-
+                const g = state.dndGames[gameId];
+                const dropzones = g && g.dropzones;
+                const cards = (g && g.draggables) || [];
                 if (!dropzones || dropzones.length === 0) {
                     list.innerHTML = '<div style="font-size:11px; color:#999; text-align:center; padding:10px;">Aucune dropzone</div>';
                     return;
                 }
-
-                list.innerHTML = dropzones.map((dz, index) => `
-                    <div style="padding:8px; border-bottom:1px solid #eee; background:#f9f9f9;">
-                        <div style="display:flex; align-items:center; gap:5px; margin-bottom:5px;">
-                            <span style="font-weight:bold; font-size:11px; color:#666;">Zone ${dz.id}</span>
-                        </div>
-                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px 8px; margin-top:6px; padding:8px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px;">
-                            ${mqDimPosField('X', dz.x || 0, 'updateDropzonePosition', gameId, index, 'x', 5)}
-                            ${mqDimPosField('Y', dz.y || 0, 'updateDropzonePosition', gameId, index, 'y', 5)}
-                            ${mqDimPosField('Largeur', dz.width || 80, 'updateDropzonePosition', gameId, index, 'width', 10)}
-                            ${mqDimPosField('Hauteur', dz.height || 80, 'updateDropzonePosition', gameId, index, 'height', 10)}
-                        </div>
-                    </div>
-                `).join('');
+                list.innerHTML = dropzones.map((dz, index) => {
+                    const accepted = Array.isArray(dz.acceptedIds) ? dz.acceptedIds.map(String) : [];
+                    const cardsHtml = cards.map((c) => {
+                        const on = accepted.indexOf(String(c.id)) >= 0;
+                        const thumb = c.src && String(c.src).indexOf('idb:') !== 0
+                            ? '<img src="' + c.src + '" alt="">'
+                            : '<div style="height:40px;line-height:40px;font-size:14px;">' + (c.label || c.id) + '</div>';
+                        const safeId = String(c.id).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+                        return '<label class="mq-dz-card' + (on ? ' on' : '') + '" title="ID ' + safeId + '">'
+                            + thumb
+                            + '<input type="checkbox" class="mq-dz-accept" data-game="' + gameId + '" data-index="' + index + '" data-card="' + safeId + '" ' + (on ? 'checked' : '') + '>'
+                            + '<span>' + (c.title || c.id) + '</span></label>';
+                    }).join('');
+                    return ''
+                        + '<div class="mq-dz-block" data-game="' + gameId + '" data-index="' + index + '" style="padding:8px; border-bottom:1px solid #eee; background:#f9f9f9; margin-bottom:6px; border-radius:6px;">'
+                        + '<div style="display:flex; align-items:center; gap:5px; margin-bottom:5px; flex-wrap:wrap;">'
+                        + '<span style="font-weight:bold; font-size:11px; color:#666;">Zone ' + dz.id + (dz.label ? ' — ' + dz.label : '') + '</span>'
+                        + '</div>'
+                        + '<div class="row" style="margin:0 0 4px 0;"><label style="font-size:10px;">Label</label>'
+                        + '<input type="text" data-field="label" value="' + String(dz.label || '').replace(/"/g, '&quot;') + '" style="font-size:11px;"></div>'
+                        + '<div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:4px; padding:6px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px;">'
+                        + mqDimPosField('X', dz.x || 0, 'updateDropzonePosition', gameId, index, 'x', 5)
+                        + mqDimPosField('Y', dz.y || 0, 'updateDropzonePosition', gameId, index, 'y', 5)
+                        + mqDimPosField('Largeur', dz.width || 80, 'updateDropzonePosition', gameId, index, 'width', 10)
+                        + mqDimPosField('Hauteur', dz.height || 80, 'updateDropzonePosition', gameId, index, 'height', 10)
+                        + '</div>'
+                        + '<div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-top:6px; font-size:11px;">'
+                        + '<label>Capacité <input type="number" min="1" max="50" data-field="capacity" value="' + (dz.capacity || 1) + '" style="width:100%;"></label>'
+                        + '<label>Groupe/ligne <input type="text" data-field="groupId" value="' + String(dz.groupId || '').replace(/"/g, '&quot;') + '" style="width:100%;"></label>'
+                        + '<label style="grid-column:1/-1;"><input type="checkbox" data-field="required" ' + (dz.required === false ? '' : 'checked') + '> Zone obligatoire</label>'
+                        + '</div>'
+                        + '<div style="margin-top:6px;"><div style="font-size:11px;font-weight:bold;">Réponses acceptées</div>'
+                        + '<div class="mq-dz-cards">' + (cardsHtml || '<span style="font-size:10px;color:#999;">Aucune carte</span>') + '</div></div>'
+                        + '<div class="row" style="margin-top:4px;"><label style="font-size:10px;">Msg réussite</label>'
+                        + '<input type="text" data-field="successMessage" value="' + String(dz.successMessage || '').replace(/"/g, '&quot;') + '" style="font-size:11px;"></div>'
+                        + '<div class="row"><label style="font-size:10px;">Msg erreur</label>'
+                        + '<input type="text" data-field="errorMessage" value="' + String(dz.errorMessage || '').replace(/"/g, '&quot;') + '" style="font-size:11px;"></div>'
+                        + '<details style="margin-top:4px;"><summary style="font-size:10px;color:#666;cursor:pointer;">Avancé (IDs)</summary>'
+                        + '<input type="text" data-field="acceptedIdsRaw" value="' + accepted.join(',') + '" placeholder="id1,id2" style="width:100%;font-size:10px;">'
+                        + '</details>'
+                        + '</div>';
+                }).join('');
+                list.querySelectorAll('.mq-dz-accept').forEach((inp) => {
+                    inp.addEventListener('change', () => {
+                        window.mqToggleZoneAccepted(inp.dataset.game, parseInt(inp.dataset.index, 10), inp.dataset.card, inp.checked);
+                    });
+                });
+                list.querySelectorAll('.mq-dz-block [data-field]').forEach((inp) => {
+                    const handler = () => {
+                        const block = inp.closest('.mq-dz-block');
+                        const gid = block.dataset.game;
+                        const index = parseInt(block.dataset.index, 10);
+                        const field = inp.getAttribute('data-field');
+                        const value = (inp.type === 'checkbox') ? inp.checked
+                            : (field === 'capacity' ? (parseInt(inp.value, 10) || 1) : inp.value);
+                        window.mqUpdateDropzoneField(gid, index, field, value);
+                    };
+                    inp.addEventListener('change', handler);
+                });
             }
+
+            window.mqUpdateDropzoneField = function (gameId, index, property, value) {
+                const dropzone = state.dndGames[gameId].dropzones[index];
+                if (!dropzone) return;
+                if (property === 'acceptedIdsRaw') {
+                    dropzone.acceptedIds = String(value || '').split(',').map(s => s.trim()).filter(Boolean);
+                } else if (property === 'required') {
+                    dropzone.required = !!value;
+                } else if (property === 'capacity') {
+                    dropzone.capacity = Math.max(1, parseInt(value, 10) || 1);
+                } else {
+                    dropzone[property] = value;
+                }
+                if (property === 'acceptedIdsRaw' || property === 'label' || property === 'groupId') {
+                    renderDropzonesList(gameId);
+                }
+                renderDndGamesPreview();
+                saveLocal();
+            };
+            window.mqToggleZoneAccepted = function (gameId, index, cardId, checked) {
+                const dropzone = state.dndGames[gameId].dropzones[index];
+                if (!dropzone) return;
+                if (!Array.isArray(dropzone.acceptedIds)) dropzone.acceptedIds = [];
+                const id = String(cardId);
+                const set = new Set(dropzone.acceptedIds.map(String));
+                if (checked) set.add(id); else set.delete(id);
+                dropzone.acceptedIds = Array.from(set);
+                renderDropzonesList(gameId);
+                saveLocal();
+            };
 
             // Mettre à jour la position ou la taille d'une dropzone
             window.updateDropzonePosition = function (gameId, index, property, value) {
@@ -12428,6 +12376,11 @@
                 if (el('Title')) el('Title').value = g.title || '';
                 if (el('GoodIds')) el('GoodIds').value = g.goodIds || '';
                 if (el('TargetCount')) el('TargetCount').value = g.targetCount ?? 1;
+                if (el('GameType')) el('GameType').value = g.gameType || 'selection';
+                if (el('FeedbackMode')) el('FeedbackMode').value = g.feedbackMode || 'immediate';
+                if (el('CardUse')) el('CardUse').value = g.cardUse || 'unique';
+                if (el('ShowScore')) el('ShowScore').checked = g.showScore !== false;
+                if (el('ShowMalus')) el('ShowMalus').checked = g.showMalus !== false;
                 if (el('ZoneWidth')) el('ZoneWidth').value = g.zoneWidth ?? 250;
                 if (el('ZoneHeight')) el('ZoneHeight').value = g.zoneHeight ?? 250;
                 if (el('ZoneGap')) el('ZoneGap').value = g.zoneGap ?? 10;
@@ -12449,9 +12402,64 @@
                 if (typeof renderDecorList === 'function') renderDecorList(gameId);
             }
 
+            
+            function mqEnsureDndAdvancedHosts() {
+                mqGameIds().forEach((gid) => {
+                    const n = mqGameNum(gid);
+                    const host = document.getElementById('dndGame' + n + 'AdvancedHost');
+                    if (!host) return;
+                    if (!host.dataset.ready) {
+                        host.innerHTML = mqDndTypeControlsHTML(n);
+                        host.dataset.ready = '1';
+                        const btn = document.getElementById('btnGenGridGame' + n);
+                        if (btn) {
+                            btn.addEventListener('click', () => mqGenerateDndGrid(gid, n));
+                        }
+                        host.querySelectorAll('select,input').forEach((inp) => {
+                            inp.addEventListener('change', () => {
+                                try { syncDndGamesFromUI(); renderDropzonesList(gid); renderDndGamesPreview(); scheduleSaveLocal(); } catch (e) {}
+                            });
+                        });
+                    }
+                });
+            }
+            function mqGenerateDndGrid(gameId, n) {
+                if (!window.MqDndEngine) return;
+                const g = state.dndGames[gameId];
+                if (!g) return;
+                if (g.dropzones && g.dropzones.length && !confirm('Remplacer les ' + g.dropzones.length + ' zones existantes par la grille ?')) return;
+                const rows = parseInt(($('dndGame' + n + 'GridRows') || {}).value, 10) || 7;
+                const cols = parseInt(($('dndGame' + n + 'GridCols') || {}).value, 10) || 3;
+                try {
+                    const zones = MqDndEngine.generateGrid({
+                        rows, cols,
+                        cellWidth: parseInt(($('dndGame' + n + 'GridCellW') || {}).value, 10) || 200,
+                        cellHeight: parseInt(($('dndGame' + n + 'GridCellH') || {}).value, 10) || 120,
+                        gapX: parseInt(($('dndGame' + n + 'GridGapX') || {}).value, 10) || 10,
+                        gapY: parseInt(($('dndGame' + n + 'GridGapY') || {}).value, 10) || 10,
+                        startX: parseInt(($('dndGame' + n + 'GridStartX') || {}).value, 10) || 10,
+                        startY: parseInt(($('dndGame' + n + 'GridStartY') || {}).value, 10) || 250
+                    });
+                    g.dropzones = zones;
+                    g.targetCount = zones.length;
+                    const tc = $('dndGame' + n + 'TargetCount');
+                    if (tc) tc.value = zones.length;
+                    if (g.gameType === 'selection') g.gameType = 'exact';
+                    const gt = $('dndGame' + n + 'GameType');
+                    if (gt) gt.value = g.gameType;
+                    renderDropzonesList(gameId);
+                    renderDndGamesPreview();
+                    scheduleSaveLocal();
+                    if (window.mqToast) mqToast('Grille ' + rows + '×' + cols + ' (' + zones.length + ' zones)');
+                } catch (err) {
+                    alert(err.message || String(err));
+                }
+            }
+
             function loadDndGamesUI() {
                 state.dndGames = normalizeDndGames(state.dndGames);
                 if (typeof mqEnsureDndGamePanels === 'function') mqEnsureDndGamePanels();
+                if (typeof mqEnsureDndAdvancedHosts === 'function') mqEnsureDndAdvancedHosts();
                 mqGameIds().forEach(gid => mqLoadOneDndGameToForm(gid, state.dndGames[gid]));
                 if (typeof mqUpdateAddRemoveButtons === 'function') mqUpdateAddRemoveButtons();
                 if (typeof window.mqEnhanceDndPanels === 'function') window.mqEnhanceDndPanels();
@@ -12463,7 +12471,108 @@
             // Charger l'UI au démarrage
             loadDndGamesUI();
 
-            // =========================================================
+                        function mqBuildExportDndGameHtml(g, gameId, pageCtx) {
+                if (!g || !g.enabled) return '';
+                const n = mqGameNum(gameId);
+                const sfx = (n === 1) ? '' : String(n);
+                const goodIds = g.goodIds || '';
+                const targetCount = parseInt(g.targetCount, 10) || 0;
+                const ttFont = (g.tooltip && g.tooltip.font) ? g.tooltip.font : "'OpenDyslexic', sans-serif";
+                const ttDur = (g.tooltip && g.tooltip.duration) ? g.tooltip.duration : 3000;
+                const ttBg = (g.tooltip && g.tooltip.bgColor) ? g.tooltip.bgColor : '#333333';
+                const ttCol = (g.tooltip && g.tooltip.color) ? g.tooltip.color : '#ffffff';
+                const G_W = g.width || 800;
+                const G_H = g.height || 400;
+                const localGx = (g.x || 0) - pageCtx.stageX;
+                const localGy = (g.y || 0) - pageCtx.stageY;
+                const leftPct = (localGx / pageCtx.baseW) * 100;
+                const topPct = (localGy / pageCtx.baseH) * 100;
+                const widthPct = (G_W / pageCtx.baseW) * 100;
+                const heightPct = (G_H / pageCtx.baseH) * 100;
+                const hBox = g.header || { width: 600, height: 80, fontSize: 60 };
+                const tb = g.titleBox || { x: 10, y: 10, width: hBox.width || 600, height: hBox.height || 80 };
+                const tbX = (tb.x / G_W) * 100, tbY = (tb.y / G_H) * 100, tbW = (tb.width / G_W) * 100, tbH = (tb.height / G_H) * 100;
+                const cfg = {
+                    gameType: g.gameType || 'selection',
+                    feedbackMode: g.feedbackMode || 'immediate',
+                    cardUse: g.cardUse || 'unique',
+                    showScore: g.showScore !== false,
+                    showMalus: g.showMalus !== false,
+                    hideBordersOnComplete: g.hideBordersOnComplete !== false,
+                    goodIds: g.goodIds || '',
+                    targetCount: targetCount,
+                    dropzones: (g.dropzones || []).map(function (dz, i) {
+                        return {
+                            id: dz.id != null ? dz.id : (i + 1),
+                            label: dz.label || '',
+                            acceptedIds: Array.isArray(dz.acceptedIds) ? dz.acceptedIds.slice() : [],
+                            capacity: dz.capacity || 1,
+                            required: dz.required !== false,
+                            groupId: dz.groupId || '',
+                            successMessage: dz.successMessage || '',
+                            errorMessage: dz.errorMessage || '',
+                            row: dz.row,
+                            column: dz.column
+                        };
+                    })
+                };
+                const cfgJson = JSON.stringify(cfg).replace(/</g, '\\u003c');
+                let out = '';
+                out += '\n                    <div id="drag-game-on-page' + sfx + '" class="drag-game game-' + n + '"';
+                out += ' style="position: absolute; left: ' + leftPct + '%; top: ' + topPct + '%; width: ' + widthPct + '%; height: ' + heightPct + '%; background: ' + (g.bgColor || '#fff') + '; border: 1px solid rgba(0,0,0,0.1); box-sizing: border-box; overflow: visible; scale: 1; transform: none; min-width: 0; min-height: 0; border-radius: 30px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); font-size: inherit;"';
+                out += ' data-dnd-good="' + String(goodIds).replace(/"/g, '&quot;') + '"';
+                out += ' data-dnd-target="' + targetCount + '"';
+                out += ' data-dnd-score-container="score-malus-container' + sfx + '"';
+                out += ' data-dnd-gameid="' + gameId + '"';
+                out += ' data-dnd-type="' + (cfg.gameType) + '"';
+                out += ' data-tt-font="' + String(ttFont).replace(/"/g, '&quot;') + '"';
+                out += ' data-tt-dur="' + ttDur + '"';
+                out += ' data-tt-bg="' + ttBg + '"';
+                out += ' data-tt-col="' + ttCol + '">';
+                out += '\n                        <script type="application/json" id="dnd-config-' + gameId + '" data-dnd-config="1">' + cfgJson + '<\/script>';
+                out += '\n                        <div class="carre_marron" style="position:absolute; left:' + tbX + '%; top:' + tbY + '%; width:' + tbW + '%; height:' + tbH + '%; display:flex; justify-content:center; align-items:center; box-sizing:border-box; z-index:2;">';
+                out += '<h2 style="font-family:' + (hBox.font || 'Verdana, sans-serif') + '; font-size:' + (hBox.fontSize || 60) + 'px; margin:0; width:100%; text-align:' + (hBox.align || 'center') + '; font-weight:' + (hBox.bold ? 'bold' : 'normal') + '; font-style:' + (hBox.italic ? 'italic' : 'normal') + ';">' + (g.title || ('Jeu ' + n)) + '</h2></div>';
+                out += '\n                        <div id="targets" style="position:absolute; inset:0; z-index:1; box-sizing:border-box; pointer-events:none;">';
+                out += (g.dropzones || []).map(function (dz, i) {
+                    const dzX = ((dz.x || 0) / G_W) * 100;
+                    const dzY = ((dz.y || 0) / G_H) * 100;
+                    const dzW = ((dz.width || g.zoneWidth || 250) / G_W) * 100;
+                    const dzH = ((dz.height || g.zoneHeight || 250) / G_H) * 100;
+                    const zid = dz.id != null ? dz.id : (i + 1);
+                    return '<div class="dropzone" data-pos="' + (i + 1) + '" data-zone-id="' + zid + '"'
+                        + (dz.groupId ? ' data-group-id="' + String(dz.groupId).replace(/"/g, '&quot;') + '"' : '')
+                        + (dz.label ? ' data-label="' + String(dz.label).replace(/"/g, '&quot;') + '"' : '')
+                        + ' style="position:absolute; left:' + dzX + '%; top:' + dzY + '%; width:' + dzW + '%; height:' + dzH + '%; font-size:' + Math.round((dz.height || g.zoneHeight || 80) * 0.4) + 'px; align-items:center; justify-content:center; display:flex; flex-wrap:wrap; gap:4px; box-sizing:border-box; pointer-events:auto;"></div>';
+                }).join('');
+                out += '</div>';
+                out += '\n                        <div id="source' + sfx + '" style="position:absolute; inset:0; z-index:3; box-sizing:border-box; pointer-events:none;">';
+                out += (g.draggables || []).map(function (d) {
+                    const dW = ((d.width || 250) / G_W) * 100;
+                    const dH = ((d.height || 250) / G_H) * 100;
+                    const dX = ((d.x || 0) / G_W) * 100;
+                    const dY = ((d.y || 0) / G_H) * 100;
+                    return '<div class="draggable-wrapper" style="position:absolute; left:' + dX + '%; top:' + dY + '%; width:' + dW + '%; height:' + dH + '%; box-sizing:border-box;">'
+                        + '<span class="png-wrap draggable" draggable="true" tabindex="0" role="button" aria-label="Carte ' + d.id + '"'
+                        + ' style="display:block; width:100%; height:100%; pointer-events:auto;"'
+                        + ' data-id="' + d.id + '" data-tooltip="' + String(d.title || '').replace(/"/g, '&quot;') + '">'
+                        + mqDndItemInner(d) + '</span></div>';
+                }).join('');
+                out += '</div>';
+                out += (g.decorImages || []).map(function (dc) {
+                    const cX = ((dc.x || 0) / G_W) * 100;
+                    const cY = ((dc.y || 0) / G_H) * 100;
+                    const cW = ((dc.width || 300) / G_W) * 100;
+                    const cH = ((dc.height || 200) / G_H) * 100;
+                    return '<img src="' + dc.src + '" alt="" style="position:absolute; left:' + cX + '%; top:' + cY + '%; width:' + cW + '%; height:' + cH + '%; object-fit:contain; pointer-events:none; z-index:' + (dc.z || 0) + ';">';
+                }).join('');
+                out += '\n                        <div class="dnd-result" id="result' + sfx + '" style="position:absolute;left:0;right:0;bottom:12%;text-align:center;font-weight:bold;z-index:4;pointer-events:none;"></div>';
+                out += '\n                        <div id="score-malus-container' + sfx + '" class="score-malus-container" style="position:absolute; left:0; right:0; bottom:1%; display:flex; justify-content:center; gap:2%; font-weight:bold; font-size:' + Math.round((g.height || 400) * 0.07) + 'px; color:#2e7d32; z-index:4;"></div>';
+                out += '\n                    </div>';
+                return out;
+            }
+
+
+// =========================================================
             //  GÉNÉRATEUR V3 — fonds = images affichées dans l’éditeur (#stage .bg)
             // =========================================================
 
@@ -13046,92 +13155,17 @@
                     // --- JEU 1 (PAGE 1) ---
                     // ===============================================
 
-                    // === JEUX DnD (nombre illimité) — placés sur la Page 1 ===
+                    // === JEUX DnD (page 1) ===
                     mqGameIds().forEach((gameId) => {
                         const g = state.dndGames && state.dndGames[gameId];
                         if (!g || !g.enabled) return;
                         if (mqFindPageForPoint((g.x || 0) + (g.width || 0) / 2, (g.y || 0) + (g.height || 0) / 2).index !== 0) return;
-                        const n = mqGameNum(gameId);
-                        const sfx = (n === 1) ? '' : String(n);
-                        const goodIds = g.goodIds || '';
-                        const targetCount = parseInt(g.targetCount) || 0;
-                        const ttFont = (g.tooltip && g.tooltip.font) ? g.tooltip.font : "'OpenDyslexic', sans-serif";
-                        const ttDur = (g.tooltip && g.tooltip.duration) ? g.tooltip.duration : 3000;
-                        const ttBg = (g.tooltip && g.tooltip.bgColor) ? g.tooltip.bgColor : '#333333';
-                        const ttCol = (g.tooltip && g.tooltip.color) ? g.tooltip.color : '#ffffff';
-
-                        const G_W = g.width || 800;
-                        const G_H = g.height || 400;
-                        const localGx = (g.x || 0) - expPage1.stageX;
-                        const localGy = (g.y || 0) - expPage1.stageY;
-                        const leftPct = (localGx / containerBaseW) * 100;
-                        const topPct = (localGy / containerBaseH) * 100;
-                        const widthPct = (G_W / containerBaseW) * 100;
-                        const heightPct = (G_H / containerBaseH) * 100;
-
-                        const hBox = g.header || { width: 600, height: 80, fontSize: 60 };
-                        const titleFS = (hBox.fontSize || 60) * pxToVw;
-                        const dzFS = 12 * pxToVw;
-
-                        const tb = g.titleBox || { x: 10, y: 10, width: hBox.width || 600, height: hBox.height || 80 };
-                        const tbX = (tb.x / G_W) * 100, tbY = (tb.y / G_H) * 100, tbW = (tb.width / G_W) * 100, tbH = (tb.height / G_H) * 100;
-
-                        html += `
-                    <div id="drag-game-on-page${sfx}" class="drag-game game-${n}"
-                        style="position: absolute; left: ${leftPct}%; top: ${topPct}%; width: ${widthPct}%; height: ${heightPct}%; background: ${g.bgColor}; border: 1px solid rgba(0,0,0,0.1); box-sizing: border-box; overflow: visible; scale: 1; transform: none; min-width: 0; min-height: 0; border-radius: 30px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); font-size: inherit;"
-                        data-dnd-good="${goodIds}"
-                        data-dnd-target="${targetCount}"
-                        data-dnd-score-container="score-malus-container${sfx}"
-                        data-dnd-gameid="${gameId}"
-                        data-tt-font="${ttFont.replace(/"/g, '&quot;')}"
-                        data-tt-dur="${ttDur}"
-                        data-tt-bg="${ttBg}"
-                        data-tt-col="${ttCol}">
-
-                        <!-- TITRE (placement libre) -->
-                        <div class="carre_marron" style="position:absolute; left:${tbX}%; top:${tbY}%; width:${tbW}%; height:${tbH}%; display:flex; justify-content:center; align-items:center; box-sizing:border-box; z-index:2;">
-                            <h2 style="font-family:${hBox.font || 'Verdana, sans-serif'}; font-size:${hBox.fontSize || 60}px; margin:0; width:100%; text-align:${hBox.align || 'center'}; font-weight:${hBox.bold ? 'bold' : 'normal'}; font-style:${hBox.italic ? 'italic' : 'normal'};">${g.title || ('Jeu ' + n)}</h2>
-                        </div>
-
-                        <!-- DROPZONES (placement libre) -->
-                        <div id="targets" style="position:absolute; inset:0; z-index:1; box-sizing:border-box; pointer-events:none;">
-                            ${(g.dropzones || []).map((dz, i) => {
-                                const dzX = ((dz.x || 0) / G_W) * 100;
-                                const dzY = ((dz.y || 0) / G_H) * 100;
-                                const dzW = ((dz.width || g.zoneWidth || 250) / G_W) * 100;
-                                const dzH = ((dz.height || g.zoneHeight || 250) / G_H) * 100;
-                                return `<div class="dropzone" data-pos="${i + 1}" style="position:absolute; left:${dzX}%; top:${dzY}%; width:${dzW}%; height:${dzH}%; font-size:${Math.round((dz.height || g.zoneHeight || 80) * 0.4)}px; align-items:center; justify-content:center; display:flex; box-sizing:border-box; pointer-events:auto;">${i + 1}</div>`;
-                            }).join('')}
-                        </div>
-
-                        <!-- DRAGGABLES (placement libre) -->
-                        <div id="source${sfx}" style="position:absolute; inset:0; z-index:3; box-sizing:border-box; pointer-events:none;">
-                            ${(g.draggables || []).map(d => {
-                                const dW = ((d.width || 250) / G_W) * 100;
-                                const dH = ((d.height || 250) / G_H) * 100;
-                                const dX = ((d.x || 0) / G_W) * 100;
-                                const dY = ((d.y || 0) / G_H) * 100;
-                                return `<div class="draggable-wrapper" style="position:absolute; left:${dX}%; top:${dY}%; width:${dW}%; height:${dH}%; box-sizing:border-box;">
-                                        <span class="png-wrap draggable" draggable="true"
-                                            style="display:block; width:100%; height:100%; pointer-events:auto;"
-                                            data-id="${d.id}" data-tooltip="${(d.title || '').replace(/"/g, '&quot;')}">
-                                            ${mqDndItemInner(d)}
-                                        </span>
-                                    </div>`;
-                            }).join('')}
-                        </div>
-
-                        <!-- IMAGES FIXES (décor) -->
-                        ${(g.decorImages || []).map(dc => {
-                            const cX = ((dc.x || 0) / G_W) * 100;
-                            const cY = ((dc.y || 0) / G_H) * 100;
-                            const cW = ((dc.width || 300) / G_W) * 100;
-                            const cH = ((dc.height || 200) / G_H) * 100;
-                            return `<img src="${dc.src}" alt="" style="position:absolute; left:${cX}%; top:${cY}%; width:${cW}%; height:${cH}%; object-fit:contain; pointer-events:none; z-index:${dc.z || 0};">`;
-                        }).join('')}
-
-                        <div id="score-malus-container${sfx}" class="score-malus-container" style="position:absolute; left:0; right:0; bottom:1%; display:flex; justify-content:center; gap:2%; font-weight:bold; font-size:${Math.round((g.height || 400) * 0.07)}px; color:#2e7d32; z-index:4;"></div>
-                    </div>`;
+                        html += mqBuildExportDndGameHtml(g, gameId, {
+                            stageX: expPage1.stageX,
+                            stageY: expPage1.stageY,
+                            baseW: containerBaseW,
+                            baseH: containerBaseH
+                        });
                     });
 
                     html += `</div>`; // Fin Page 1 Container
@@ -13237,7 +13271,22 @@
                         });
                     html += `</svg>`;
 
+                    // === JEUX DnD PAGE 2 ===
+                    mqGameIds().forEach((gameId) => {
+                        const g = state.dndGames && state.dndGames[gameId];
+                        if (!g || !g.enabled) return;
+                        if (mqFindPageForPoint((g.x || 0) + (g.width || 0) / 2, (g.y || 0) + (g.height || 0) / 2).index !== 1) return;
+                        html += mqBuildExportDndGameHtml(g, gameId, {
+                            stageX: expPage2.stageX,
+                            stageY: expPage2.stageY,
+                            baseW: page2BaseW,
+                            baseH: page2BaseH
+                        });
+                    });
+
                     html += `</div></div></div>`; // Fin Wrapper
+
+                    
 
                     // --- SCRIPTS intégrés (fichier HTML autonome) ---
                     html += `
@@ -14277,6 +14326,50 @@
 
 
 
+            
+            function mqDndTypeControlsHTML(n) {
+                return ''
+                    + '<div class="row mq-dnd-type-row"><label>Type de jeu</label>'
+                    + '<select id="dndGame' + n + 'GameType" style="width:100%;">'
+                    + '<option value="selection">Sélection simple</option>'
+                    + '<option value="exact">Placement exact</option>'
+                    + '<option value="classification">Classement par catégories</option>'
+                    + '<option value="mindmap">Carte mentale</option>'
+                    + '</select></div>'
+                    + '<div class="row"><label>Vérification</label>'
+                    + '<select id="dndGame' + n + 'FeedbackMode" style="width:100%;">'
+                    + '<option value="immediate">Immédiate</option>'
+                    + '<option value="deferred">Avec bouton Vérifier</option>'
+                    + '</select></div>'
+                    + '<div class="row"><label>Usage carte</label>'
+                    + '<select id="dndGame' + n + 'CardUse" style="width:100%;">'
+                    + '<option value="unique">Utilisable une fois</option>'
+                    + '<option value="reusable">Réutilisable</option>'
+                    + '</select></div>'
+                    + '<div class="row" style="gap:12px;flex-wrap:wrap;">'
+                    + '<label style="width:auto;"><input type="checkbox" id="dndGame' + n + 'ShowScore" checked> Afficher score</label>'
+                    + '<label style="width:auto;"><input type="checkbox" id="dndGame' + n + 'ShowMalus" checked> Afficher malus</label>'
+                    + '</div>'
+                    + '<details style="margin:8px 0;background:#fff;border:1px solid #ddd;border-radius:6px;padding:6px;">'
+                    + '<summary style="cursor:pointer;font-weight:bold;font-size:12px;">Générer une grille</summary>'
+                    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-top:6px;font-size:11px;">'
+                    + '<label>Lignes <input id="dndGame' + n + 'GridRows" type="number" min="1" max="20" value="7" style="width:100%;"></label>'
+                    + '<label>Colonnes <input id="dndGame' + n + 'GridCols" type="number" min="1" max="20" value="3" style="width:100%;"></label>'
+                    + '<label>Largeur cellule <input id="dndGame' + n + 'GridCellW" type="number" value="200" style="width:100%;"></label>'
+                    + '<label>Hauteur cellule <input id="dndGame' + n + 'GridCellH" type="number" value="120" style="width:100%;"></label>'
+                    + '<label>Esp. H <input id="dndGame' + n + 'GridGapX" type="number" value="10" style="width:100%;"></label>'
+                    + '<label>Esp. V <input id="dndGame' + n + 'GridGapY" type="number" value="10" style="width:100%;"></label>'
+                    + '<label>Départ X <input id="dndGame' + n + 'GridStartX" type="number" value="10" style="width:100%;"></label>'
+                    + '<label>Départ Y <input id="dndGame' + n + 'GridStartY" type="number" value="250" style="width:100%;"></label>'
+                    + '</div>'
+                    + '<button type="button" id="btnGenGridGame' + n + '" style="width:100%;margin-top:6px;font-weight:bold;">Générer/remplacer les zones</button>'
+                    + '</details>'
+                    + '<div style="margin-top:8px;">'
+                    + '<label style="font-size:12px;font-weight:bold;display:block;margin-bottom:4px;">Zones de dépôt</label>'
+                    + '<div id="dndGame' + n + 'DropzonesList" style="max-height:280px;overflow-y:auto;background:#fff;padding:5px;border-radius:4px;border:1px solid #ddd;"></div>'
+                    + '</div>';
+            }
+
             // === Jeux DnD dynamiques (nombre illimité, plafonné à MQ_MAX_GAMES) ===
             function mqBuildGamePanelHTML(n) {
                 const bg = (n % 2 === 1) ? '#f0f8ff' : '#f0fff0';
@@ -14290,7 +14383,8 @@
                     + '<div class="row"><label>Bonnes réponses (IDs)</label>'
                     + '<input id="dndGame' + n + 'GoodIds" type="text" placeholder="Ex: 1,2,3"></div>'
                     + '<div class="row"><label>Nombre de zones</label>'
-                    + '<input id="dndGame' + n + 'TargetCount" type="number" min="1" max="10" value="4"></div>'
+                    + '<input id="dndGame' + n + 'TargetCount" type="number" min="1" max="100" value="4"></div>'
+                    + '<div id="dndGame' + n + 'AdvancedHost" data-mq-dnd-adv="' + n + '"></div>'
                     + '<div class="row"><label style="font-size:11px;">Zones (L x H | Gap)</label>'
                     + '<div style="display:flex; gap:3px; align-items:center;">'
                     + '<input id="dndGame' + n + 'ZoneWidth" type="number" value="250" style="width:35px; font-size:11px; padding:2px;" placeholder="L" title="Largeur">'
@@ -14346,6 +14440,7 @@
                 for (let n = 3; n <= count; n++) {
                     if (!$('dndGame' + n + 'Enabled')) host.insertAdjacentHTML('beforeend', mqBuildGamePanelHTML(n));
                 }
+                if (typeof mqEnsureDndAdvancedHosts === 'function') mqEnsureDndAdvancedHosts();
             }
             function mqUpdateAddRemoveButtons() {
                 const count = mqGameIds().length;

@@ -1,0 +1,659 @@
+/* style.css - Design commun à toutes les machines */
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: Arial, sans-serif;
+    overflow: hidden;
+    background: #f0f0f0;
+}
+
+/* ========== INPUTS ========== */
+
+
+.input-wrapper input[type="text"] {
+    display: block;
+    width: 100%;
+    height: 100%;
+    padding: 4px 6px;
+    font-size: 56px;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+    pointer-events: auto;
+    backdrop-filter: blur(2px);
+    z-index: 100;
+    background-color: #e7e7e7;
+}
+
+.input-wrapper textarea {
+    display: block;
+    width: 100%;
+    height: 100%;
+    padding: 4px 6px;
+    font-size: 56px;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+    pointer-events: auto;
+    backdrop-filter: blur(2px);
+    z-index: 100;
+    background-color: #e7e7e7;
+    resize: none;
+    /* Empêcher le redimensionnement manuel */
+    line-height: 1;
+    /* Demande utilisateur */
+    overflow: hidden;
+}
+
+input:disabled,
+input[readonly].disabled-style {
+    background-color: rgb(240, 240, 240);
+    cursor: not-allowed;
+    border: 1px solid #ddd;
+}
+
+input::placeholder {
+    color: #d3d3d3;
+    opacity: 1;
+}
+
+/* Tooltips */
+/*
+.input-wrapper[data-tooltip]:hover::after,
+.hotspot[data-tooltip]:hover::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #333;
+    color: white;
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-size: 50px;
+        white-space: nowrap;
+    z-index: 1000;
+    opacity: 0;
+    animation: fadeInOut 1s forwards;
+}
+*/
+/*
+.input-wrapper[data-tooltip]:hover::before,
+.hotspot[data-tooltip]:hover::before {
+    content: "";
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    border-width: 5px;
+    border-style: solid;
+    border-color: transparent transparent #333 transparent;
+    opacity: 0;
+    animation: fadeInOut 1s forwards;
+    z-index: 1000;
+}
+*/
+
+@keyframes fadeInOut {
+    0% {
+        opacity: 0;
+    }
+
+    20% {
+        opacity: 1;
+    }
+
+    80% {
+        opacity: 1;
+    }
+
+    100% {
+        opacity: 0;
+    }
+}
+
+/* ========== CONTROLES ========== */
+.controls {
+    position: fixed;
+    top: 10px;
+    left: 10px;
+    z-index: 200;
+    background: rgba(255, 255, 255, 0.9);
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-weight: bold;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+}
+
+/* ========== CANVAS ========== */
+.canvas-container {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+    cursor: grab;
+}
+
+.canvas-container.grabbing {
+    cursor: grabbing;
+}
+
+.page-wrapper {
+    position: absolute;
+    top: 0;
+    left: 0;
+    transform-origin: 0 0;
+    transition: transform 0.1s ease;
+}
+
+.page-container {
+    position: relative;
+    display: inline-block;
+}
+
+.page-image {
+    display: block;
+    max-width: none;
+    user-select: none;
+    -webkit-user-drag: none;
+    user-drag: none;
+    pointer-events: none; /* laisser le pan passer au canvas (fond non déplaçable comme fichier) */
+}
+
+/* ========== DRAG & DROP ========== */
+.draggable {
+    width: 50px;
+    height: 50px;
+    cursor: grab;
+    border: 1px solid #656565;
+    border-radius: 5px;
+    transition: opacity 0.2s;
+    pointer-events: auto;
+}
+
+.draggable:hover:not(.used) {
+    border-color: #007bff;
+}
+
+.draggable.used {
+    opacity: 0.3 !important;
+    cursor: not-allowed;
+}
+
+/* Wrapper pour images PNG avec ombre portée et mix-blend-mode */
+.png-wrap {
+    display: inline-block;
+    filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.35));
+    transition: transform 0.2s;
+    /* Pour l'animation de survol */
+}
+
+/* L'image à l'intérieur conserve le mix-blend-mode */
+.png-wrap .png,
+.png-wrap img {
+    display: block;
+    mix-blend-mode: multiply;
+}
+
+/* Application du hover sur le wrapper plutôt que l'image directe */
+.png-wrap:hover {
+    transform: scale(1.05);
+}
+
+#targets {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    margin: 10px 0 4px;
+}
+
+.dropzone {
+    width: 50px;
+    height: 50px;
+    border: 2px dashed #999;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: white;
+    pointer-events: auto;
+    transition: all 0.3s ease;
+}
+
+.dropzone.drag-over {
+    border-color: #007bff;
+    background: #eaf5ff;
+}
+
+/* ✅ Effet vert gaming pour bonne réponse */
+.dropzone.dropzone-correct {
+    border: 3px solid #4caf50 !important;
+    background: rgba(76, 175, 80, 0.15) !important;
+    box-shadow: 0 0 20px rgba(76, 175, 80, 0.6), inset 0 0 10px rgba(76, 175, 80, 0.2);
+}
+
+/* ❌ Effet rouge gaming pour mauvaise réponse */
+.dropzone.dropzone-wrong {
+    border: 3px solid #f44336 !important;
+    background: rgba(244, 67, 54, 0.15) !important;
+    box-shadow: 0 0 15px rgba(244, 67, 54, 0.5);
+}
+
+.dropzone img {
+    max-width: 100%;
+    max-height: 100%;
+    pointer-events: none;
+}
+
+#result {
+    min-height: 20px;
+    margin-top: 8px;
+    font-weight: bold;
+    text-align: center;
+}
+
+.success {
+    color: green;
+}
+
+.error {
+    color: red;
+}
+
+#score-malus-container,
+#score-malus-container2 {
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+    margin-top: 8px;
+    font-weight: bold;
+    font-size: 12px;
+}
+
+#malus-display {
+    color: red;
+}
+
+.hidden {
+    display: none !important;
+}
+
+/* Feedback couleurs */
+.correct {
+    background-color: #d4edda !important;
+    border-color: #28a745 !important;
+}
+
+.incorrect {
+    background-color: #f8d7da !important;
+    border-color: #dc3545 !important;
+}
+
+.in-progress {
+    background-color: #fbcd88 !important;
+    border-color: #f59840 !important;
+}
+
+/* ========== JEUX ========== */
+.background-box {
+    position: absolute;
+    top: 1721px;
+    right: 2604px;
+    width: 2266px;
+    height: 1675px;
+    background: rgb(255, 255, 255);
+    border-radius: 15px;
+    z-index: 5;
+}
+
+.carre_marron {
+    background: #a48870;
+    padding-bottom: 5px;
+    border-radius: 15px;
+}
+
+.drag-game {
+    position: relative;
+    background: rgb(255, 255, 255);
+    border-radius: 15px;
+    font-size: 30px;
+    z-index: 10;
+    min-width: 220px;
+    box-shadow: 6px 9px 3px rgba(0, 0, 0, 0.2);
+    scale: 4.2;
+    width: 23%;
+}
+
+#drag-game-on-page {
+    top: 20%;
+    left: 39%;
+}
+
+#drag-game-on-page2 {
+    top: 60%;
+    left: 39%;
+}
+
+.drag-game h2 {
+    margin: 0 0 8px;
+    font-size: 16px;
+    font-weight: bold;
+    color: #ffffff;
+    text-align: center;
+}
+
+#source,
+#source2 {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 8px 0;
+    justify-content: center;
+}
+
+/* ========== FEEDBACK MESSAGE ========== */
+#feedback-message {
+    text-align: center;
+    margin-top: 20px;
+    font-size: 1.5em;
+    color: #2e7d32;
+    padding: 20px;
+    background-color: #e8f5e9;
+    border-radius: 10px;
+    z-index: 1000;
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    display: none;
+}
+
+/* ========== SPECIFIQUES ========== */
+.definition input {
+    font-size: 40px !important;
+    text-transform: capitalize;
+    color: #333;
+    border: 2px solid #333;
+}
+
+.hotspot {
+    background: transparent;
+    cursor: pointer;
+    z-index: 8;
+    position: absolute;
+    pointer-events: none;
+}
+
+.hotspot-image {
+    opacity: 100%;
+    display: block;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 10;
+    mix-blend-mode: multiply;
+}
+
+.hotspot-path {
+    pointer-events: auto !important;
+    cursor: pointer;
+}
+
+/* Tooltip flottant SVG */
+#svg-tooltip {
+    display: none;
+    position: fixed;
+    background: #333;
+    color: white;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 16px;
+    font-weight: bold;
+    z-index: 10000 !important;
+    /* Très haut pour passer par-dessus tout */
+    pointer-events: none;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+    white-space: nowrap;
+}
+
+button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.pdf-buttons {
+    margin-top: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.pdf-buttons button {
+    padding: 12px 16px;
+    font-size: 14px;
+    width: 280px;
+    text-align: center;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+#download-pdf {
+    background-color: #f8f8f8;
+    color: #888;
+    opacity: 0.6;
+    /* Gris et pâle quand désactivé */
+}
+
+#download-pdf:not(:disabled) {
+    background-color: #007bff;
+    color: white;
+    opacity: 1;
+    cursor: pointer;
+}
+
+#download-pdf:disabled {
+    cursor: not-allowed;
+}
+
+#download-pdf-prof {
+    background-color: #e9ecef;
+    color: #333;
+}
+
+/* Inputs au-dessus du SVG */
+.input-wrapper {
+    position: absolute;
+    z-index: 20;
+    /* > 7 du SVG */
+}
+
+.input-wrapper input[type="text"] {
+    position: relative;
+    /* rend z-index effectif */
+    z-index: 30;
+    cursor: text;
+    /* évite l'héritage du grab */
+}
+
+/* Optionnel (si tu veux bétonner côté CSS) */
+svg {
+    pointer-events: none;
+}
+
+.hotspot-path {
+    cursor: pointer;
+}
+
+/* Gestion de l'opacité des hotspots au survol */
+.hs-fill {
+    transition: fill-opacity 0.3s ease;
+}
+
+.hotspot-group:hover .hs-fill {
+    fill-opacity: var(--alpha-active, 0.35) !important;
+}
+
+input[type="text"] {
+    transition: background-color 0.3s ease;
+}
+
+/* Orange pendant la frappe */
+input.in-progress {
+    background-color: #ff9800;
+    color: rgb(0, 0, 0);
+}
+
+/* Rouge si faux */
+input.incorrect {
+    background-color: #f44336;
+    color: rgb(0, 0, 0);
+}
+
+/* Vert si juste */
+input.correct {
+    background-color: #4caf50;
+    color: rgb(0, 0, 0);
+}
+
+/* --- GAMIFICATION : Effet "Pop" (Succès) --- */
+
+@keyframes successPulse {
+    0% {
+        transform: scale(1);
+        box-shadow: 0 0 0 rgba(76, 175, 80, 0);
+    }
+
+    50% {
+        transform: scale(1.05);
+        box-shadow: 0 0 15px rgba(76, 175, 80, 0.6);
+        border-color: #4caf50;
+    }
+
+    100% {
+        transform: scale(1);
+        box-shadow: 0 0 0 rgba(76, 175, 80, 0);
+    }
+}
+
+/* On applique l'effet sur les inputs ET les textareas */
+.input-wrapper input.correct,
+.input-wrapper textarea.correct {
+    animation: successPulse 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    background-color: #c8e6c9 !important;
+    /* Vert pâle */
+    border-color: #2e7d32 !important;
+    /* Bordure verte */
+    color: #1b5e20 !important;
+    /* Texte vert foncé */
+    font-weight: bold;
+}
+
+/* ========== ZOOM MOBILE (fichiers générés) ========== */
+.mobile-zoom-bar {
+    position: fixed;
+    right: 12px;
+    bottom: max(12px, env(safe-area-inset-bottom, 0px));
+    z-index: 10001;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    pointer-events: auto;
+}
+
+.mobile-zoom-bar button {
+    width: 48px;
+    height: 48px;
+    border: 2px solid #333;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.95);
+    font-size: 22px;
+    font-weight: bold;
+    line-height: 1;
+    cursor: pointer;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.mobile-zoom-bar button:active {
+    background: #e3f2fd;
+}
+
+@media (max-width: 900px) {
+    .controls {
+        top: auto;
+        bottom: max(72px, calc(12px + env(safe-area-inset-bottom, 0px)));
+        left: 8px;
+        right: 72px;
+        max-width: calc(100vw - 80px);
+        font-size: 13px;
+        padding: 6px 10px;
+    }
+
+    .controls .progress-track {
+        width: 90px;
+    }
+
+    .controls .pdf-buttons {
+        flex-wrap: wrap;
+    }
+
+    .controls .pdf-buttons button {
+        font-size: 12px;
+        padding: 6px 10px !important;
+    }
+
+    #btnFullscreen {
+        top: auto !important;
+        bottom: max(12px, env(safe-area-inset-bottom, 0px)) !important;
+        right: 72px !important;
+    }
+}
+
+@media (min-width: 901px) {
+    .mobile-zoom-bar {
+        bottom: 20px;
+    }
+}
+
+/* ========== MODE IFRAME (Moodle, activité Page) ========== */
+html[data-embed="1"],
+html[data-embed="1"] body {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    overflow: hidden;
+}
+
+html[data-embed="1"] .canvas-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+}
+
+html[data-embed="1"] .controls {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    right: auto;
+    max-width: calc(100% - 16px);
+}
+
+html[data-embed="1"] .mobile-zoom-bar {
+    position: absolute;
+}
+
+html[data-embed="1"] #btnFullscreen {
+    position: absolute !important;
+    top: 8px !important;
+    right: 8px !important;
+}
