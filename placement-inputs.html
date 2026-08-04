@@ -839,6 +839,57 @@
             border: 5px dashed #666;
             border-radius: 8px;
             background: rgba(255, 255, 255, 0.5);
+            display: flex;
+            align-items: flex-start;
+            justify-content: flex-start;
+        }
+        .dnd-dropzone-label {
+            pointer-events: none;
+            margin: 6px;
+            padding: 3px 8px;
+            border-radius: 6px;
+            background: rgba(31, 39, 51, 0.82);
+            color: #fff;
+            font: 600 12px/1.2 Verdana, sans-serif;
+            max-width: calc(100% - 12px);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            box-shadow: 0 1px 4px rgba(0,0,0,.25);
+            z-index: 2;
+        }
+        .dnd-dropzone.mq-dnd-selected .dnd-dropzone-label {
+            background: rgba(232, 82, 31, 0.95);
+        }
+        .mq-dz-chip-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+            margin-bottom: 8px;
+        }
+        .mq-dz-chip {
+            border: 1px solid #cfd6df;
+            background: #fff;
+            border-radius: 999px;
+            padding: 3px 9px;
+            font-size: 11px;
+            cursor: pointer;
+            color: #334155;
+        }
+        .mq-dz-chip.is-active {
+            background: #e8521f;
+            border-color: #e8521f;
+            color: #fff;
+            font-weight: 700;
+        }
+        .mq-dz-inspector-empty {
+            font-size: 12px;
+            color: #64748b;
+            background: #f8fafc;
+            border: 1px dashed #cbd5e1;
+            border-radius: 8px;
+            padding: 10px;
+            text-align: center;
         }
 
         /* === ANIMATIONS GAMING POUR DND === */
@@ -9347,6 +9398,24 @@
                 document.querySelectorAll('.dnd-element.mq-dnd-selected').forEach(el => el.classList.remove('mq-dnd-selected'));
                 const el = document.querySelector(mqDndSelector(sel));
                 if (el) el.classList.add('mq-dnd-selected');
+                if (sel && sel.type === 'dropzone' && typeof window.mqRefreshDropzoneInspector === 'function') {
+                    window.mqRefreshDropzoneInspector(sel.gameId, parseInt(sel.index, 10));
+                }
+            };
+            window.mqSelectDropzoneForEdit = function (gameId, index) {
+                const g = state.dndGames && state.dndGames[gameId];
+                if (!g || !g.dropzones || !g.dropzones[index]) return;
+                if (typeof window.mqSetInspectorTab === 'function') window.mqSetInspectorTab('dnd');
+                window.mqSetDndSel({ gameId, type: 'dropzone', index: String(index) });
+                const panel = document.getElementById('dndGame' + mqGameNum(gameId) + 'Enabled');
+                const card = panel && panel.closest('.mq-dnd-card, [data-mq-dnd-panel], div');
+                if (card && card.scrollIntoView) {
+                    try { card.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (e) { card.scrollIntoView(true); }
+                }
+                const insp = document.getElementById('dndGame' + mqGameNum(gameId) + 'DropzonesList');
+                if (insp && insp.scrollIntoView) {
+                    try { insp.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (e2) { /* ignore */ }
+                }
             };
             window.mqStartDndAlign = function () {
                 if (!mqDndSel) { alert('Faites d\'abord un clic droit sur la zone à aligner.'); return; }
@@ -11504,8 +11573,12 @@
                 `).join('');
             }
 
-            // Afficher la liste des dropzones avec contrôles
-            function renderDropzonesList(gameId) {
+            // Afficher la liste / inspecteur des dropzones
+            function mqDropzoneDisplayName(dz, index) {
+                if (dz && dz.label && String(dz.label).trim()) return String(dz.label).trim();
+                return 'Zone ' + ((dz && dz.id != null) ? dz.id : (index + 1));
+            }
+            function renderDropzonesList(gameId, focusIndex) {
                 const listId = 'dndGame' + mqGameNum(gameId) + 'DropzonesList';
                 const list = document.getElementById(listId);
                 if (!list) return;
@@ -11513,51 +11586,80 @@
                 const dropzones = g && g.dropzones;
                 const cards = (g && g.draggables) || [];
                 if (!dropzones || dropzones.length === 0) {
-                    list.innerHTML = '<div style="font-size:11px; color:#999; text-align:center; padding:10px;">Aucune dropzone</div>';
+                    list.innerHTML = '<div class="mq-dz-inspector-empty">Aucune zone. Augmentez le nombre de zones ou générez une grille.</div>';
                     return;
                 }
-                list.innerHTML = dropzones.map((dz, index) => {
-                    const accepted = Array.isArray(dz.acceptedIds) ? dz.acceptedIds.map(String) : [];
-                    const cardsHtml = cards.map((c) => {
-                        const on = accepted.indexOf(String(c.id)) >= 0;
-                        const thumb = c.src && String(c.src).indexOf('idb:') !== 0
-                            ? '<img src="' + c.src + '" alt="">'
-                            : '<div style="height:40px;line-height:40px;font-size:14px;">' + (c.label || c.id) + '</div>';
-                        const safeId = String(c.id).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
-                        return '<label class="mq-dz-card' + (on ? ' on' : '') + '" title="ID ' + safeId + '">'
-                            + thumb
-                            + '<input type="checkbox" class="mq-dz-accept" data-game="' + gameId + '" data-index="' + index + '" data-card="' + safeId + '" ' + (on ? 'checked' : '') + '>'
-                            + '<span>' + (c.title || c.id) + '</span></label>';
-                    }).join('');
-                    return ''
-                        + '<div class="mq-dz-block" data-game="' + gameId + '" data-index="' + index + '" style="padding:8px; border-bottom:1px solid #eee; background:#f9f9f9; margin-bottom:6px; border-radius:6px;">'
-                        + '<div style="display:flex; align-items:center; gap:5px; margin-bottom:5px; flex-wrap:wrap;">'
-                        + '<span style="font-weight:bold; font-size:11px; color:#666;">Zone ' + dz.id + (dz.label ? ' — ' + dz.label : '') + '</span>'
-                        + '</div>'
-                        + '<div class="row" style="margin:0 0 4px 0;"><label style="font-size:10px;">Label</label>'
-                        + '<input type="text" data-field="label" value="' + String(dz.label || '').replace(/"/g, '&quot;') + '" style="font-size:11px;"></div>'
-                        + '<div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:4px; padding:6px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px;">'
-                        + mqDimPosField('X', dz.x || 0, 'updateDropzonePosition', gameId, index, 'x', 5)
-                        + mqDimPosField('Y', dz.y || 0, 'updateDropzonePosition', gameId, index, 'y', 5)
-                        + mqDimPosField('Largeur', dz.width || 80, 'updateDropzonePosition', gameId, index, 'width', 10)
-                        + mqDimPosField('Hauteur', dz.height || 80, 'updateDropzonePosition', gameId, index, 'height', 10)
-                        + '</div>'
-                        + '<div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-top:6px; font-size:11px;">'
-                        + '<label>Capacité <input type="number" min="1" max="50" data-field="capacity" value="' + (dz.capacity || 1) + '" style="width:100%;"></label>'
-                        + '<label>Groupe/ligne <input type="text" data-field="groupId" value="' + String(dz.groupId || '').replace(/"/g, '&quot;') + '" style="width:100%;"></label>'
-                        + '<label style="grid-column:1/-1;"><input type="checkbox" data-field="required" ' + (dz.required === false ? '' : 'checked') + '> Zone obligatoire</label>'
-                        + '</div>'
-                        + '<div style="margin-top:6px;"><div style="font-size:11px;font-weight:bold;">Réponses acceptées</div>'
-                        + '<div class="mq-dz-cards">' + (cardsHtml || '<span style="font-size:10px;color:#999;">Aucune carte</span>') + '</div></div>'
-                        + '<div class="row" style="margin-top:4px;"><label style="font-size:10px;">Msg réussite</label>'
-                        + '<input type="text" data-field="successMessage" value="' + String(dz.successMessage || '').replace(/"/g, '&quot;') + '" style="font-size:11px;"></div>'
-                        + '<div class="row"><label style="font-size:10px;">Msg erreur</label>'
-                        + '<input type="text" data-field="errorMessage" value="' + String(dz.errorMessage || '').replace(/"/g, '&quot;') + '" style="font-size:11px;"></div>'
-                        + '<details style="margin-top:4px;"><summary style="font-size:10px;color:#666;cursor:pointer;">Avancé (IDs)</summary>'
-                        + '<input type="text" data-field="acceptedIdsRaw" value="' + accepted.join(',') + '" placeholder="id1,id2" style="width:100%;font-size:10px;">'
-                        + '</details>'
-                        + '</div>';
+                let selIdx = (typeof focusIndex === 'number' && !isNaN(focusIndex)) ? focusIndex : -1;
+                if (selIdx < 0 && mqDndSel && mqDndSel.gameId === gameId && mqDndSel.type === 'dropzone') {
+                    selIdx = parseInt(mqDndSel.index, 10);
+                }
+                if (isNaN(selIdx) || selIdx < 0 || selIdx >= dropzones.length) selIdx = -1;
+
+                const chips = dropzones.map((dz, index) => {
+                    const name = mqDropzoneDisplayName(dz, index).replace(/</g, '&lt;');
+                    return '<button type="button" class="mq-dz-chip' + (index === selIdx ? ' is-active' : '') + '" data-game="' + gameId + '" data-index="' + index + '" title="' + name + '">' + name + '</button>';
                 }).join('');
+
+                let body = '<div class="mq-dz-chip-row">' + chips + '</div>';
+                if (selIdx < 0) {
+                    body += '<div class="mq-dz-inspector-empty">Cliquez une zone sur le canvas<br><span style="font-size:11px;">(ou un pastille ci-dessus) pour éditer ses paramètres.</span></div>';
+                    list.innerHTML = body;
+                    list.querySelectorAll('.mq-dz-chip').forEach((btn) => {
+                        btn.addEventListener('click', () => {
+                            window.mqSelectDropzoneForEdit(btn.dataset.game, parseInt(btn.dataset.index, 10));
+                        });
+                    });
+                    return;
+                }
+
+                const dz = dropzones[selIdx];
+                const index = selIdx;
+                const accepted = Array.isArray(dz.acceptedIds) ? dz.acceptedIds.map(String) : [];
+                const cardsHtml = cards.map((c) => {
+                    const on = accepted.indexOf(String(c.id)) >= 0;
+                    const thumb = c.src && String(c.src).indexOf('idb:') !== 0
+                        ? '<img src="' + c.src + '" alt="">'
+                        : '<div style="height:40px;line-height:40px;font-size:14px;">' + (c.label || c.id) + '</div>';
+                    const safeId = String(c.id).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+                    return '<label class="mq-dz-card' + (on ? ' on' : '') + '" title="ID ' + safeId + '">'
+                        + thumb
+                        + '<input type="checkbox" class="mq-dz-accept" data-game="' + gameId + '" data-index="' + index + '" data-card="' + safeId + '" ' + (on ? 'checked' : '') + '>'
+                        + '<span>' + (c.title || c.id) + '</span></label>';
+                }).join('');
+
+                body += ''
+                    + '<div class="mq-dz-block" data-game="' + gameId + '" data-index="' + index + '" style="padding:8px; background:#fff7ed; border:2px solid #e8521f; border-radius:8px;">'
+                    + '<div style="font-weight:bold; font-size:12px; color:#9a3412; margin-bottom:6px;">⚙️ ' + mqDropzoneDisplayName(dz, index).replace(/</g, '&lt;') + '</div>'
+                    + '<div class="row" style="margin:0 0 4px 0;"><label style="font-size:10px;">Label (affiché sur le canvas)</label>'
+                    + '<input type="text" data-field="label" value="' + String(dz.label || '').replace(/"/g, '&quot;') + '" style="font-size:11px;" placeholder="Ex: L1-C1 ou Casque"></div>'
+                    + '<div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:4px; padding:6px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px;">'
+                    + mqDimPosField('X', dz.x || 0, 'updateDropzonePosition', gameId, index, 'x', 5)
+                    + mqDimPosField('Y', dz.y || 0, 'updateDropzonePosition', gameId, index, 'y', 5)
+                    + mqDimPosField('Largeur', dz.width || 80, 'updateDropzonePosition', gameId, index, 'width', 10)
+                    + mqDimPosField('Hauteur', dz.height || 80, 'updateDropzonePosition', gameId, index, 'height', 10)
+                    + '</div>'
+                    + '<div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-top:6px; font-size:11px;">'
+                    + '<label>Capacité <input type="number" min="1" max="50" data-field="capacity" value="' + (dz.capacity || 1) + '" style="width:100%;"></label>'
+                    + '<label>Groupe/ligne <input type="text" data-field="groupId" value="' + String(dz.groupId || '').replace(/"/g, '&quot;') + '" style="width:100%;"></label>'
+                    + '<label style="grid-column:1/-1;"><input type="checkbox" data-field="required" ' + (dz.required === false ? '' : 'checked') + '> Zone obligatoire</label>'
+                    + '</div>'
+                    + '<div style="margin-top:6px;"><div style="font-size:11px;font-weight:bold;">Réponses acceptées</div>'
+                    + '<div class="mq-dz-cards">' + (cardsHtml || '<span style="font-size:10px;color:#999;">Aucune carte</span>') + '</div></div>'
+                    + '<div class="row" style="margin-top:4px;"><label style="font-size:10px;">Msg réussite</label>'
+                    + '<input type="text" data-field="successMessage" value="' + String(dz.successMessage || '').replace(/"/g, '&quot;') + '" style="font-size:11px;"></div>'
+                    + '<div class="row"><label style="font-size:10px;">Msg erreur</label>'
+                    + '<input type="text" data-field="errorMessage" value="' + String(dz.errorMessage || '').replace(/"/g, '&quot;') + '" style="font-size:11px;"></div>'
+                    + '<details style="margin-top:4px;"><summary style="font-size:10px;color:#666;cursor:pointer;">Avancé (IDs)</summary>'
+                    + '<input type="text" data-field="acceptedIdsRaw" value="' + accepted.join(',') + '" placeholder="id1,id2" style="width:100%;font-size:10px;">'
+                    + '</details>'
+                    + '</div>';
+
+                list.innerHTML = body;
+                list.querySelectorAll('.mq-dz-chip').forEach((btn) => {
+                    btn.addEventListener('click', () => {
+                        window.mqSelectDropzoneForEdit(btn.dataset.game, parseInt(btn.dataset.index, 10));
+                    });
+                });
                 list.querySelectorAll('.mq-dz-accept').forEach((inp) => {
                     inp.addEventListener('change', () => {
                         window.mqToggleZoneAccepted(inp.dataset.game, parseInt(inp.dataset.index, 10), inp.dataset.card, inp.checked);
@@ -11567,15 +11669,19 @@
                     const handler = () => {
                         const block = inp.closest('.mq-dz-block');
                         const gid = block.dataset.game;
-                        const index = parseInt(block.dataset.index, 10);
+                        const idx = parseInt(block.dataset.index, 10);
                         const field = inp.getAttribute('data-field');
                         const value = (inp.type === 'checkbox') ? inp.checked
                             : (field === 'capacity' ? (parseInt(inp.value, 10) || 1) : inp.value);
-                        window.mqUpdateDropzoneField(gid, index, field, value);
+                        window.mqUpdateDropzoneField(gid, idx, field, value);
                     };
                     inp.addEventListener('change', handler);
                 });
             }
+            window.mqRefreshDropzoneInspector = function (gameId, index) {
+                if (!gameId) return;
+                renderDropzonesList(gameId, index);
+            };
 
             window.mqUpdateDropzoneField = function (gameId, index, property, value) {
                 const dropzone = state.dndGames[gameId].dropzones[index];
@@ -11589,10 +11695,16 @@
                 } else {
                     dropzone[property] = value;
                 }
-                if (property === 'acceptedIdsRaw' || property === 'label' || property === 'groupId') {
-                    renderDropzonesList(gameId);
+                mqDndSel = { gameId, type: 'dropzone', index: String(index) };
+                // Mettre à jour le libellé canvas immédiatement si possible
+                if (property === 'label') {
+                    const el = document.querySelector(mqDndSelector(mqDndSel));
+                    const lab = el && el.querySelector('.dnd-dropzone-label');
+                    if (lab) lab.textContent = mqDropzoneDisplayName(dropzone, index);
                 }
-                renderDndGamesPreview();
+                renderDropzonesList(gameId, index);
+                if (property !== 'label') renderDndGamesPreview();
+                else if (window.mqSetDndSel) window.mqSetDndSel(mqDndSel);
                 saveLocal();
             };
             window.mqToggleZoneAccepted = function (gameId, index, cardId, checked) {
@@ -11603,7 +11715,8 @@
                 const set = new Set(dropzone.acceptedIds.map(String));
                 if (checked) set.add(id); else set.delete(id);
                 dropzone.acceptedIds = Array.from(set);
-                renderDropzonesList(gameId);
+                mqDndSel = { gameId, type: 'dropzone', index: String(index) };
+                renderDropzonesList(gameId, index);
                 saveLocal();
             };
 
@@ -11611,6 +11724,7 @@
             window.updateDropzonePosition = function (gameId, index, property, value) {
                 const dropzone = state.dndGames[gameId].dropzones[index];
                 dropzone[property] = parseInt(value) || 0;
+                mqDndSel = { gameId, type: 'dropzone', index: String(index) };
                 renderDndGamesPreview();
                 saveLocal();
             };
@@ -12019,9 +12133,15 @@
                     });
 
                     (g.dropzones || []).forEach((dz, idx) => {
+                        const zoneName = (dz.label && String(dz.label).trim())
+                            ? String(dz.label).trim()
+                            : ('Zone ' + (dz.id != null ? dz.id : (idx + 1)));
+                        const safeName = zoneName.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
                         html += `
                             <div class="dnd-element dnd-dropzone" data-game="${gameId}" data-type="dropzone" data-index="${idx}"
+                                 title="${safeName}"
                                  style="left: ${dz.x}px; top: ${dz.y}px; width: ${dz.width}px; height: ${dz.height}px; z-index: 1;">
+                                <span class="dnd-dropzone-label">${safeName}</span>
                                 <div class="dnd-element-handle" data-game="${gameId}" data-type="dropzone" data-index="${idx}"></div>
                             </div>`;
                     });
@@ -12049,6 +12169,12 @@
 
                 // Attacher les tooltips personnalisés
                 attachDndTooltips();
+
+                // Restaurer la sélection (contour + panneau gauche)
+                if (mqDndSel && mqDndSel.gameId) {
+                    const still = document.querySelector(mqDndSelector(mqDndSel));
+                    if (still && window.mqSetDndSel) window.mqSetDndSel(mqDndSel);
+                }
             }
 
             // Système de tooltip personnalisé pour les images DnD
@@ -12246,14 +12372,23 @@
                 });
 
                 // Relâchement de la souris
-                document.addEventListener('mouseup', () => {
+                document.addEventListener('mouseup', (e) => {
                     if (draggedElement || resizingElement) {
                         const moved = draggedElement || resizingElement;
+                        const wasClick = draggedElement && Math.hypot(
+                            (e.clientX || 0) - (draggedElement.startX || 0),
+                            (e.clientY || 0) - (draggedElement.startY || 0)
+                        ) < 6;
                         saveLocal();
                         if (viewport) viewport.style.pointerEvents = '';
                         document.body.style.userSelect = '';
                         document.body.style.cursor = '';
                         if (moved && moved.type === 'decor') renderDecorList(moved.gameId);
+                        if (wasClick && moved.type === 'dropzone' && typeof window.mqSelectDropzoneForEdit === 'function') {
+                            window.mqSelectDropzoneForEdit(moved.gameId, parseInt(moved.index, 10));
+                        } else if (moved && moved.type === 'dropzone' && window.mqSetDndSel) {
+                            window.mqSetDndSel({ gameId: moved.gameId, type: 'dropzone', index: String(moved.index) });
+                        }
                     }
                     draggedElement = null;
                     resizingElement = null;
@@ -14366,7 +14501,8 @@
                     + '</details>'
                     + '<div style="margin-top:8px;">'
                     + '<label style="font-size:12px;font-weight:bold;display:block;margin-bottom:4px;">Zones de dépôt</label>'
-                    + '<div id="dndGame' + n + 'DropzonesList" style="max-height:280px;overflow-y:auto;background:#fff;padding:5px;border-radius:4px;border:1px solid #ddd;"></div>'
+                    + '<p style="font-size:11px;color:#64748b;margin:0 0 6px 0;">Cliquez une zone sur le canvas pour afficher ses paramètres ici.</p>'
+                    + '<div id="dndGame' + n + 'DropzonesList" style="max-height:360px;overflow-y:auto;background:#fff;padding:5px;border-radius:4px;border:1px solid #ddd;"></div>'
                     + '</div>';
             }
 
@@ -14738,6 +14874,7 @@
                     });
                     try { localStorage.setItem(storageKey, id); } catch (e) { /* ignore */ }
                 }
+                window.mqSetInspectorTab = setTab;
 
                 tabIds.forEach((d) => {
                     tabButtons[d.id].addEventListener('click', () => setTab(d.id));
@@ -15614,7 +15751,11 @@
                     e.preventDefault();
                     e.stopPropagation();
                     if (dndEl) {
-                        if (window.mqSetDndSel) window.mqSetDndSel({ gameId: dndEl.dataset.game, type: dndEl.dataset.type, index: dndEl.dataset.index });
+                        if (dndEl.dataset.type === 'dropzone' && typeof window.mqSelectDropzoneForEdit === 'function') {
+                            window.mqSelectDropzoneForEdit(dndEl.dataset.game, parseInt(dndEl.dataset.index, 10));
+                        } else if (window.mqSetDndSel) {
+                            window.mqSetDndSel({ gameId: dndEl.dataset.game, type: dndEl.dataset.type, index: dndEl.dataset.index });
+                        }
                         mqShowContextMenu(e.clientX, e.clientY, 'dnd');
                     } else if (boxEl) {
                         mqSelectBoxEl(boxEl);
