@@ -25,5 +25,15 @@ node rebuild-mq-export-runtime.js --extract
 |-----------|-------------|
 | `instructions` | Texte de consignes affiché pendant le jeu |
 | `showInstructions` | Afficher les consignes (défaut `true`) |
+| `allowedLinks` | Paires `{ from, to }` pour le type `linking` |
+| `linkMode` | `one-to-one` (défaut) ou `one-to-many` |
+
+### Type `linking` (Relier / flèches)
+
+- Les images (`draggables`) restent fixes.
+- L’élève clique une image de départ puis une d’arrivée → flèche SVG.
+- Validation via `allowedLinks` (ex. `1>3`).
+- Clic sur une flèche pour la retirer.
+- Les zones de dépôt sont ignorées.
 
 Les consignes restent visibles jusqu’à la réussite de l’étape (`dnd-game-complete`), puis sont masquées.

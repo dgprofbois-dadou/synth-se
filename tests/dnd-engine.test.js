@@ -267,6 +267,38 @@ test('UI consignes dans placement-inputs.html', () => {
   assert.ok(html.includes('Consignes (affichées pendant le jeu)'));
 });
 
+console.log('\n=== Test linking ===');
+test('linking : score et complétion', () => {
+  const g = Engine.applyGameDefaults({
+    gameType: 'linking',
+    allowedLinks: [{ from: '1', to: '3' }, { from: '2', to: '4' }],
+    dropzones: []
+  });
+  assert.strictEqual(g.gameType, 'linking');
+  assert.strictEqual(Engine.computeGameMaxScore(g), 2);
+  assert.strictEqual(Engine.computeGameScore(g, { links: [{ from: '1', to: '3' }] }), 1);
+  const ok = Engine.evaluateGame(g, { links: [{ from: '1', to: '3' }, { from: '2', to: '4' }] });
+  assert.strictEqual(ok.isComplete, true);
+  assert.strictEqual(ok.score, 2);
+  const bad = Engine.evaluateGame(g, { links: [{ from: '1', to: '4' }, { from: '2', to: '4' }] });
+  assert.strictEqual(bad.isComplete, false);
+  assert.ok(bad.wrongLinks.length >= 1);
+});
+
+test('normalizeAllowedLinks texte', () => {
+  const links = Engine.normalizeAllowedLinks('1>3\n2→4\n5->6');
+  assert.strictEqual(links.length, 3);
+  assert.strictEqual(links[0].from, '1');
+  assert.strictEqual(links[1].to, '4');
+});
+
+test('UI linking dans placement-inputs.html', () => {
+  const html = fs.readFileSync(path.join(__dirname, '..', 'placement-inputs.html'), 'utf8');
+  assert.ok(html.includes('value="linking"'));
+  assert.ok(html.includes('AllowedLinks'));
+  assert.ok(html.includes('Relier (flèches)'));
+});
+
 console.log('\n--------------------------------');
 console.log('Résultat:', passed, 'ok,', failed, 'échec(s)');
 process.exit(failed ? 1 : 0);

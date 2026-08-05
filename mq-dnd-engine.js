@@ -14,9 +14,10 @@
   'use strict';
 
   var MQ_DND_MAX_ZONES = 100;
-  var GAME_TYPES = ['selection', 'exact', 'classification', 'mindmap'];
+  var GAME_TYPES = ['selection', 'exact', 'classification', 'mindmap', 'linking'];
   var FEEDBACK_MODES = ['immediate', 'deferred'];
   var CARD_USES = ['unique', 'retry', 'reusable'];
+  var LINK_MODES = ['one-to-one', 'one-to-many'];
 
   function parseIdList(raw) {
     if (Array.isArray(raw)) {
@@ -48,9 +49,49 @@
     return CARD_USES.indexOf(v) >= 0 ? v : 'unique';
   }
 
+  function normalizeLinkMode(t) {
+    var v = String(t || 'one-to-one').toLowerCase();
+    return LINK_MODES.indexOf(v) >= 0 ? v : 'one-to-one';
+  }
+
   function isSingleUse(cardUse) {
     var u = normalizeCardUse(cardUse);
     return u === 'unique' || u === 'retry';
+  }
+
+  function normalizeAllowedLinks(raw) {
+    var list = [];
+    if (typeof raw === 'string') {
+      raw.split(/[\n;]+/).forEach(function (line) {
+        var m = String(line).trim().match(/^(.+?)\s*(?:→|->|>|=)\s*(.+)$/);
+        if (m) list.push({ from: m[1].trim(), to: m[2].trim() });
+      });
+    } else if (Array.isArray(raw)) {
+      raw.forEach(function (l) {
+        if (!l || typeof l !== 'object') return;
+        var from = String(l.from != null ? l.from : '').trim();
+        var to = String(l.to != null ? l.to : '').trim();
+        if (from && to) list.push({ from: from, to: to });
+      });
+    }
+    var seen = {};
+    return list.filter(function (l) {
+      if (!l.from || !l.to || l.from === l.to) return false;
+      var k = l.from + '\0' + l.to;
+      if (seen[k]) return false;
+      seen[k] = true;
+      return true;
+    });
+  }
+
+  function allowedLinksToText(links) {
+    return normalizeAllowedLinks(links).map(function (l) {
+      return l.from + '>' + l.to;
+    }).join('\n');
+  }
+
+  function linkPairKey(from, to) {
+    return String(from) + '\0' + String(to);
   }
 
   function normalizeDropzone(dz, index) {
@@ -93,11 +134,17 @@
     if (g.goodIds == null) g.goodIds = '';
     if (!Array.isArray(g.dropzones)) g.dropzones = [];
     g.dropzones = g.dropzones.map(normalizeDropzone);
+    g.linkMode = normalizeLinkMode(g.linkMode);
+    g.allowedLinks = normalizeAllowedLinks(g.allowedLinks);
     return g;
   }
 
   function isSelection(game) {
     return normalizeGameType(game && game.gameType) === 'selection';
+  }
+
+  function isLinking(game) {
+    return normalizeGameType(game && game.gameType) === 'linking';
   }
 
   function goodIdSet(game) {
@@ -191,10 +238,14 @@
    * selection : nombre de goodIds
    * exact/mindmap : somme des attendus sur zones required
    * classification : somme des cartes attendues (min capacity, acceptedIds.length) sur zones required
+   * linking : nombre de paires autorisées
    */
   function computeGameMaxScore(game) {
     if (!game) return 0;
     var type = normalizeGameType(game.gameType);
+    if (type === 'linking') {
+      return normalizeAllowedLinks(game.allowedLinks).length;
+    }
     if (type === 'selection') {
       var goods = parseIdList(game.goodIds);
       var tc = parseInt(game.targetCount, 10) || 0;
@@ -221,12 +272,55 @@
   }
 
   /**
-   * Score brut (sans malus) : nombre de cartes correctement placées.
-   * placements: { zoneKey: id[] }
+   * Évalue les liaisons (flèches) pour un jeu linking.
+   * links: [{ from, to }]
+   */
+  function evaluateLinks(game, links) {
+    var allowed = normalizeAllowedLinks(game && game.allowedLinks);
+    var allowedSet = {};
+    allowed.forEach(function (l) {
+      allowedSet[linkPairKey(l.from, l.to)] = true;
+    });
+    var user = normalizeAllowedLinks(links || []);
+    var correct = [];
+    var wrong = [];
+    var seenCorrect = {};
+    user.forEach(function (l) {
+      var k = linkPairKey(l.from, l.to);
+      if (allowedSet[k]) {
+        if (!seenCorrect[k]) {
+          seenCorrect[k] = true;
+          correct.push(l);
+        }
+      } else {
+        wrong.push(l);
+      }
+    });
+    var maxScore = allowed.length;
+    var score = correct.length;
+    return {
+      links: user,
+      correct: correct,
+      wrong: wrong,
+      score: score,
+      maxScore: maxScore,
+      isComplete: maxScore > 0 && score >= maxScore && wrong.length === 0,
+      gameType: 'linking'
+    };
+  }
+
+  /**
+   * Score brut (sans malus) : nombre de cartes correctement placées / liens corrects.
+   * placements: { zoneKey: id[] }  OU  pour linking: { links: [{from,to}] } / tableau de liens
    */
   function computeGameScore(game, placements) {
     placements = placements || {};
     var type = normalizeGameType(game && game.gameType);
+    if (type === 'linking') {
+      var links = Array.isArray(placements) ? placements
+        : (Array.isArray(placements.links) ? placements.links : []);
+      return evaluateLinks(game, links).score;
+    }
     var zones = Array.isArray(game && game.dropzones) ? game.dropzones : [];
     var score = 0;
 
@@ -255,6 +349,22 @@
 
   function evaluateGame(game, placements) {
     placements = placements || {};
+    if (isLinking(game)) {
+      var links = Array.isArray(placements) ? placements
+        : (Array.isArray(placements.links) ? placements.links : []);
+      var lev = evaluateLinks(game, links);
+      return {
+        zoneEvals: [],
+        groups: {},
+        links: lev.links,
+        correctLinks: lev.correct,
+        wrongLinks: lev.wrong,
+        score: lev.score,
+        maxScore: lev.maxScore,
+        isComplete: lev.isComplete,
+        gameType: 'linking'
+      };
+    }
     var zones = Array.isArray(game && game.dropzones) ? game.dropzones : [];
     var zoneEvals = zones.map(function (z) {
       return evaluateZone(game, z, placements[String(z.id)] || []);
@@ -404,13 +514,418 @@
   }
 
   /**
+   * Jeu « Relier » : clic sur image départ puis image arrivée → flèche SVG.
+   * Les .draggable restent fixes (non déplaçables). Les dropzones sont ignorées.
+   */
+  function initPlayableLinkingGame(gameContainer, gameConfig, hooks) {
+    if (!gameContainer || !gameConfig) return null;
+    hooks = hooks || {};
+    var game = applyGameDefaults(cloneJson(gameConfig));
+    var feedbackMode = normalizeFeedbackMode(game.feedbackMode);
+    var linkMode = normalizeLinkMode(game.linkMode);
+    var links = [];
+    var selectedFrom = null;
+    var nbErreurs = 0;
+    var verifiedOnce = feedbackMode === 'immediate';
+    var gameId = gameConfig._gameId || gameContainer.getAttribute('data-dnd-gameid') || 'game';
+    var completeFired = false;
+
+    gameContainer.classList.add('dnd-linking');
+
+    // Masquer / désactiver les dropzones (non utilisées)
+    Array.prototype.forEach.call(gameContainer.querySelectorAll('.dropzone'), function (z) {
+      z.style.pointerEvents = 'none';
+      z.style.opacity = '0';
+      z.setAttribute('aria-hidden', 'true');
+    });
+
+    var resultDiv = gameContainer.querySelector('.dnd-result') || gameContainer.querySelector('[id^="result"]');
+    var scoreContainer = gameContainer.querySelector('.score-malus-container') ||
+      gameContainer.querySelector('[id^="score-malus"]');
+    var instructionsEl = gameContainer.querySelector('.dnd-instructions');
+    var instructionsText = String(game.instructions || '').trim();
+    if (!instructionsText && game.showInstructions !== false) {
+      instructionsText = 'Cliquez une image de départ puis une image d’arrivée pour tracer une flèche.';
+    }
+    var showInstructions = game.showInstructions !== false && !!instructionsText;
+
+    if (showInstructions && !instructionsEl) {
+      instructionsEl = document.createElement('div');
+      instructionsEl.className = 'dnd-instructions';
+      instructionsEl.setAttribute('role', 'status');
+      instructionsEl.setAttribute('aria-live', 'polite');
+      gameContainer.appendChild(instructionsEl);
+    }
+    if (instructionsEl) {
+      var tbPos = game.titleBox || gameConfig.titleBox || null;
+      var gH = game.height || gameContainer.clientHeight || 400;
+      var topPct = 8;
+      if (tbPos && typeof tbPos.y === 'number') {
+        topPct = (((tbPos.y || 0) + (tbPos.height || 0) + 10) / Math.max(1, gH)) * 100;
+        if (topPct < 2) topPct = 2;
+        if (topPct > 70) topPct = 70;
+      }
+      if (!instructionsEl.style.top) instructionsEl.style.top = topPct + '%';
+      if (showInstructions) {
+        instructionsEl.textContent = instructionsText;
+        instructionsEl.hidden = false;
+        instructionsEl.style.display = '';
+      } else {
+        instructionsEl.hidden = true;
+        instructionsEl.style.display = 'none';
+      }
+    }
+
+    function updateInstructionsVisibility(isComplete) {
+      if (!instructionsEl || !showInstructions) return;
+      if (isComplete) {
+        instructionsEl.classList.add('dnd-instructions-done');
+        instructionsEl.hidden = true;
+        instructionsEl.style.display = 'none';
+      } else {
+        instructionsEl.classList.remove('dnd-instructions-done');
+        instructionsEl.hidden = false;
+        instructionsEl.style.display = '';
+      }
+    }
+    updateInstructionsVisibility(false);
+
+    function cssEscape(id) {
+      if (typeof CSS !== 'undefined' && CSS.escape) return CSS.escape(String(id));
+      return String(id).replace(/"/g, '\\"');
+    }
+
+    function findNode(id) {
+      return gameContainer.querySelector('.draggable[data-id="' + cssEscape(id) + '"], [data-link-node][data-id="' + cssEscape(id) + '"]');
+    }
+
+    function allNodes() {
+      return Array.prototype.slice.call(
+        gameContainer.querySelectorAll('.draggable[data-id], [data-link-node][data-id]')
+      );
+    }
+
+    // Préparer les nœuds : fixes, cliquables
+    allNodes().forEach(function (el) {
+      el.draggable = false;
+      el.classList.add('dnd-link-node');
+      el.classList.remove('used');
+      el.style.cursor = 'pointer';
+      el.style.opacity = '1';
+      el.style.filter = 'none';
+      el.style.pointerEvents = 'auto';
+      if (!el.getAttribute('tabindex')) el.setAttribute('tabindex', '0');
+      if (!el.getAttribute('role')) el.setAttribute('role', 'button');
+    });
+
+    // Couche SVG
+    var svg = gameContainer.querySelector('svg.dnd-links-layer');
+    if (!svg) {
+      svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      svg.setAttribute('class', 'dnd-links-layer');
+      svg.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;z-index:4;pointer-events:none;overflow:visible;';
+      var defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+      ['#1565c0', '#2e7d32', '#d32f2f', '#f59e0b'].forEach(function (color, i) {
+        var names = ['arrow-pending', 'arrow-ok', 'arrow-bad', 'arrow-sel'];
+        var marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
+        marker.setAttribute('id', names[i] + '-' + gameId);
+        marker.setAttribute('markerWidth', '10');
+        marker.setAttribute('markerHeight', '10');
+        marker.setAttribute('refX', '8');
+        marker.setAttribute('refY', '3');
+        marker.setAttribute('orient', 'auto');
+        marker.setAttribute('markerUnits', 'strokeWidth');
+        var path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path.setAttribute('d', 'M0,0 L0,6 L9,3 z');
+        path.setAttribute('fill', color);
+        marker.appendChild(path);
+        defs.appendChild(marker);
+      });
+      svg.appendChild(defs);
+      gameContainer.appendChild(svg);
+    }
+
+    function nodeCenter(el) {
+      var cr = gameContainer.getBoundingClientRect();
+      var er = el.getBoundingClientRect();
+      return {
+        x: (er.left + er.width / 2) - cr.left,
+        y: (er.top + er.height / 2) - cr.top
+      };
+    }
+
+    function clearSelection() {
+      selectedFrom = null;
+      allNodes().forEach(function (el) {
+        el.classList.remove('dnd-selected', 'dnd-link-from');
+        el.removeAttribute('aria-pressed');
+      });
+    }
+
+    function selectFrom(id, el) {
+      clearSelection();
+      selectedFrom = id;
+      if (el) {
+        el.classList.add('dnd-selected', 'dnd-link-from');
+        el.setAttribute('aria-pressed', 'true');
+      }
+    }
+
+    function isAllowedPair(from, to) {
+      var allowed = normalizeAllowedLinks(game.allowedLinks);
+      for (var i = 0; i < allowed.length; i++) {
+        if (String(allowed[i].from) === String(from) && String(allowed[i].to) === String(to)) return true;
+      }
+      return false;
+    }
+
+    function addLink(from, to) {
+      from = String(from);
+      to = String(to);
+      if (!from || !to || from === to) return false;
+
+      // one-to-one : un départ = une flèche ; une arrivée = une flèche
+      if (linkMode === 'one-to-one') {
+        links = links.filter(function (l) {
+          return String(l.from) !== from && String(l.to) !== to;
+        });
+      } else {
+        // one-to-many : pas de doublon exact
+        links = links.filter(function (l) {
+          return !(String(l.from) === from && String(l.to) === to);
+        });
+      }
+
+      var ok = isAllowedPair(from, to);
+      if (!ok) {
+        nbErreurs += 1;
+        if (typeof hooks.playSound === 'function') hooks.playSound('error');
+      } else if (typeof hooks.playSound === 'function') {
+        hooks.playSound('ok');
+      }
+      links.push({ from: from, to: to });
+      clearSelection();
+      refreshUI();
+      return true;
+    }
+
+    function removeLinkAt(index) {
+      if (index < 0 || index >= links.length) return;
+      links.splice(index, 1);
+      refreshUI();
+    }
+
+    function drawLinks(ev) {
+      // Nettoyer lignes (garder defs)
+      Array.prototype.slice.call(svg.querySelectorAll('line, path.dnd-link-hit')).forEach(function (n) {
+        n.parentNode.removeChild(n);
+      });
+      var showFb = feedbackMode === 'immediate' || verifiedOnce || (ev && ev.isComplete);
+      links.forEach(function (l, idx) {
+        var a = findNode(l.from);
+        var b = findNode(l.to);
+        if (!a || !b) return;
+        var ca = nodeCenter(a);
+        var cb = nodeCenter(b);
+        var ok = isAllowedPair(l.from, l.to);
+        var state = 'pending';
+        if (showFb) state = ok ? 'ok' : 'bad';
+        if (ev && ev.isComplete && ok && game.revealLinksOnComplete !== false) state = 'ok';
+
+        var line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        line.setAttribute('x1', String(ca.x));
+        line.setAttribute('y1', String(ca.y));
+        line.setAttribute('x2', String(cb.x));
+        line.setAttribute('y2', String(cb.y));
+        line.setAttribute('class', 'dnd-link-line dnd-link-' + state);
+        line.setAttribute('stroke-width', '4');
+        line.setAttribute('stroke-linecap', 'round');
+        var colors = { pending: '#1565c0', ok: '#2e7d32', bad: '#d32f2f' };
+        line.setAttribute('stroke', colors[state] || colors.pending);
+        line.setAttribute('marker-end', 'url(#arrow-' + state + '-' + gameId + ')');
+        line.style.pointerEvents = 'stroke';
+        svg.appendChild(line);
+
+        // Zone de clic plus large pour supprimer
+        var hit = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        hit.setAttribute('x1', String(ca.x));
+        hit.setAttribute('y1', String(ca.y));
+        hit.setAttribute('x2', String(cb.x));
+        hit.setAttribute('y2', String(cb.y));
+        hit.setAttribute('class', 'dnd-link-hit');
+        hit.setAttribute('stroke', 'transparent');
+        hit.setAttribute('stroke-width', '18');
+        hit.style.pointerEvents = 'stroke';
+        hit.style.cursor = 'pointer';
+        hit.setAttribute('data-link-index', String(idx));
+        hit.setAttribute('title', 'Cliquer pour retirer la flèche');
+        (function (linkIndex) {
+          hit.addEventListener('click', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            removeLinkAt(linkIndex);
+          });
+        })(idx);
+        svg.appendChild(hit);
+      });
+      // Activer pointer-events sur le SVG pour les hits
+      svg.style.pointerEvents = links.length ? 'auto' : 'none';
+    }
+
+    function refreshUI() {
+      var ev = evaluateLinks(game, links);
+      drawLinks(ev);
+
+      if (ev.isComplete) {
+        gameContainer.classList.add('dnd-game-complete');
+        updateInstructionsVisibility(true);
+        if (resultDiv) {
+          resultDiv.textContent = '✅ Parfait !';
+          resultDiv.style.color = '#2e7d32';
+        }
+      } else {
+        gameContainer.classList.remove('dnd-game-complete');
+        updateInstructionsVisibility(false);
+        if (resultDiv && (feedbackMode === 'immediate' || verifiedOnce)) {
+          if (ev.wrong.length && verifiedOnce) {
+            resultDiv.textContent = '❌ Vérifiez vos flèches';
+            resultDiv.style.color = '#d32f2f';
+          } else if (feedbackMode === 'immediate' && ev.wrong.length) {
+            resultDiv.textContent = '❌ Lien incorrect';
+            resultDiv.style.color = '#d32f2f';
+          } else {
+            resultDiv.textContent = '';
+          }
+        }
+      }
+
+      var maxScore = ev.maxScore;
+      var scoreBrut = ev.score;
+      var scoreFinal = Math.max(0, scoreBrut - nbErreurs * 0.5);
+      var showScore = game.showScore !== false;
+      var showMalus = game.showMalus !== false;
+      if (scoreContainer) {
+        if (!showScore && !showMalus) {
+          scoreContainer.innerHTML = '';
+        } else {
+          var malusHtml = (showMalus && nbErreurs > 0)
+            ? '<span class="dnd-malus" style="color:#d32f2f;">−' + (nbErreurs * 0.5) + '</span>'
+            : '';
+          var scoreHtml = showScore
+            ? '<span class="dnd-score">' + scoreFinal + (maxScore ? ' / ' + maxScore : '') + '</span>'
+            : '';
+          scoreContainer.innerHTML = scoreHtml + (scoreHtml && malusHtml ? ' ' : '') + malusHtml;
+        }
+      }
+
+      if (typeof hooks.onScore === 'function') {
+        hooks.onScore({
+          gameId: gameId,
+          score: scoreFinal,
+          maxScore: maxScore,
+          errors: nbErreurs,
+          isComplete: ev.isComplete
+        });
+      }
+      if (ev.isComplete && !completeFired && typeof hooks.onComplete === 'function') {
+        completeFired = true;
+        hooks.onComplete(ev);
+      }
+      if (!ev.isComplete) completeFired = false;
+    }
+
+    function onNodeActivate(el) {
+      var id = el.getAttribute('data-id');
+      if (!id) return;
+      if (!selectedFrom) {
+        selectFrom(id, el);
+        return;
+      }
+      if (String(selectedFrom) === String(id)) {
+        clearSelection();
+        return;
+      }
+      addLink(selectedFrom, id);
+    }
+
+    allNodes().forEach(function (el) {
+      el.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        onNodeActivate(el);
+      });
+      el.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onNodeActivate(el);
+        }
+      });
+    });
+
+    // Bouton vérifier
+    var verifyBtn = gameContainer.querySelector('.dnd-verify-btn');
+    if (feedbackMode === 'deferred') {
+      if (!verifyBtn) {
+        verifyBtn = document.createElement('button');
+        verifyBtn.type = 'button';
+        verifyBtn.className = 'dnd-verify-btn';
+        verifyBtn.textContent = 'Vérifier';
+        verifyBtn.style.cssText = 'position:absolute;left:50%;bottom:8%;transform:translateX(-50%);z-index:5;pointer-events:auto;padding:8px 16px;font-size:18px;cursor:pointer;';
+        gameContainer.appendChild(verifyBtn);
+      }
+      verifyBtn.addEventListener('click', function () {
+        verifiedOnce = true;
+        refreshUI();
+      });
+    } else if (verifyBtn) {
+      verifyBtn.style.display = 'none';
+    }
+
+    // Redessiner au resize
+    var resizeTimer = null;
+    function onResize() {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(function () { drawLinks(evaluateLinks(game, links)); }, 80);
+    }
+    if (typeof window !== 'undefined' && window.addEventListener) {
+      window.addEventListener('resize', onResize);
+    }
+
+    var scoreHook = hooks.onScore;
+    hooks.onScore = null;
+    refreshUI();
+    hooks.onScore = scoreHook;
+    if (typeof hooks.onReady === 'function') {
+      hooks.onReady({
+        gameId: gameId,
+        maxScore: computeGameMaxScore(game)
+      });
+    }
+
+    return {
+      refresh: refreshUI,
+      getLinks: function () { return links.slice(); },
+      getPlacements: function () { return { links: links.slice() }; },
+      evaluate: function () { return evaluateGame(game, { links: links }); },
+      addLink: addLink,
+      clearSelection: clearSelection,
+      getSelectedId: function () { return selectedFrom; },
+      getErrors: function () { return nbErreurs; }
+    };
+  }
+
+  /**
    * Initialise un jeu jouable dans un conteneur déjà rempli de .draggable et .dropzone[data-zone-id].
    * hooks: { onScore(score, max, errors), onComplete(eval), playSound(type), showFloating(el) }
    */
   function initPlayableDndGame(gameContainer, gameConfig, hooks) {
     if (!gameContainer || !gameConfig) return null;
     hooks = hooks || {};
-    var game = applyGameDefaults(cloneJson(gameConfig));
+    var gamePeek = applyGameDefaults(cloneJson(gameConfig));
+    if (isLinking(gamePeek)) {
+      return initPlayableLinkingGame(gameContainer, gameConfig, hooks);
+    }
+    var game = gamePeek;
     var cardUse = normalizeCardUse(game.cardUse);
     var feedbackMode = normalizeFeedbackMode(game.feedbackMode);
     var used = new Set();
@@ -909,18 +1424,23 @@
     normalizeGameType: normalizeGameType,
     normalizeFeedbackMode: normalizeFeedbackMode,
     normalizeCardUse: normalizeCardUse,
+    normalizeLinkMode: normalizeLinkMode,
+    normalizeAllowedLinks: normalizeAllowedLinks,
+    allowedLinksToText: allowedLinksToText,
     isSingleUse: isSingleUse,
     normalizeDropzone: normalizeDropzone,
     applyGameDefaults: applyGameDefaults,
     isCardAcceptedInZone: isCardAcceptedInZone,
     evaluateZone: evaluateZone,
     evaluateGame: evaluateGame,
+    evaluateLinks: evaluateLinks,
     computeGameScore: computeGameScore,
     computeGameMaxScore: computeGameMaxScore,
     generateGrid: generateGrid,
     syncDropzonesToTargetCount: syncDropzonesToTargetCount,
     migrateLegacyGame: migrateLegacyGame,
     initPlayableDndGame: initPlayableDndGame,
+    initPlayableLinkingGame: initPlayableLinkingGame,
     collectPlacements: collectPlacements
   };
 });

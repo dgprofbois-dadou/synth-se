@@ -1001,6 +1001,22 @@
         .dnd-instructions.dnd-instructions-done {
             display: none !important;
         }
+        .dnd-link-node.dnd-link-from,
+        .dnd-link-node.dnd-selected {
+            outline: 4px solid #f59e0b !important;
+            outline-offset: 3px;
+        }
+        .dnd-links-layer {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 4;
+            overflow: visible;
+        }
+        .dnd-link-line.dnd-link-pending { stroke: #1565c0; }
+        .dnd-link-line.dnd-link-ok { stroke: #2e7d32; }
+        .dnd-link-line.dnd-link-bad { stroke: #d32f2f; }
         .dnd-instructions-preview {
             position: absolute;
             left: 4%;
@@ -7303,7 +7319,7 @@
                             el.style.fontSize = '18px';
                         }
                         el.className = 'draggable';
-                        el.draggable = true;
+                        el.draggable = (gameConfig.gameType !== 'linking');
                         el.dataset.id = drag.id;
                         el.title = drag.title || drag.tooltip || '';
                         el.setAttribute('data-tooltip', drag.title || drag.tooltip || '');
@@ -10942,6 +10958,8 @@
                     if (typeof g.showMalus !== 'boolean') g.showMalus = true;
                     if (g.instructions == null) g.instructions = '';
                     if (typeof g.showInstructions !== 'boolean') g.showInstructions = true;
+                    if (!g.linkMode) g.linkMode = 'one-to-one';
+                    if (!Array.isArray(g.allowedLinks)) g.allowedLinks = [];
                     g.dropzones = (g.dropzones || []).map(function (dz) {
                         const z = Object.assign({ label: '', acceptedIds: [], capacity: 1, required: true, groupId: '', successMessage: '', errorMessage: '' }, dz);
                         if (!Array.isArray(z.acceptedIds)) z.acceptedIds = [];
@@ -10995,6 +11013,15 @@
                     if (el('ShowMalus')) g.showMalus = el('ShowMalus').checked;
                     if (el('ShowInstructions')) g.showInstructions = el('ShowInstructions').checked;
                     if (el('Instructions')) g.instructions = el('Instructions').value || '';
+                    if (el('LinkMode')) g.linkMode = val('LinkMode') || 'one-to-one';
+                    if (el('AllowedLinks')) {
+                        g.allowedLinks = (window.MqDndEngine && MqDndEngine.normalizeAllowedLinks)
+                            ? MqDndEngine.normalizeAllowedLinks(el('AllowedLinks').value)
+                            : String(el('AllowedLinks').value || '').split(/[\n;]+/).map((line) => {
+                                const m = line.trim().match(/^(.+?)\s*(?:→|->|>|=)\s*(.+)$/);
+                                return m ? { from: m[1].trim(), to: m[2].trim() } : null;
+                            }).filter(Boolean);
+                    }
                     g.zoneWidth = parseInt(val('ZoneWidth'), 10) || 250;
                     g.zoneHeight = parseInt(val('ZoneHeight'), 10) || 250;
                     g.zoneGap = parseInt(val('ZoneGap'), 10) || 10;
@@ -12184,6 +12211,28 @@
                                  style="top: ${instrY}px;" title="Consignes (aperçu admin)">${safeInstr}</div>`;
                     }
 
+                    if ((g.gameType || '') === 'linking' && Array.isArray(g.allowedLinks) && g.allowedLinks.length) {
+                        const byId = {};
+                        (g.draggables || []).forEach((d) => { byId[String(d.id)] = d; });
+                        let lines = '';
+                        g.allowedLinks.forEach((l) => {
+                            const a = byId[String(l.from)];
+                            const b = byId[String(l.to)];
+                            if (!a || !b) return;
+                            const x1 = (a.x || 0) + (a.width || 60) / 2;
+                            const y1 = (a.y || 0) + (a.height || 60) / 2;
+                            const x2 = (b.x || 0) + (b.width || 60) / 2;
+                            const y2 = (b.y || 0) + (b.height || 60) / 2;
+                            lines += '<line x1="' + x1 + '" y1="' + y1 + '" x2="' + x2 + '" y2="' + y2 + '" stroke="#2e7d32" stroke-width="3" stroke-dasharray="8 6" marker-end="url(#mq-link-preview-arrow)"/>';
+                        });
+                        if (lines) {
+                            html += '<svg class="dnd-links-layer" style="position:absolute;inset:0;width:100%;height:100%;z-index:3;pointer-events:none;overflow:visible;">'
+                                + '<defs><marker id="mq-link-preview-arrow-' + gameId + '" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">'
+                                + '<path d="M0,0 L0,6 L9,3 z" fill="#2e7d32"/></marker></defs>'
+                                + lines.replace(/url\(#mq-link-preview-arrow\)/g, 'url(#mq-link-preview-arrow-' + gameId + ')') + '</svg>';
+                        }
+                    }
+
                     (g.draggables || []).forEach((d, idx) => {
                         const x = d.x || (10 + idx * 70);
                         const y = d.y || 120;
@@ -12586,6 +12635,19 @@
                 if (el('ShowMalus')) el('ShowMalus').checked = g.showMalus !== false;
                 if (el('ShowInstructions')) el('ShowInstructions').checked = g.showInstructions !== false;
                 if (el('Instructions')) el('Instructions').value = g.instructions || '';
+                if (el('LinkMode')) el('LinkMode').value = g.linkMode || 'one-to-one';
+                if (el('AllowedLinks')) {
+                    el('AllowedLinks').value = (window.MqDndEngine && MqDndEngine.allowedLinksToText)
+                        ? MqDndEngine.allowedLinksToText(g.allowedLinks || [])
+                        : (g.allowedLinks || []).map((l) => l.from + '>' + l.to).join('\n');
+                }
+                const hostEl = document.getElementById('dndGame' + mqGameNum(gameId) + 'AdvancedHost');
+                if (hostEl) {
+                    const isLink = (g.gameType || '') === 'linking';
+                    hostEl.querySelectorAll('.mq-dnd-linking-only').forEach((row) => {
+                        row.style.display = isLink ? 'flex' : 'none';
+                    });
+                }
                 if (el('ZoneWidth')) el('ZoneWidth').value = g.zoneWidth ?? 250;
                 if (el('ZoneHeight')) el('ZoneHeight').value = g.zoneHeight ?? 250;
                 if (el('ZoneGap')) el('ZoneGap').value = g.zoneGap ?? 10;
@@ -12613,19 +12675,34 @@
                     const n = mqGameNum(gid);
                     const host = document.getElementById('dndGame' + n + 'AdvancedHost');
                     if (!host) return;
-                    if (!host.dataset.ready || host.dataset.ready !== 'instr-v1') {
+                    if (!host.dataset.ready || host.dataset.ready !== 'link-v1') {
                         host.innerHTML = mqDndTypeControlsHTML(n);
-                        host.dataset.ready = 'instr-v1';
+                        host.dataset.ready = 'link-v1';
                         const btn = document.getElementById('btnGenGridGame' + n);
                         if (btn) {
                             btn.addEventListener('click', () => mqGenerateDndGrid(gid, n));
                         }
+                        const gt = document.getElementById('dndGame' + n + 'GameType');
+                        const toggleLinking = () => {
+                            const isLink = gt && gt.value === 'linking';
+                            host.querySelectorAll('.mq-dnd-linking-only').forEach((row) => {
+                                row.style.display = isLink ? 'flex' : 'none';
+                            });
+                        };
+                        if (gt) gt.addEventListener('change', toggleLinking);
+                        toggleLinking();
                         host.querySelectorAll('select,input,textarea').forEach((inp) => {
                             const sync = () => {
                                 try { syncDndGamesFromUI(); renderDropzonesList(gid); renderDndGamesPreview(); scheduleSaveLocal(); } catch (e) {}
                             };
                             inp.addEventListener('change', sync);
                             if (inp.tagName === 'TEXTAREA') inp.addEventListener('input', sync);
+                        });
+                    } else {
+                        const gt = document.getElementById('dndGame' + n + 'GameType');
+                        const isLink = gt && gt.value === 'linking';
+                        host.querySelectorAll('.mq-dnd-linking-only').forEach((row) => {
+                            row.style.display = isLink ? 'flex' : 'none';
                         });
                     }
                 });
@@ -12707,6 +12784,10 @@
                     showMalus: g.showMalus !== false,
                     showInstructions: g.showInstructions !== false,
                     instructions: g.instructions || '',
+                    linkMode: g.linkMode || 'one-to-one',
+                    allowedLinks: (g.allowedLinks || []).map(function (l) {
+                        return { from: String(l.from), to: String(l.to) };
+                    }),
                     hideBordersOnComplete: g.hideBordersOnComplete !== false,
                     goodIds: g.goodIds || '',
                     targetCount: targetCount,
@@ -14561,6 +14642,7 @@
                     + '<option value="exact">Placement exact</option>'
                     + '<option value="classification">Classement par catégories</option>'
                     + '<option value="mindmap">Carte mentale</option>'
+                    + '<option value="linking">Relier (flèches)</option>'
                     + '</select></div>'
                     + '<div class="row"><label>Vérification</label>'
                     + '<select id="dndGame' + n + 'FeedbackMode" style="width:100%;">'
@@ -14573,6 +14655,16 @@
                     + '<option value="retry">Une fois — repositionnable si erreur</option>'
                     + '<option value="reusable">Réutilisable</option>'
                     + '</select></div>'
+                    + '<div class="row mq-dnd-linking-only" style="display:none;flex-direction:column;align-items:stretch;gap:4px;">'
+                    + '<label style="width:auto;font-size:12px;font-weight:bold;">Mode de liaison</label>'
+                    + '<select id="dndGame' + n + 'LinkMode" style="width:100%;">'
+                    + '<option value="one-to-one">Un départ → une arrivée</option>'
+                    + '<option value="one-to-many">Un départ → plusieurs arrivées</option>'
+                    + '</select>'
+                    + '<label style="width:auto;font-size:12px;font-weight:bold;margin-top:4px;">Paires correctes (flèches)</label>'
+                    + '<textarea id="dndGame' + n + 'AllowedLinks" rows="4" placeholder="Une paire par ligne : idDépart&gt;idArrivée&#10;Ex :&#10;1&gt;3&#10;2&gt;4" style="width:100%;resize:vertical;font-size:12px;padding:6px;border:1px solid #ccc;border-radius:6px;box-sizing:border-box;font-family:monospace;"></textarea>'
+                    + '<p style="margin:0;font-size:10px;color:#64748b;">Utilisez les IDs des images. L’élève clique départ puis arrivée. Les zones de dépôt sont ignorées.</p>'
+                    + '</div>'
                     + '<div class="row" style="gap:12px;flex-wrap:wrap;">'
                     + '<label style="width:auto;"><input type="checkbox" id="dndGame' + n + 'ShowScore" checked> Afficher score</label>'
                     + '<label style="width:auto;"><input type="checkbox" id="dndGame' + n + 'ShowMalus" checked> Afficher malus</label>'
