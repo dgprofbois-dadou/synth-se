@@ -3272,6 +3272,9 @@
                     <div id="dndGame1DecorList"
                         style="max-height:150px; overflow-y:auto; background:#fff; padding:5px; border-radius:4px; border:1px solid #ddd; margin-bottom:5px;"></div>
                     <button id="btnAddDecorGame1" type="button" style="width:100%; font-size:12px;">🖼️ + Image fixe</button>
+                    <button id="btnAddDecorTextGame1" type="button" style="width:100%; font-size:12px; margin-top:4px;">🔤 + Texte fixe</button>
+                    <div id="dndGame1DecorTextList"
+                        style="max-height:150px; overflow-y:auto; background:#fff; padding:5px; border-radius:4px; border:1px solid #ddd; margin-top:5px;"></div>
                 </div>
 
 
@@ -3373,6 +3376,9 @@
                     <div id="dndGame2DecorList"
                         style="max-height:150px; overflow-y:auto; background:#fff; padding:5px; border-radius:4px; border:1px solid #ddd; margin-bottom:5px;"></div>
                     <button id="btnAddDecorGame2" type="button" style="width:100%; font-size:12px;">🖼️ + Image fixe</button>
+                    <button id="btnAddDecorTextGame2" type="button" style="width:100%; font-size:12px; margin-top:4px;">🔤 + Texte fixe</button>
+                    <div id="dndGame2DecorTextList"
+                        style="max-height:150px; overflow-y:auto; background:#fff; padding:5px; border-radius:4px; border:1px solid #ddd; margin-top:5px;"></div>
                 </div>
 
 
@@ -7305,6 +7311,22 @@
                         gameEl.appendChild(img);
                     });
 
+                    (gameConfig.decorTexts || []).forEach((dt) => {
+                        const el = document.createElement('div');
+                        el.className = 'dnd-decor-text';
+                        el.textContent = dt.text || 'Texte';
+                        el.style.cssText = 'position:absolute; left:' + (dt.x || 0) + 'px; top:' + (dt.y || 0) + 'px; width:' + (dt.width || 240) + 'px; height:' + (dt.height || 80) + 'px; z-index:' + (dt.z != null ? dt.z : 1) + '; pointer-events:none; box-sizing:border-box;'
+                            + 'display:flex;align-items:center;justify-content:center;text-align:center;padding:4px;overflow:hidden;'
+                            + 'font-family:' + (dt.font || 'Arial, sans-serif') + ';'
+                            + 'font-size:' + (dt.fontSize || 28) + 'px;'
+                            + 'color:' + (dt.color || '#000000') + ';'
+                            + 'font-weight:' + (dt.bold ? 'bold' : 'normal') + ';'
+                            + 'font-style:' + (dt.italic ? 'italic' : 'normal') + ';'
+                            + 'background:' + (dt.bgOn ? (dt.bg || '#ffffff') : 'transparent') + ';'
+                            + 'border-radius:8px;';
+                        gameEl.appendChild(el);
+                    });
+
                     const sourceEl = document.createElement('div');
                     sourceEl.id = 'source-' + gameId;
                     sourceEl.style.cssText = 'position:absolute; inset:0; z-index:3; pointer-events:none;';
@@ -9465,6 +9487,8 @@
                 if (sel.type === 'title') obj = g.titleBox;
                 else if (sel.type === 'draggable') obj = (g.draggables || [])[parseInt(sel.index)];
                 else if (sel.type === 'dropzone') obj = (g.dropzones || [])[parseInt(sel.index)];
+                else if (sel.type === 'decor') obj = (g.decorImages || [])[parseInt(sel.index)];
+                else if (sel.type === 'decorText') obj = (g.decorTexts || [])[parseInt(sel.index)];
                 if (!obj) return null;
                 return { obj, g };
             }
@@ -9539,6 +9563,7 @@
                 if (sel.type === 'dropzone') arr = g.dropzones;
                 else if (sel.type === 'draggable') arr = g.draggables;
                 else if (sel.type === 'decor') arr = g.decorImages;
+                else if (sel.type === 'decorText') arr = g.decorTexts;
                 if (!arr || arr.length < 3) { alert('Il faut au moins 3 éléments du même type pour les répartir.'); return; }
                 const ref = mqDndZone(sel).obj;
                 const xs = arr.map(z => z.x || 0), ys = arr.map(z => z.y || 0);
@@ -10867,6 +10892,7 @@
                         titleBox: { x: 10, y: 10, width: 600, height: 80 },
                         header: { width: 600, height: 80, font: 'Verdana, sans-serif', fontSize: 60 },
                         decorImages: [],
+                        decorTexts: [],
                         dropzones: [
                             { id: 1, x: 10, y: 250, width: 250, height: 250 },
                             { id: 2, x: 100, y: 250, width: 250, height: 250 },
@@ -10934,6 +10960,13 @@
                     : (defaults.dropzones || []).map((d) => Object.assign({}, d));
                 g.decorImages = Array.isArray(saved && saved.decorImages)
                     ? saved.decorImages.map((d) => Object.assign({ x: 50, y: 50, width: 300, height: 200, z: 0 }, d))
+                    : [];
+                g.decorTexts = Array.isArray(saved && saved.decorTexts)
+                    ? saved.decorTexts.map((d) => Object.assign({
+                        text: 'Texte', x: 50, y: 50, width: 240, height: 80, z: 1,
+                        fontSize: 28, font: 'Arial, sans-serif', color: '#000000',
+                        bold: false, italic: false, bgOn: false, bg: '#ffffff'
+                    }, d))
                     : [];
                 g.titleBox = Object.assign({}, defaults.titleBox || {}, (saved && saved.titleBox) || {});
                 g.header = Object.assign({}, defaults.header || {}, (saved && saved.header) || {});
@@ -11369,6 +11402,7 @@
                                 if (typeof updateDraggablesUI === 'function') updateDraggablesUI(gid);
                                 else renderDraggablesList(gid);
                                 if (typeof renderDecorList === 'function') renderDecorList(gid);
+                                if (typeof renderDecorTextList === 'function') renderDecorTextList(gid);
                             });
                         } catch (e) { /* ignore */ }
                     }
@@ -11642,6 +11676,7 @@
                     try { if (typeof updateDraggablesUI === 'function') updateDraggablesUI(gid); else renderDraggablesList(gid); } catch (e) { }
                     try { renderDropzonesList(gid); } catch (e) { }
                     try { renderDecorList(gid); } catch (e) { }
+                    try { renderDecorTextList(gid); } catch (e) { }
                 });
             }
 
@@ -12005,6 +12040,82 @@
                     </div>`).join('');
             }
 
+            // ===== Textes fixes (décor) =====
+            window.addDecorText = function (gameId) {
+                if (!state.dndGames[gameId].decorTexts) state.dndGames[gameId].decorTexts = [];
+                const arr = state.dndGames[gameId].decorTexts;
+                arr.push({
+                    id: 'dtext-' + Math.random().toString(36).slice(2, 7),
+                    text: 'Texte fixe',
+                    x: 60 + arr.length * 20, y: 60 + arr.length * 20,
+                    width: 240, height: 80, z: 1,
+                    fontSize: 28, font: 'Arial, sans-serif', color: '#000000',
+                    bold: false, italic: false, bgOn: false, bg: '#ffffff'
+                });
+                renderDndGamesPreview();
+                renderDecorTextList(gameId);
+                saveLocal();
+            };
+            window.removeDecorText = function (gameId, index) {
+                if (!confirm('Supprimer ce texte fixe ?')) return;
+                (state.dndGames[gameId].decorTexts || []).splice(index, 1);
+                renderDndGamesPreview();
+                renderDecorTextList(gameId);
+                saveLocal();
+            };
+            window.updateDecorText = function (gameId, index, property, value) {
+                const arr = state.dndGames[gameId].decorTexts;
+                if (!arr || !arr[index]) return;
+                if (property === 'bold' || property === 'italic' || property === 'bgOn') arr[index][property] = !!value;
+                else if (property === 'fontSize' || property === 'x' || property === 'y' || property === 'width' || property === 'height' || property === 'z') {
+                    arr[index][property] = parseInt(value, 10) || 0;
+                } else {
+                    arr[index][property] = value;
+                }
+                renderDndGamesPreview();
+                if (property === 'width' || property === 'height' || property === 'z') renderDecorTextList(gameId);
+                saveLocal();
+            };
+            function renderDecorTextList(gameId) {
+                const list = document.getElementById('dndGame' + mqGameNum(gameId) + 'DecorTextList');
+                if (!list) return;
+                const arr = state.dndGames[gameId].decorTexts || [];
+                if (arr.length === 0) {
+                    list.innerHTML = '<div style="font-size:11px; color:#999; text-align:center; padding:8px;">Aucun texte fixe</div>';
+                    return;
+                }
+                const fonts = ['Arial, sans-serif', 'Verdana, sans-serif', 'Georgia, serif', "'Comic Sans MS', sans-serif", "'OpenDyslexic', sans-serif", "'Courier New', monospace"];
+                list.innerHTML = arr.map((d, index) => `
+                    <div style="padding:6px; border-bottom:1px solid #eee; background:#fffdf5; display:flex; flex-direction:column; gap:5px;">
+                        <input type="text" value="${String(d.text || '').replace(/"/g, '&quot;')}" placeholder="Texte fixe"
+                            oninput="window.updateDecorText('${gameId}', ${index}, 'text', this.value)"
+                            style="width:100%; padding:4px; font-size:13px; border:1px solid #ddd; box-sizing:border-box;">
+                        <div style="display:flex; gap:5px; align-items:center; flex-wrap:wrap;">
+                            <label style="font-size:11px;">Taille</label>
+                            <input type="number" value="${d.fontSize || 28}" min="8" max="200"
+                                onchange="window.updateDecorText('${gameId}', ${index}, 'fontSize', this.value)" style="width:52px; padding:3px; font-size:12px;">
+                            <select onchange="window.updateDecorText('${gameId}', ${index}, 'font', this.value)" style="font-size:11px; flex:1; min-width:80px;">
+                                ${fonts.map(f => '<option value="' + f + '"' + ((d.font || 'Arial, sans-serif') === f ? ' selected' : '') + '>' + f.split(',')[0].replace(/'/g, '') + '</option>').join('')}
+                            </select>
+                            <input type="color" value="${d.color || '#000000'}" title="Couleur"
+                                oninput="window.updateDecorText('${gameId}', ${index}, 'color', this.value)" style="width:28px; height:24px; padding:0; border:1px solid #ccc;">
+                        </div>
+                        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                            <label style="font-size:12px; font-weight:bold;"><input type="checkbox" ${d.bold ? 'checked' : ''} onchange="window.updateDecorText('${gameId}', ${index}, 'bold', this.checked)"> G</label>
+                            <label style="font-size:12px; font-style:italic;"><input type="checkbox" ${d.italic ? 'checked' : ''} onchange="window.updateDecorText('${gameId}', ${index}, 'italic', this.checked)"> I</label>
+                            <label style="font-size:11px;"><input type="checkbox" ${d.bgOn ? 'checked' : ''} onchange="window.updateDecorText('${gameId}', ${index}, 'bgOn', this.checked)"> Fond</label>
+                            <input type="color" value="${d.bg || '#ffffff'}" title="Fond"
+                                oninput="window.updateDecorText('${gameId}', ${index}, 'bg', this.value)" style="width:28px; height:24px; padding:0; border:1px solid #ccc;">
+                            <button type="button" onclick="window.removeDecorText('${gameId}', ${index})" style="margin-left:auto; font-size:11px; color:#fff; background:#ff4444; border:none; border-radius:4px; padding:3px 8px; cursor:pointer;">✕</button>
+                        </div>
+                        <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px; padding:6px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px;">
+                            ${mqDimPosField('L', d.width || 240, 'updateDecorText', gameId, index, 'width', 10)}
+                            ${mqDimPosField('H', d.height || 80, 'updateDecorText', gameId, index, 'height', 10)}
+                            ${mqDimPosField('z', d.z || 1, 'updateDecorText', gameId, index, 'z', 1)}
+                        </div>
+                    </div>`).join('');
+            }
+
             // ---------------------------------------------------------
             // GESTION IMPORT / EXPORT COMPLET DU PROJET
             // ---------------------------------------------------------
@@ -12288,6 +12399,16 @@
                             </div>`;
                     });
 
+                    (g.decorTexts || []).forEach((dt, idx) => {
+                        html += `
+                            <div class="dnd-element dnd-decor-text" data-game="${gameId}" data-type="decorText" data-index="${idx}"
+                                 title="Texte fixe"
+                                 style="left: ${dt.x || 0}px; top: ${dt.y || 0}px; width: ${dt.width || 240}px; height: ${dt.height || 80}px; z-index: ${dt.z != null ? dt.z : 1};">
+                                <div class="dnd-label" style="${mqDndTextStyle(dt)}pointer-events:none;">${escapeHtml(dt.text || 'Texte')}</div>
+                                <div class="dnd-element-handle" data-game="${gameId}" data-type="decorText" data-index="${idx}"></div>
+                            </div>`;
+                    });
+
                     html += `
                         </div>`;
                 });
@@ -12398,6 +12519,7 @@
                         else if (type === 'draggable') { ox = (g0.draggables[idx0].x) || 0; oy = (g0.draggables[idx0].y) || 0; }
                         else if (type === 'dropzone') { ox = (g0.dropzones[idx0].x) || 0; oy = (g0.dropzones[idx0].y) || 0; }
                         else if (type === 'decor') { const a = (g0.decorImages || [])[idx0] || {}; ox = a.x || 0; oy = a.y || 0; }
+                        else if (type === 'decorText') { const a = (g0.decorTexts || [])[idx0] || {}; ox = a.x || 0; oy = a.y || 0; }
 
                         draggedElement = { el, gameId, type, index, startX: e.clientX, startY: e.clientY, origX: ox, origY: oy };
 
@@ -12456,6 +12578,9 @@
                         } else if (type === 'decor') {
                             state.dndGames[gameId].decorImages[idx].x = newX;
                             state.dndGames[gameId].decorImages[idx].y = newY;
+                        } else if (type === 'decorText') {
+                            state.dndGames[gameId].decorTexts[idx].x = newX;
+                            state.dndGames[gameId].decorTexts[idx].y = newY;
                         }
 
                         // Mise à jour visuelle immédiate
@@ -12496,6 +12621,10 @@
                             const idx = parseInt(index);
                             state.dndGames[gameId].decorImages[idx].width = newWidth;
                             state.dndGames[gameId].decorImages[idx].height = newHeight;
+                        } else if (type === 'decorText') {
+                            const idx = parseInt(index);
+                            state.dndGames[gameId].decorTexts[idx].width = newWidth;
+                            state.dndGames[gameId].decorTexts[idx].height = newHeight;
                         }
 
                         // Mise à jour visuelle immédiate
@@ -12517,6 +12646,7 @@
                         document.body.style.userSelect = '';
                         document.body.style.cursor = '';
                         if (moved && moved.type === 'decor') renderDecorList(moved.gameId);
+                        if (moved && moved.type === 'decorText') renderDecorTextList(moved.gameId);
                         if (wasClick && moved.type === 'dropzone' && typeof window.mqSelectDropzoneForEdit === 'function') {
                             window.mqSelectDropzoneForEdit(moved.gameId, parseInt(moved.index, 10));
                         } else if (moved && moved.type === 'dropzone' && window.mqSetDndSel) {
@@ -12685,6 +12815,7 @@
                 if (typeof renderDropzonesList === 'function') renderDropzonesList(gameId);
                 if (typeof updateDraggablesUI === 'function') updateDraggablesUI(gameId);
                 if (typeof renderDecorList === 'function') renderDecorList(gameId);
+                if (typeof renderDecorTextList === 'function') renderDecorTextList(gameId);
             }
 
             
@@ -12897,6 +13028,23 @@
                     const cW = ((dc.width || 300) / G_W) * 100;
                     const cH = ((dc.height || 200) / G_H) * 100;
                     return '<img src="' + dc.src + '" alt="" style="position:absolute; left:' + cX + '%; top:' + cY + '%; width:' + cW + '%; height:' + cH + '%; object-fit:contain; pointer-events:none; z-index:' + (dc.z || 0) + ';">';
+                }).join('');
+                out += (g.decorTexts || []).map(function (dt) {
+                    const cX = ((dt.x || 0) / G_W) * 100;
+                    const cY = ((dt.y || 0) / G_H) * 100;
+                    const cW = ((dt.width || 240) / G_W) * 100;
+                    const cH = ((dt.height || 80) / G_H) * 100;
+                    const safe = String(dt.text || 'Texte')
+                        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                    return '<div class="dnd-decor-text" style="position:absolute; left:' + cX + '%; top:' + cY + '%; width:' + cW + '%; height:' + cH + '%; z-index:' + (dt.z != null ? dt.z : 1) + '; pointer-events:none; box-sizing:border-box;'
+                        + 'display:flex;align-items:center;justify-content:center;text-align:center;padding:4px;overflow:hidden;'
+                        + 'font-family:' + (dt.font || 'Arial, sans-serif') + ';'
+                        + 'font-size:' + (dt.fontSize || 28) + 'px;'
+                        + 'color:' + (dt.color || '#000000') + ';'
+                        + 'font-weight:' + (dt.bold ? 'bold' : 'normal') + ';'
+                        + 'font-style:' + (dt.italic ? 'italic' : 'normal') + ';'
+                        + 'background:' + (dt.bgOn ? (dt.bg || '#ffffff') : 'transparent') + ';'
+                        + 'border-radius:8px;">' + safe + '</div>';
                 }).join('');
                 out += '\n                        <div class="dnd-result" id="result' + sfx + '" style="position:absolute;left:0;right:0;bottom:12%;text-align:center;font-weight:bold;z-index:4;pointer-events:none;"></div>';
                 out += '\n                        <div id="score-malus-container' + sfx + '" class="score-malus-container" style="position:absolute; left:0; right:0; bottom:1%; display:flex; justify-content:center; gap:2%; font-weight:bold; font-size:' + Math.round((g.height || 400) * 0.07) + 'px; color:#2e7d32; z-index:4;"></div>';
@@ -14580,6 +14728,7 @@
                     if ((m = /^btnAddDraggableGame(\d+)$/.exec(btn.id))) addDraggable('game' + m[1]);
                     else if ((m = /^btnAddTextGame(\d+)$/.exec(btn.id))) window.addTextDraggable('game' + m[1]);
                     else if ((m = /^btnAddDecorGame(\d+)$/.exec(btn.id))) window.addDecorImage('game' + m[1]);
+                    else if ((m = /^btnAddDecorTextGame(\d+)$/.exec(btn.id))) window.addDecorText('game' + m[1]);
                 });
             })();
             if ($('btnAddDndGame')) $('btnAddDndGame').addEventListener('click', addDndGame);
@@ -14787,6 +14936,8 @@
                     + '<label style="font-size:12px; font-weight:bold; display:block; margin:8px 0 5px;">Images fixes (décor) :</label>'
                     + '<div id="dndGame' + n + 'DecorList" style="max-height:150px; overflow-y:auto; background:#fff; padding:5px; border-radius:4px; border:1px solid #ddd; margin-bottom:5px;"></div>'
                     + '<button id="btnAddDecorGame' + n + '" type="button" style="width:100%; font-size:12px;">🖼️ + Image fixe</button>'
+                    + '<button id="btnAddDecorTextGame' + n + '" type="button" style="width:100%; font-size:12px; margin-top:4px;">🔤 + Texte fixe</button>'
+                    + '<div id="dndGame' + n + 'DecorTextList" style="max-height:150px; overflow-y:auto; background:#fff; padding:5px; border-radius:4px; border:1px solid #ddd; margin-top:5px;"></div>'
                     + '</div></div>';
             }
 
