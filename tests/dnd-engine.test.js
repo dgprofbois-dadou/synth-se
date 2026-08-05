@@ -275,6 +275,7 @@ test('linking : score et complétion', () => {
     dropzones: []
   });
   assert.strictEqual(g.gameType, 'linking');
+  assert.strictEqual(g.enableLinking, true);
   assert.strictEqual(Engine.computeGameMaxScore(g), 2);
   assert.strictEqual(Engine.computeGameScore(g, { links: [{ from: '1', to: '3' }] }), 1);
   const ok = Engine.evaluateGame(g, { links: [{ from: '1', to: '3' }, { from: '2', to: '4' }] });
@@ -283,6 +284,25 @@ test('linking : score et complétion', () => {
   const bad = Engine.evaluateGame(g, { links: [{ from: '1', to: '4' }, { from: '2', to: '4' }] });
   assert.strictEqual(bad.isComplete, false);
   assert.ok(bad.wrongLinks.length >= 1);
+});
+
+test('enableLinking hybride avec selection', () => {
+  const g = Engine.applyGameDefaults({
+    gameType: 'selection',
+    enableLinking: true,
+    goodIds: '1,2',
+    targetCount: 2,
+    allowedLinks: [{ from: 'a', to: 'b' }],
+    dropzones: [{ id: 1 }, { id: 2 }]
+  });
+  assert.strictEqual(Engine.computeGameMaxScore(g), 3);
+  const ev = Engine.evaluateGame(g, {
+    '1': ['1'],
+    '2': ['2'],
+    links: [{ from: 'a', to: 'b' }]
+  });
+  assert.strictEqual(ev.score, 3);
+  assert.strictEqual(ev.isComplete, true);
 });
 
 test('normalizeAllowedLinks texte', () => {
@@ -296,7 +316,8 @@ test('UI linking dans placement-inputs.html', () => {
   const html = fs.readFileSync(path.join(__dirname, '..', 'placement-inputs.html'), 'utf8');
   assert.ok(html.includes('value="linking"'));
   assert.ok(html.includes('AllowedLinks'));
-  assert.ok(html.includes('Relier (flèches)'));
+  assert.ok(html.includes('EnableLinking'));
+  assert.ok(html.includes('dnd-relier-btn') || html.includes('Activer Relier'));
 });
 
 console.log('\n--------------------------------');

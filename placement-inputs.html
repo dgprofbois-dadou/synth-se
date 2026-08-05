@@ -1011,8 +1011,20 @@
             inset: 0;
             width: 100%;
             height: 100%;
-            z-index: 4;
+            z-index: 6;
             overflow: visible;
+        }
+        .dnd-relier-btn.active {
+            background: #ef6c00 !important;
+        }
+        .dnd-link-mode .draggable,
+        .dnd-link-mode .dnd-link-node {
+            cursor: crosshair !important;
+        }
+        .dnd-link-tooltip {
+            position: absolute;
+            z-index: 20;
+            pointer-events: none;
         }
         .dnd-link-line.dnd-link-pending { stroke: #1565c0; }
         .dnd-link-line.dnd-link-ok { stroke: #2e7d32; }
@@ -7320,6 +7332,7 @@
                         }
                         el.className = 'draggable';
                         el.draggable = (gameConfig.gameType !== 'linking');
+                        if (gameConfig.enableLinking) el.classList.add('dnd-link-capable');
                         el.dataset.id = drag.id;
                         el.title = drag.title || drag.tooltip || '';
                         el.setAttribute('data-tooltip', drag.title || drag.tooltip || '');
@@ -11013,7 +11026,10 @@
                     if (el('ShowMalus')) g.showMalus = el('ShowMalus').checked;
                     if (el('ShowInstructions')) g.showInstructions = el('ShowInstructions').checked;
                     if (el('Instructions')) g.instructions = el('Instructions').value || '';
+                    if (el('EnableLinking')) g.enableLinking = el('EnableLinking').checked || (g.gameType === 'linking');
+                    if (g.gameType === 'linking') g.enableLinking = true;
                     if (el('LinkMode')) g.linkMode = val('LinkMode') || 'one-to-one';
+                    if (el('LinkTooltip')) g.linkTooltip = val('LinkTooltip') || '';
                     if (el('AllowedLinks')) {
                         g.allowedLinks = (window.MqDndEngine && MqDndEngine.normalizeAllowedLinks)
                             ? MqDndEngine.normalizeAllowedLinks(el('AllowedLinks').value)
@@ -12211,7 +12227,7 @@
                                  style="top: ${instrY}px;" title="Consignes (aperçu admin)">${safeInstr}</div>`;
                     }
 
-                    if ((g.gameType || '') === 'linking' && Array.isArray(g.allowedLinks) && g.allowedLinks.length) {
+                    if ((g.gameType === 'linking' || g.enableLinking) && Array.isArray(g.allowedLinks) && g.allowedLinks.length) {
                         const byId = {};
                         (g.draggables || []).forEach((d) => { byId[String(d.id)] = d; });
                         let lines = '';
@@ -12636,6 +12652,8 @@
                 if (el('ShowInstructions')) el('ShowInstructions').checked = g.showInstructions !== false;
                 if (el('Instructions')) el('Instructions').value = g.instructions || '';
                 if (el('LinkMode')) el('LinkMode').value = g.linkMode || 'one-to-one';
+                if (el('LinkTooltip')) el('LinkTooltip').value = g.linkTooltip || '';
+                if (el('EnableLinking')) el('EnableLinking').checked = !!(g.enableLinking || g.gameType === 'linking');
                 if (el('AllowedLinks')) {
                     el('AllowedLinks').value = (window.MqDndEngine && MqDndEngine.allowedLinksToText)
                         ? MqDndEngine.allowedLinksToText(g.allowedLinks || [])
@@ -12643,7 +12661,7 @@
                 }
                 const hostEl = document.getElementById('dndGame' + mqGameNum(gameId) + 'AdvancedHost');
                 if (hostEl) {
-                    const isLink = (g.gameType || '') === 'linking';
+                    const isLink = !!(g.enableLinking || g.gameType === 'linking');
                     hostEl.querySelectorAll('.mq-dnd-linking-only').forEach((row) => {
                         row.style.display = isLink ? 'flex' : 'none';
                     });
@@ -12675,32 +12693,38 @@
                     const n = mqGameNum(gid);
                     const host = document.getElementById('dndGame' + n + 'AdvancedHost');
                     if (!host) return;
-                    if (!host.dataset.ready || host.dataset.ready !== 'link-v1') {
+                    if (!host.dataset.ready || host.dataset.ready !== 'link-v2') {
                         host.innerHTML = mqDndTypeControlsHTML(n);
-                        host.dataset.ready = 'link-v1';
+                        host.dataset.ready = 'link-v2';
                         const btn = document.getElementById('btnGenGridGame' + n);
                         if (btn) {
                             btn.addEventListener('click', () => mqGenerateDndGrid(gid, n));
                         }
-                        const gt = document.getElementById('dndGame' + n + 'GameType');
                         const toggleLinking = () => {
-                            const isLink = gt && gt.value === 'linking';
+                            const gt = document.getElementById('dndGame' + n + 'GameType');
+                            const en = document.getElementById('dndGame' + n + 'EnableLinking');
+                            const isLink = (gt && gt.value === 'linking') || (en && en.checked);
+                            if (gt && gt.value === 'linking' && en) en.checked = true;
                             host.querySelectorAll('.mq-dnd-linking-only').forEach((row) => {
                                 row.style.display = isLink ? 'flex' : 'none';
                             });
                         };
+                        const gt = document.getElementById('dndGame' + n + 'GameType');
+                        const en = document.getElementById('dndGame' + n + 'EnableLinking');
                         if (gt) gt.addEventListener('change', toggleLinking);
+                        if (en) en.addEventListener('change', toggleLinking);
                         toggleLinking();
                         host.querySelectorAll('select,input,textarea').forEach((inp) => {
                             const sync = () => {
                                 try { syncDndGamesFromUI(); renderDropzonesList(gid); renderDndGamesPreview(); scheduleSaveLocal(); } catch (e) {}
                             };
                             inp.addEventListener('change', sync);
-                            if (inp.tagName === 'TEXTAREA') inp.addEventListener('input', sync);
+                            if (inp.tagName === 'TEXTAREA' || (inp.tagName === 'INPUT' && inp.type === 'text')) inp.addEventListener('input', sync);
                         });
                     } else {
                         const gt = document.getElementById('dndGame' + n + 'GameType');
-                        const isLink = gt && gt.value === 'linking';
+                        const en = document.getElementById('dndGame' + n + 'EnableLinking');
+                        const isLink = (gt && gt.value === 'linking') || (en && en.checked);
                         host.querySelectorAll('.mq-dnd-linking-only').forEach((row) => {
                             row.style.display = isLink ? 'flex' : 'none';
                         });
@@ -12785,6 +12809,8 @@
                     showInstructions: g.showInstructions !== false,
                     instructions: g.instructions || '',
                     linkMode: g.linkMode || 'one-to-one',
+                    enableLinking: !!(g.enableLinking || g.gameType === 'linking'),
+                    linkTooltip: g.linkTooltip || '',
                     allowedLinks: (g.allowedLinks || []).map(function (l) {
                         return { from: String(l.from), to: String(l.to) };
                     }),
@@ -14642,7 +14668,7 @@
                     + '<option value="exact">Placement exact</option>'
                     + '<option value="classification">Classement par catégories</option>'
                     + '<option value="mindmap">Carte mentale</option>'
-                    + '<option value="linking">Relier (flèches)</option>'
+                    + '<option value="linking">Relier seul (flèches)</option>'
                     + '</select></div>'
                     + '<div class="row"><label>Vérification</label>'
                     + '<select id="dndGame' + n + 'FeedbackMode" style="width:100%;">'
@@ -14655,6 +14681,9 @@
                     + '<option value="retry">Une fois — repositionnable si erreur</option>'
                     + '<option value="reusable">Réutilisable</option>'
                     + '</select></div>'
+                    + '<div class="row" style="gap:12px;flex-wrap:wrap;">'
+                    + '<label style="width:auto;"><input type="checkbox" id="dndGame' + n + 'EnableLinking"> Activer Relier (flèches) en plus</label>'
+                    + '</div>'
                     + '<div class="row mq-dnd-linking-only" style="display:none;flex-direction:column;align-items:stretch;gap:4px;">'
                     + '<label style="width:auto;font-size:12px;font-weight:bold;">Mode de liaison</label>'
                     + '<select id="dndGame' + n + 'LinkMode" style="width:100%;">'
@@ -14663,7 +14692,9 @@
                     + '</select>'
                     + '<label style="width:auto;font-size:12px;font-weight:bold;margin-top:4px;">Paires correctes (flèches)</label>'
                     + '<textarea id="dndGame' + n + 'AllowedLinks" rows="4" placeholder="Une paire par ligne : idDépart&gt;idArrivée&#10;Ex :&#10;1&gt;3&#10;2&gt;4" style="width:100%;resize:vertical;font-size:12px;padding:6px;border:1px solid #ccc;border-radius:6px;box-sizing:border-box;font-family:monospace;"></textarea>'
-                    + '<p style="margin:0;font-size:10px;color:#64748b;">Utilisez les IDs des images. L’élève clique départ puis arrivée. Les zones de dépôt sont ignorées.</p>'
+                    + '<label style="width:auto;font-size:12px;font-weight:bold;margin-top:4px;">Tooltip Relier</label>'
+                    + '<input id="dndGame' + n + 'LinkTooltip" type="text" placeholder="Maintenez le clic… tirez jusqu’à l’arrivée" style="width:100%;font-size:12px;padding:6px;box-sizing:border-box;">'
+                    + '<p style="margin:0;font-size:10px;color:#64748b;">L’élève clique Relier, puis maintient le clic et tire la flèche. Peut se combiner avec un autre type de jeu.</p>'
                     + '</div>'
                     + '<div class="row" style="gap:12px;flex-wrap:wrap;">'
                     + '<label style="width:auto;"><input type="checkbox" id="dndGame' + n + 'ShowScore" checked> Afficher score</label>'

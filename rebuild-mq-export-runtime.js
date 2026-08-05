@@ -123,8 +123,15 @@ function rebuild() {
   inset: 0;
   width: 100%;
   height: 100%;
-  z-index: 4;
+  z-index: 6;
   overflow: visible;
+}
+.dnd-relier-btn.active {
+  background: #ef6c00 !important;
+}
+.dnd-link-mode .draggable,
+.dnd-link-mode .dnd-link-node {
+  cursor: crosshair !important;
 }
 .dropzone {
   flex-wrap: wrap;
@@ -174,9 +181,18 @@ function rebuild() {
   inset: 0;
   width: 100%;
   height: 100%;
-  z-index: 4;
+  z-index: 6;
   overflow: visible;
 }
+.dnd-relier-btn.active { background: #ef6c00 !important; }
+.dnd-link-mode .draggable,
+.dnd-link-mode .dnd-link-node { cursor: crosshair !important; }
+`;
+  } else if (styleCss.indexOf('.dnd-relier-btn') < 0) {
+    styleCss += `
+.dnd-relier-btn.active { background: #ef6c00 !important; }
+.dnd-link-mode .draggable,
+.dnd-link-mode .dnd-link-node { cursor: crosshair !important; }
 `;
   }
 

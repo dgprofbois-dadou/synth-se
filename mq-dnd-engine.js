@@ -136,6 +136,15 @@
     g.dropzones = g.dropzones.map(normalizeDropzone);
     g.linkMode = normalizeLinkMode(g.linkMode);
     g.allowedLinks = normalizeAllowedLinks(g.allowedLinks);
+    if (typeof g.enableLinking !== 'boolean') {
+      g.enableLinking = normalizeGameType(g.gameType) === 'linking';
+    }
+    if (normalizeGameType(g.gameType) === 'linking') g.enableLinking = true;
+    if (g.linkTooltip == null || g.linkTooltip === '') {
+      g.linkTooltip = 'Maintenez le clic sur une image et tirez la flèche jusqu’à l’arrivée.';
+    } else {
+      g.linkTooltip = String(g.linkTooltip);
+    }
     return g;
   }
 
@@ -145,6 +154,10 @@
 
   function isLinking(game) {
     return normalizeGameType(game && game.gameType) === 'linking';
+  }
+
+  function hasLinkingFeature(game) {
+    return isLinking(game) || !!(game && game.enableLinking);
   }
 
   function goodIdSet(game) {
@@ -240,16 +253,13 @@
    * classification : somme des cartes attendues (min capacity, acceptedIds.length) sur zones required
    * linking : nombre de paires autorisées
    */
-  function computeGameMaxScore(game) {
+  function computeDndBaseMaxScore(game) {
     if (!game) return 0;
     var type = normalizeGameType(game.gameType);
-    if (type === 'linking') {
-      return normalizeAllowedLinks(game.allowedLinks).length;
-    }
+    if (type === 'linking') return 0;
     if (type === 'selection') {
       var goods = parseIdList(game.goodIds);
       var tc = parseInt(game.targetCount, 10) || 0;
-      // Compat ancien : max = min(targetCount, goodIds.length) si les deux existent, sinon goodIds
       if (goods.length && tc) return Math.min(goods.length, tc);
       return goods.length || tc || 0;
     }
@@ -262,12 +272,23 @@
       if (type === 'classification') {
         total += acc ? Math.min(cap, acc) : cap;
       } else {
-        // exact / mindmap
         if (acc === 0) total += 1;
         else if (cap > 1) total += Math.min(cap, acc);
         else total += 1;
       }
     });
+    return total;
+  }
+
+  function computeGameMaxScore(game) {
+    if (!game) return 0;
+    if (isLinking(game)) {
+      return normalizeAllowedLinks(game.allowedLinks).length;
+    }
+    var total = computeDndBaseMaxScore(game);
+    if (game.enableLinking) {
+      total += normalizeAllowedLinks(game.allowedLinks).length;
+    }
     return total;
   }
 
@@ -317,9 +338,9 @@
     placements = placements || {};
     var type = normalizeGameType(game && game.gameType);
     if (type === 'linking') {
-      var links = Array.isArray(placements) ? placements
+      var linksOnly = Array.isArray(placements) ? placements
         : (Array.isArray(placements.links) ? placements.links : []);
-      return evaluateLinks(game, links).score;
+      return evaluateLinks(game, linksOnly).score;
     }
     var zones = Array.isArray(game && game.dropzones) ? game.dropzones : [];
     var score = 0;
@@ -337,13 +358,15 @@
           }
         });
       });
-      return score;
+    } else {
+      zones.forEach(function (z) {
+        var ev = evaluateZone(game, z, placements[String(z.id)] || []);
+        score += ev.correctCount;
+      });
     }
-
-    zones.forEach(function (z) {
-      var ev = evaluateZone(game, z, placements[String(z.id)] || []);
-      score += ev.correctCount;
-    });
+    if (game && game.enableLinking) {
+      score += evaluateLinks(game, placements.links || []).score;
+    }
     return score;
   }
 
@@ -359,6 +382,7 @@
         links: lev.links,
         correctLinks: lev.correct,
         wrongLinks: lev.wrong,
+        linkEval: lev,
         score: lev.score,
         maxScore: lev.maxScore,
         isComplete: lev.isComplete,
@@ -380,21 +404,43 @@
       if (!ev.required) return true;
       return ev.isCorrect && !ev.hasWrong && !ev.isEmpty;
     });
-    // Pour selection : toutes les bonnes cartes placées (score == max) et aucune mauvaise
+    var dndScore = 0;
     if (isSelection(game)) {
-      var max = computeGameMaxScore(game);
-      var score = computeGameScore(game, placements);
+      var good2 = goodIdSet(game);
+      var seen2 = new Set();
+      zones.forEach(function (z) {
+        (placements[String(z.id)] || []).forEach(function (id) {
+          id = String(id);
+          if (good2.has(id) && !seen2.has(id)) { seen2.add(id); dndScore += 1; }
+        });
+      });
       var anyWrong = zoneEvals.some(function (ev) { return ev.hasWrong; });
-      requiredOk = score >= max && max > 0 && !anyWrong;
+      var selMax = computeDndBaseMaxScore(game);
+      requiredOk = dndScore >= selMax && selMax > 0 && !anyWrong;
+    } else {
+      zoneEvals.forEach(function (ev) { dndScore += ev.correctCount; });
     }
-    return {
+    var dndMax = computeDndBaseMaxScore(game);
+
+    var result = {
       zoneEvals: zoneEvals,
       groups: groups,
-      score: computeGameScore(game, placements),
-      maxScore: computeGameMaxScore(game),
+      score: dndScore,
+      maxScore: dndMax,
       isComplete: requiredOk,
       gameType: normalizeGameType(game && game.gameType)
     };
+    if (game && game.enableLinking) {
+      var linkEv = evaluateLinks(game, placements.links || []);
+      result.linkEval = linkEv;
+      result.links = linkEv.links;
+      result.correctLinks = linkEv.correct;
+      result.wrongLinks = linkEv.wrong;
+      result.score = dndScore + linkEv.score;
+      result.maxScore = dndMax + linkEv.maxScore;
+      result.isComplete = requiredOk && (linkEv.maxScore === 0 || linkEv.isComplete);
+    }
+    return result;
   }
 
   function generateGrid(opts) {
@@ -514,119 +560,139 @@
   }
 
   /**
-   * Jeu « Relier » : clic sur image départ puis image arrivée → flèche SVG.
-   * Les .draggable restent fixes (non déplaçables). Les dropzones sont ignorées.
+   * Couche Relier (flèches) — bouton Relier + tirage au clic maintenu.
+   * opts.hybrid: true = en plus d'un jeu DnD (ne masque pas les zones).
+   * opts.onChange: callback après modification des liens.
+   * opts.getVerifiedOnce / opts.addErrors: pont avec le score parent (hybrid).
    */
-  function initPlayableLinkingGame(gameContainer, gameConfig, hooks) {
-    if (!gameContainer || !gameConfig) return null;
+  function attachLinkingFeature(gameContainer, game, hooks, opts) {
     hooks = hooks || {};
-    var game = applyGameDefaults(cloneJson(gameConfig));
+    opts = opts || {};
+    var hybrid = !!opts.hybrid;
     var feedbackMode = normalizeFeedbackMode(game.feedbackMode);
     var linkMode = normalizeLinkMode(game.linkMode);
     var links = [];
-    var selectedFrom = null;
-    var nbErreurs = 0;
+    var linkErrors = 0;
     var verifiedOnce = feedbackMode === 'immediate';
-    var gameId = gameConfig._gameId || gameContainer.getAttribute('data-dnd-gameid') || 'game';
+    var gameId = opts.gameId || game._gameId || gameContainer.getAttribute('data-dnd-gameid') || 'game';
+    var linkModeActive = false;
+    var dragState = null;
     var completeFired = false;
 
-    gameContainer.classList.add('dnd-linking');
-
-    // Masquer / désactiver les dropzones (non utilisées)
-    Array.prototype.forEach.call(gameContainer.querySelectorAll('.dropzone'), function (z) {
-      z.style.pointerEvents = 'none';
-      z.style.opacity = '0';
-      z.setAttribute('aria-hidden', 'true');
-    });
-
-    var resultDiv = gameContainer.querySelector('.dnd-result') || gameContainer.querySelector('[id^="result"]');
-    var scoreContainer = gameContainer.querySelector('.score-malus-container') ||
-      gameContainer.querySelector('[id^="score-malus"]');
-    var instructionsEl = gameContainer.querySelector('.dnd-instructions');
-    var instructionsText = String(game.instructions || '').trim();
-    if (!instructionsText && game.showInstructions !== false) {
-      instructionsText = 'Cliquez une image de départ puis une image d’arrivée pour tracer une flèche.';
+    gameContainer.classList.add('dnd-linking-ready');
+    if (!hybrid) {
+      gameContainer.classList.add('dnd-linking');
+      Array.prototype.forEach.call(gameContainer.querySelectorAll('.dropzone'), function (z) {
+        z.style.pointerEvents = 'none';
+        z.style.opacity = '0';
+        z.setAttribute('aria-hidden', 'true');
+      });
     }
-    var showInstructions = game.showInstructions !== false && !!instructionsText;
-
-    if (showInstructions && !instructionsEl) {
-      instructionsEl = document.createElement('div');
-      instructionsEl.className = 'dnd-instructions';
-      instructionsEl.setAttribute('role', 'status');
-      instructionsEl.setAttribute('aria-live', 'polite');
-      gameContainer.appendChild(instructionsEl);
-    }
-    if (instructionsEl) {
-      var tbPos = game.titleBox || gameConfig.titleBox || null;
-      var gH = game.height || gameContainer.clientHeight || 400;
-      var topPct = 8;
-      if (tbPos && typeof tbPos.y === 'number') {
-        topPct = (((tbPos.y || 0) + (tbPos.height || 0) + 10) / Math.max(1, gH)) * 100;
-        if (topPct < 2) topPct = 2;
-        if (topPct > 70) topPct = 70;
-      }
-      if (!instructionsEl.style.top) instructionsEl.style.top = topPct + '%';
-      if (showInstructions) {
-        instructionsEl.textContent = instructionsText;
-        instructionsEl.hidden = false;
-        instructionsEl.style.display = '';
-      } else {
-        instructionsEl.hidden = true;
-        instructionsEl.style.display = 'none';
-      }
-    }
-
-    function updateInstructionsVisibility(isComplete) {
-      if (!instructionsEl || !showInstructions) return;
-      if (isComplete) {
-        instructionsEl.classList.add('dnd-instructions-done');
-        instructionsEl.hidden = true;
-        instructionsEl.style.display = 'none';
-      } else {
-        instructionsEl.classList.remove('dnd-instructions-done');
-        instructionsEl.hidden = false;
-        instructionsEl.style.display = '';
-      }
-    }
-    updateInstructionsVisibility(false);
 
     function cssEscape(id) {
       if (typeof CSS !== 'undefined' && CSS.escape) return CSS.escape(String(id));
       return String(id).replace(/"/g, '\\"');
     }
-
     function findNode(id) {
       return gameContainer.querySelector('.draggable[data-id="' + cssEscape(id) + '"], [data-link-node][data-id="' + cssEscape(id) + '"]');
     }
-
     function allNodes() {
       return Array.prototype.slice.call(
         gameContainer.querySelectorAll('.draggable[data-id], [data-link-node][data-id]')
       );
     }
+    function localPoint(clientX, clientY) {
+      var cr = gameContainer.getBoundingClientRect();
+      return { x: clientX - cr.left, y: clientY - cr.top };
+    }
+    function nodeCenter(el) {
+      var cr = gameContainer.getBoundingClientRect();
+      var er = el.getBoundingClientRect();
+      return { x: (er.left + er.width / 2) - cr.left, y: (er.top + er.height / 2) - cr.top };
+    }
+    function nodeFromPoint(clientX, clientY) {
+      var el = document.elementFromPoint(clientX, clientY);
+      if (!el || !el.closest) return null;
+      var node = el.closest('.draggable[data-id], [data-link-node][data-id]');
+      if (node && gameContainer.contains(node)) return node;
+      return null;
+    }
 
-    // Préparer les nœuds : fixes, cliquables
-    allNodes().forEach(function (el) {
-      el.draggable = false;
-      el.classList.add('dnd-link-node');
-      el.classList.remove('used');
-      el.style.cursor = 'pointer';
-      el.style.opacity = '1';
-      el.style.filter = 'none';
-      el.style.pointerEvents = 'auto';
-      if (!el.getAttribute('tabindex')) el.setAttribute('tabindex', '0');
-      if (!el.getAttribute('role')) el.setAttribute('role', 'button');
+    var tip = gameContainer.querySelector('.dnd-link-tooltip');
+    if (!tip) {
+      tip = document.createElement('div');
+      tip.className = 'dnd-link-tooltip';
+      tip.setAttribute('role', 'status');
+      tip.style.cssText = 'position:absolute;z-index:20;pointer-events:none;display:none;max-width:280px;padding:8px 12px;border-radius:10px;background:rgba(30,30,30,0.92);color:#fff;font-size:14px;font-weight:600;line-height:1.3;box-shadow:0 4px 14px rgba(0,0,0,0.25);transform:translate(-50%,-120%);white-space:pre-wrap;text-align:center;';
+      gameContainer.appendChild(tip);
+    }
+    function showTip(text, x, y) {
+      tip.textContent = text || '';
+      tip.style.display = text ? 'block' : 'none';
+      if (text) {
+        tip.style.left = Math.max(20, Math.min((gameContainer.clientWidth || 400) - 20, x)) + 'px';
+        tip.style.top = Math.max(24, y) + 'px';
+      }
+    }
+    function hideTip() { tip.style.display = 'none'; }
+
+    var btn = gameContainer.querySelector('.dnd-relier-btn');
+    if (!btn) {
+      btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'dnd-relier-btn';
+      btn.textContent = 'Relier';
+      btn.title = 'Activer le mode flèches';
+      btn.style.cssText = 'position:absolute;left:2%;bottom:10%;z-index:12;pointer-events:auto;padding:10px 16px;font-size:16px;font-weight:bold;cursor:pointer;border:none;border-radius:10px;background:#1565c0;color:#fff;box-shadow:0 2px 8px rgba(0,0,0,0.25);';
+      gameContainer.appendChild(btn);
+    }
+
+    function setLinkMode(on) {
+      linkModeActive = !!on;
+      gameContainer.classList.toggle('dnd-link-mode', linkModeActive);
+      btn.classList.toggle('active', linkModeActive);
+      btn.setAttribute('aria-pressed', linkModeActive ? 'true' : 'false');
+      btn.style.background = linkModeActive ? '#ef6c00' : '#1565c0';
+      btn.textContent = linkModeActive ? 'Relier (actif)' : 'Relier';
+      allNodes().forEach(function (el) {
+        if (linkModeActive) {
+          el.classList.add('dnd-link-node');
+          el.dataset._prevDraggable = el.draggable ? '1' : '0';
+          el.draggable = false;
+          el.style.cursor = 'crosshair';
+        } else {
+          el.classList.remove('dnd-link-node', 'dnd-link-from', 'dnd-selected');
+          if (hybrid) {
+            el.draggable = el.dataset._prevDraggable === '1';
+            el.style.cursor = '';
+          } else {
+            el.draggable = false;
+            el.style.cursor = 'pointer';
+          }
+        }
+      });
+      if (linkModeActive) {
+        showTip(game.linkTooltip || 'Maintenez le clic sur une image et tirez la flèche jusqu’à l’arrivée.', (gameContainer.clientWidth || 200) / 2, 40);
+      } else {
+        hideTip();
+        cancelDrag();
+      }
+    }
+
+    btn.addEventListener('click', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      setLinkMode(!linkModeActive);
     });
 
-    // Couche SVG
     var svg = gameContainer.querySelector('svg.dnd-links-layer');
     if (!svg) {
       svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
       svg.setAttribute('class', 'dnd-links-layer');
-      svg.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;z-index:4;pointer-events:none;overflow:visible;';
+      svg.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;z-index:6;pointer-events:none;overflow:visible;';
       var defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
       ['#1565c0', '#2e7d32', '#d32f2f', '#f59e0b'].forEach(function (color, i) {
-        var names = ['arrow-pending', 'arrow-ok', 'arrow-bad', 'arrow-sel'];
+        var names = ['arrow-pending', 'arrow-ok', 'arrow-bad', 'arrow-drag'];
         var marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
         marker.setAttribute('id', names[i] + '-' + gameId);
         marker.setAttribute('markerWidth', '10');
@@ -645,32 +711,6 @@
       gameContainer.appendChild(svg);
     }
 
-    function nodeCenter(el) {
-      var cr = gameContainer.getBoundingClientRect();
-      var er = el.getBoundingClientRect();
-      return {
-        x: (er.left + er.width / 2) - cr.left,
-        y: (er.top + er.height / 2) - cr.top
-      };
-    }
-
-    function clearSelection() {
-      selectedFrom = null;
-      allNodes().forEach(function (el) {
-        el.classList.remove('dnd-selected', 'dnd-link-from');
-        el.removeAttribute('aria-pressed');
-      });
-    }
-
-    function selectFrom(id, el) {
-      clearSelection();
-      selectedFrom = id;
-      if (el) {
-        el.classList.add('dnd-selected', 'dnd-link-from');
-        el.setAttribute('aria-pressed', 'true');
-      }
-    }
-
     function isAllowedPair(from, to) {
       var allowed = normalizeAllowedLinks(game.allowedLinks);
       for (var i = 0; i < allowed.length; i++) {
@@ -683,44 +723,40 @@
       from = String(from);
       to = String(to);
       if (!from || !to || from === to) return false;
-
-      // one-to-one : un départ = une flèche ; une arrivée = une flèche
       if (linkMode === 'one-to-one') {
-        links = links.filter(function (l) {
-          return String(l.from) !== from && String(l.to) !== to;
-        });
+        links = links.filter(function (l) { return String(l.from) !== from && String(l.to) !== to; });
       } else {
-        // one-to-many : pas de doublon exact
-        links = links.filter(function (l) {
-          return !(String(l.from) === from && String(l.to) === to);
-        });
+        links = links.filter(function (l) { return !(String(l.from) === from && String(l.to) === to); });
       }
-
       var ok = isAllowedPair(from, to);
       if (!ok) {
-        nbErreurs += 1;
+        linkErrors += 1;
+        if (typeof opts.addErrors === 'function') opts.addErrors(1);
         if (typeof hooks.playSound === 'function') hooks.playSound('error');
       } else if (typeof hooks.playSound === 'function') {
         hooks.playSound('ok');
       }
       links.push({ from: from, to: to });
-      clearSelection();
-      refreshUI();
+      if (typeof opts.onChange === 'function') opts.onChange();
+      else refreshStandalone();
       return true;
     }
 
     function removeLinkAt(index) {
       if (index < 0 || index >= links.length) return;
       links.splice(index, 1);
-      refreshUI();
+      if (typeof opts.onChange === 'function') opts.onChange();
+      else refreshStandalone();
     }
 
     function drawLinks(ev) {
-      // Nettoyer lignes (garder defs)
-      Array.prototype.slice.call(svg.querySelectorAll('line, path.dnd-link-hit')).forEach(function (n) {
+      Array.prototype.slice.call(svg.querySelectorAll('line.dnd-link-line, line.dnd-link-hit')).forEach(function (n) {
         n.parentNode.removeChild(n);
       });
       var showFb = feedbackMode === 'immediate' || verifiedOnce || (ev && ev.isComplete);
+      if (typeof opts.getVerifiedOnce === 'function') {
+        showFb = feedbackMode === 'immediate' || opts.getVerifiedOnce() || (ev && ev.isComplete);
+      }
       links.forEach(function (l, idx) {
         var a = findNode(l.from);
         var b = findNode(l.to);
@@ -728,10 +764,7 @@
         var ca = nodeCenter(a);
         var cb = nodeCenter(b);
         var ok = isAllowedPair(l.from, l.to);
-        var state = 'pending';
-        if (showFb) state = ok ? 'ok' : 'bad';
-        if (ev && ev.isComplete && ok && game.revealLinksOnComplete !== false) state = 'ok';
-
+        var state = showFb ? (ok ? 'ok' : 'bad') : 'pending';
         var line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
         line.setAttribute('x1', String(ca.x));
         line.setAttribute('y1', String(ca.y));
@@ -743,10 +776,7 @@
         var colors = { pending: '#1565c0', ok: '#2e7d32', bad: '#d32f2f' };
         line.setAttribute('stroke', colors[state] || colors.pending);
         line.setAttribute('marker-end', 'url(#arrow-' + state + '-' + gameId + ')');
-        line.style.pointerEvents = 'stroke';
         svg.appendChild(line);
-
-        // Zone de clic plus large pour supprimer
         var hit = document.createElementNS('http://www.w3.org/2000/svg', 'line');
         hit.setAttribute('x1', String(ca.x));
         hit.setAttribute('y1', String(ca.y));
@@ -757,10 +787,9 @@
         hit.setAttribute('stroke-width', '18');
         hit.style.pointerEvents = 'stroke';
         hit.style.cursor = 'pointer';
-        hit.setAttribute('data-link-index', String(idx));
-        hit.setAttribute('title', 'Cliquer pour retirer la flèche');
         (function (linkIndex) {
-          hit.addEventListener('click', function (e) {
+          hit.addEventListener('pointerdown', function (e) {
+            if (!linkModeActive) return;
             e.preventDefault();
             e.stopPropagation();
             removeLinkAt(linkIndex);
@@ -768,103 +797,156 @@
         })(idx);
         svg.appendChild(hit);
       });
-      // Activer pointer-events sur le SVG pour les hits
-      svg.style.pointerEvents = links.length ? 'auto' : 'none';
+      if (dragState && dragState.line && !dragState.line.parentNode) svg.appendChild(dragState.line);
+      svg.style.pointerEvents = (linkModeActive && links.length) ? 'auto' : 'none';
     }
 
-    function refreshUI() {
-      var ev = evaluateLinks(game, links);
-      drawLinks(ev);
-
-      if (ev.isComplete) {
-        gameContainer.classList.add('dnd-game-complete');
-        updateInstructionsVisibility(true);
-        if (resultDiv) {
-          resultDiv.textContent = '✅ Parfait !';
-          resultDiv.style.color = '#2e7d32';
-        }
+    function cancelDrag() {
+      if (dragState && dragState.line && dragState.line.parentNode) {
+        dragState.line.parentNode.removeChild(dragState.line);
+      }
+      if (dragState && dragState.fromEl) {
+        dragState.fromEl.classList.remove('dnd-link-from', 'dnd-selected');
+      }
+      dragState = null;
+      if (linkModeActive) {
+        showTip(game.linkTooltip || 'Maintenez le clic sur une image et tirez la flèche jusqu’à l’arrivée.', (gameContainer.clientWidth || 200) / 2, 40);
       } else {
-        gameContainer.classList.remove('dnd-game-complete');
-        updateInstructionsVisibility(false);
-        if (resultDiv && (feedbackMode === 'immediate' || verifiedOnce)) {
-          if (ev.wrong.length && verifiedOnce) {
-            resultDiv.textContent = '❌ Vérifiez vos flèches';
-            resultDiv.style.color = '#d32f2f';
-          } else if (feedbackMode === 'immediate' && ev.wrong.length) {
-            resultDiv.textContent = '❌ Lien incorrect';
-            resultDiv.style.color = '#d32f2f';
-          } else {
-            resultDiv.textContent = '';
-          }
-        }
+        hideTip();
       }
-
-      var maxScore = ev.maxScore;
-      var scoreBrut = ev.score;
-      var scoreFinal = Math.max(0, scoreBrut - nbErreurs * 0.5);
-      var showScore = game.showScore !== false;
-      var showMalus = game.showMalus !== false;
-      if (scoreContainer) {
-        if (!showScore && !showMalus) {
-          scoreContainer.innerHTML = '';
-        } else {
-          var malusHtml = (showMalus && nbErreurs > 0)
-            ? '<span class="dnd-malus" style="color:#d32f2f;">−' + (nbErreurs * 0.5) + '</span>'
-            : '';
-          var scoreHtml = showScore
-            ? '<span class="dnd-score">' + scoreFinal + (maxScore ? ' / ' + maxScore : '') + '</span>'
-            : '';
-          scoreContainer.innerHTML = scoreHtml + (scoreHtml && malusHtml ? ' ' : '') + malusHtml;
-        }
-      }
-
-      if (typeof hooks.onScore === 'function') {
-        hooks.onScore({
-          gameId: gameId,
-          score: scoreFinal,
-          maxScore: maxScore,
-          errors: nbErreurs,
-          isComplete: ev.isComplete
-        });
-      }
-      if (ev.isComplete && !completeFired && typeof hooks.onComplete === 'function') {
-        completeFired = true;
-        hooks.onComplete(ev);
-      }
-      if (!ev.isComplete) completeFired = false;
     }
 
-    function onNodeActivate(el) {
-      var id = el.getAttribute('data-id');
+    function startDrag(fromEl, clientX, clientY) {
+      var id = fromEl.getAttribute('data-id');
       if (!id) return;
-      if (!selectedFrom) {
-        selectFrom(id, el);
-        return;
+      var c = nodeCenter(fromEl);
+      var line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      line.setAttribute('class', 'dnd-link-drag');
+      line.setAttribute('x1', String(c.x));
+      line.setAttribute('y1', String(c.y));
+      var pt = localPoint(clientX, clientY);
+      line.setAttribute('x2', String(pt.x));
+      line.setAttribute('y2', String(pt.y));
+      line.setAttribute('stroke', '#f59e0b');
+      line.setAttribute('stroke-width', '4');
+      line.setAttribute('stroke-linecap', 'round');
+      line.setAttribute('stroke-dasharray', '8 6');
+      line.setAttribute('marker-end', 'url(#arrow-drag-' + gameId + ')');
+      line.style.pointerEvents = 'none';
+      svg.appendChild(line);
+      svg.style.pointerEvents = 'none';
+      fromEl.classList.add('dnd-link-from', 'dnd-selected');
+      dragState = { fromId: id, fromEl: fromEl, line: line };
+      showTip('Tirez jusqu’à l’image d’arrivée, puis relâchez.', pt.x, pt.y);
+    }
+
+    function moveDrag(clientX, clientY) {
+      if (!dragState || !dragState.line) return;
+      var pt = localPoint(clientX, clientY);
+      dragState.line.setAttribute('x2', String(pt.x));
+      dragState.line.setAttribute('y2', String(pt.y));
+      showTip('Tirez jusqu’à l’image d’arrivée, puis relâchez.', pt.x, pt.y);
+    }
+
+    function endDrag(clientX, clientY) {
+      if (!dragState) return;
+      var fromId = dragState.fromId;
+      var target = nodeFromPoint(clientX, clientY);
+      cancelDrag();
+      if (target) {
+        var toId = target.getAttribute('data-id');
+        if (toId && String(toId) !== String(fromId)) addLink(fromId, toId);
       }
-      if (String(selectedFrom) === String(id)) {
-        clearSelection();
-        return;
+      if (linkModeActive) {
+        showTip(game.linkTooltip || 'Maintenez le clic sur une image et tirez la flèche jusqu’à l’arrivée.', (gameContainer.clientWidth || 200) / 2, 40);
       }
-      addLink(selectedFrom, id);
+    }
+
+    function onPointerDown(e) {
+      if (!linkModeActive) return;
+      if (e.button != null && e.button !== 0) return;
+      var el = e.currentTarget;
+      e.preventDefault();
+      e.stopPropagation();
+      try { el.setPointerCapture(e.pointerId); } catch (err) {}
+      startDrag(el, e.clientX, e.clientY);
+    }
+    function onPointerMove(e) {
+      if (!dragState) return;
+      e.preventDefault();
+      moveDrag(e.clientX, e.clientY);
+    }
+    function onPointerUp(e) {
+      if (!dragState) return;
+      e.preventDefault();
+      endDrag(e.clientX, e.clientY);
     }
 
     allNodes().forEach(function (el) {
-      el.addEventListener('click', function (e) {
-        e.preventDefault();
-        e.stopPropagation();
-        onNodeActivate(el);
-      });
-      el.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          onNodeActivate(el);
-        }
-      });
+      if (!hybrid) {
+        el.draggable = false;
+        el.classList.add('dnd-link-node');
+        el.style.pointerEvents = 'auto';
+        el.style.cursor = 'pointer';
+      }
+      el.addEventListener('pointerdown', onPointerDown);
+      el.addEventListener('pointermove', onPointerMove);
+      el.addEventListener('pointerup', onPointerUp);
+      el.addEventListener('pointercancel', function () { cancelDrag(); });
     });
 
-    // Bouton vérifier
-    var verifyBtn = gameContainer.querySelector('.dnd-verify-btn');
-    if (feedbackMode === 'deferred') {
+    setLinkMode(false);
+
+    function getVerified() {
+      if (typeof opts.getVerifiedOnce === 'function') return opts.getVerifiedOnce();
+      return verifiedOnce;
+    }
+
+    function refreshStandalone() {
+      var ev = evaluateLinks(game, links);
+      drawLinks(ev);
+      if (!hybrid) {
+        var resultDiv = gameContainer.querySelector('.dnd-result') || gameContainer.querySelector('[id^="result"]');
+        var scoreContainer = gameContainer.querySelector('.score-malus-container') || gameContainer.querySelector('[id^="score-malus"]');
+        var instructionsEl = gameContainer.querySelector('.dnd-instructions');
+        if (ev.isComplete) {
+          gameContainer.classList.add('dnd-game-complete');
+          if (instructionsEl) { instructionsEl.hidden = true; instructionsEl.style.display = 'none'; }
+          if (resultDiv) { resultDiv.textContent = '✅ Parfait !'; resultDiv.style.color = '#2e7d32'; }
+        } else {
+          gameContainer.classList.remove('dnd-game-complete');
+          if (resultDiv && (feedbackMode === 'immediate' || getVerified())) {
+            if (ev.wrong.length) {
+              resultDiv.textContent = '❌ Vérifiez vos flèches';
+              resultDiv.style.color = '#d32f2f';
+            } else {
+              resultDiv.textContent = '';
+            }
+          }
+        }
+        var maxScore = ev.maxScore;
+        var scoreFinal = Math.max(0, ev.score - linkErrors * 0.5);
+        if (scoreContainer && game.showScore !== false) {
+          var malusHtml = (game.showMalus !== false && linkErrors > 0)
+            ? '<span class="dnd-malus" style="color:#d32f2f;">−' + (linkErrors * 0.5) + '</span>'
+            : '';
+          scoreContainer.innerHTML = '<span class="dnd-score">' + scoreFinal + (maxScore ? ' / ' + maxScore : '') + '</span> ' + malusHtml;
+        }
+        if (typeof hooks.onScore === 'function') {
+          hooks.onScore({ gameId: gameId, score: scoreFinal, maxScore: maxScore, errors: linkErrors, isComplete: ev.isComplete });
+        }
+        if (ev.isComplete && !completeFired && typeof hooks.onComplete === 'function') {
+          completeFired = true;
+          hooks.onComplete(ev);
+        }
+        if (!ev.isComplete) completeFired = false;
+      } else {
+        drawLinks(evaluateLinks(game, links));
+      }
+    }
+
+    if (!hybrid && feedbackMode === 'deferred') {
+      var verifyBtn = gameContainer.querySelector('.dnd-verify-btn');
       if (!verifyBtn) {
         verifyBtn = document.createElement('button');
         verifyBtn.type = 'button';
@@ -875,13 +957,10 @@
       }
       verifyBtn.addEventListener('click', function () {
         verifiedOnce = true;
-        refreshUI();
+        refreshStandalone();
       });
-    } else if (verifyBtn) {
-      verifyBtn.style.display = 'none';
     }
 
-    // Redessiner au resize
     var resizeTimer = null;
     function onResize() {
       clearTimeout(resizeTimer);
@@ -891,33 +970,75 @@
       window.addEventListener('resize', onResize);
     }
 
-    var scoreHook = hooks.onScore;
-    hooks.onScore = null;
-    refreshUI();
-    hooks.onScore = scoreHook;
-    if (typeof hooks.onReady === 'function') {
-      hooks.onReady({
-        gameId: gameId,
-        maxScore: computeGameMaxScore(game)
-      });
-    }
+    refreshStandalone();
 
     return {
-      refresh: refreshUI,
+      refresh: function () { drawLinks(evaluateLinks(game, links)); },
       getLinks: function () { return links.slice(); },
-      getPlacements: function () { return { links: links.slice() }; },
-      evaluate: function () { return evaluateGame(game, { links: links }); },
-      addLink: addLink,
-      clearSelection: clearSelection,
-      getSelectedId: function () { return selectedFrom; },
-      getErrors: function () { return nbErreurs; }
+      getErrors: function () { return linkErrors; },
+      setVerified: function (v) { verifiedOnce = !!v; },
+      isLinkModeActive: function () { return linkModeActive; },
+      setLinkMode: setLinkMode
     };
   }
 
   /**
-   * Initialise un jeu jouable dans un conteneur déjà rempli de .draggable et .dropzone[data-zone-id].
-   * hooks: { onScore(score, max, errors), onComplete(eval), playSound(type), showFloating(el) }
+   * Jeu Relier pur (gameType linking) : consignes + couche flèches.
    */
+  function initPlayableLinkingGame(gameContainer, gameConfig, hooks) {
+    if (!gameContainer || !gameConfig) return null;
+    hooks = hooks || {};
+    var game = applyGameDefaults(cloneJson(gameConfig));
+    var gameId = gameConfig._gameId || gameContainer.getAttribute('data-dnd-gameid') || 'game';
+    game._gameId = gameId;
+
+    var instructionsEl = gameContainer.querySelector('.dnd-instructions');
+    var instructionsText = String(game.instructions || '').trim();
+    if (!instructionsText && game.showInstructions !== false) {
+      instructionsText = 'Cliquez sur Relier, puis maintenez le clic sur une image et tirez jusqu’à l’arrivée.';
+    }
+    var showInstructions = game.showInstructions !== false && !!instructionsText;
+    if (showInstructions && !instructionsEl) {
+      instructionsEl = document.createElement('div');
+      instructionsEl.className = 'dnd-instructions';
+      instructionsEl.setAttribute('role', 'status');
+      gameContainer.appendChild(instructionsEl);
+    }
+    if (instructionsEl) {
+      var tbPos = game.titleBox || gameConfig.titleBox || null;
+      var gH = game.height || gameContainer.clientHeight || 400;
+      var topPct = 8;
+      if (tbPos && typeof tbPos.y === 'number') {
+        topPct = Math.min(70, Math.max(2, (((tbPos.y || 0) + (tbPos.height || 0) + 10) / Math.max(1, gH)) * 100));
+      }
+      if (!instructionsEl.style.top) instructionsEl.style.top = topPct + '%';
+      if (showInstructions) {
+        instructionsEl.textContent = instructionsText;
+        instructionsEl.hidden = false;
+      } else {
+        instructionsEl.hidden = true;
+        instructionsEl.style.display = 'none';
+      }
+    }
+
+    var api = attachLinkingFeature(gameContainer, game, hooks, { hybrid: false, gameId: gameId });
+    var scoreHook = hooks.onScore;
+    hooks.onScore = null;
+    if (api && api.refresh) api.refresh();
+    hooks.onScore = scoreHook;
+    if (typeof hooks.onReady === 'function') {
+      hooks.onReady({ gameId: gameId, maxScore: computeGameMaxScore(game) });
+    }
+    return {
+      refresh: function () { if (api) api.refresh(); },
+      getLinks: function () { return api ? api.getLinks() : []; },
+      getPlacements: function () { return { links: api ? api.getLinks() : [] }; },
+      evaluate: function () { return evaluateGame(game, { links: api ? api.getLinks() : [] }); },
+      getErrors: function () { return api ? api.getErrors() : 0; },
+      linking: api
+    };
+  }
+
   function initPlayableDndGame(gameContainer, gameConfig, hooks) {
     if (!gameContainer || !gameConfig) return null;
     hooks = hooks || {};
@@ -933,6 +1054,11 @@
     var nbErreurs = 0;
     var verifiedOnce = feedbackMode === 'immediate';
     var gameId = gameConfig._gameId || gameContainer.getAttribute('data-dnd-gameid') || 'game';
+    var linkingApi = null;
+
+    function isLinkModeOn() {
+      return !!(linkingApi && linkingApi.isLinkModeActive && linkingApi.isLinkModeActive());
+    }
 
     var resultDiv = gameContainer.querySelector('.dnd-result') || gameContainer.querySelector('[id^="result"]');
     var scoreContainer = gameContainer.querySelector('.score-malus-container') ||
@@ -1203,10 +1329,12 @@
 
     function refreshUI() {
       var placements = collectPlacements(gameContainer, game);
+      if (linkingApi) placements.links = linkingApi.getLinks();
       var ev = evaluateGame(game, placements);
+      if (linkingApi && linkingApi.refresh) linkingApi.refresh();
 
       // Groupes
-      Object.keys(ev.groups).forEach(function (gid) {
+      Object.keys(ev.groups || {}).forEach(function (gid) {
         var ok = ev.groups[gid].allCorrect;
         Array.prototype.forEach.call(gameContainer.querySelectorAll('.dropzone[data-group-id="' + cssEscape(gid) + '"]'), function (z) {
           z.classList.toggle('dnd-group-complete', ok);
@@ -1302,6 +1430,10 @@
       img.setAttribute('role', 'button');
 
       img.addEventListener('dragstart', function (e) {
+        if (isLinkModeOn()) {
+          e.preventDefault();
+          return;
+        }
         if (isSingleUse(cardUse) && img.classList.contains('used')) {
           e.preventDefault();
           return;
@@ -1319,6 +1451,7 @@
         img.style.opacity = img.classList.contains('used') ? '0.3' : '1';
       });
       img.addEventListener('click', function (e) {
+        if (isLinkModeOn()) return;
         e.preventDefault();
         e.stopPropagation();
         if (isSingleUse(cardUse) && img.classList.contains('used')) return;
@@ -1326,6 +1459,7 @@
         else selectCard(id, img);
       });
       img.addEventListener('keydown', function (e) {
+        if (isLinkModeOn()) return;
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
           if (isSingleUse(cardUse) && img.classList.contains('used')) return;
@@ -1391,6 +1525,16 @@
     }
 
     // Affichage score initial ; onScore utilisateur seulement après interaction
+    if (game.enableLinking) {
+      linkingApi = attachLinkingFeature(gameContainer, game, hooks, {
+        hybrid: true,
+        gameId: gameId,
+        onChange: function () { refreshUI(); },
+        getVerifiedOnce: function () { return verifiedOnce; },
+        addErrors: function (n) { nbErreurs += (n || 1); }
+      });
+    }
+
     var scoreHook = hooks.onScore;
     hooks.onScore = null;
     refreshUI();
@@ -1404,8 +1548,16 @@
 
     return {
       refresh: refreshUI,
-      getPlacements: function () { return collectPlacements(gameContainer, game); },
-      evaluate: function () { return evaluateGame(game, collectPlacements(gameContainer, game)); },
+      getPlacements: function () {
+        var p = collectPlacements(gameContainer, game);
+        if (linkingApi) p.links = linkingApi.getLinks();
+        return p;
+      },
+      evaluate: function () {
+        var p = collectPlacements(gameContainer, game);
+        if (linkingApi) p.links = linkingApi.getLinks();
+        return evaluateGame(game, p);
+      },
       place: function (zoneId, cardId) {
         var z = zoneById(zoneId);
         return z ? placeInZone(z, cardId, { allowMove: true }) : false;
@@ -1413,7 +1565,8 @@
       selectCard: selectCard,
       clearSelection: clearSelection,
       getSelectedId: function () { return selectedId; },
-      getErrors: function () { return nbErreurs; }
+      getErrors: function () { return nbErreurs; },
+      linking: linkingApi
     };
   }
 
@@ -1441,6 +1594,9 @@
     migrateLegacyGame: migrateLegacyGame,
     initPlayableDndGame: initPlayableDndGame,
     initPlayableLinkingGame: initPlayableLinkingGame,
-    collectPlacements: collectPlacements
+    attachLinkingFeature: attachLinkingFeature,
+    collectPlacements: collectPlacements,
+    hasLinkingFeature: hasLinkingFeature,
+    computeDndBaseMaxScore: computeDndBaseMaxScore
   };
 });
