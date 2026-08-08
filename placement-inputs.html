@@ -1021,6 +1021,19 @@
         .dnd-instructions.dnd-instructions-done {
             display: none !important;
         }
+        .dnd-instructions.dnd-instructions-pulse {
+            animation: dndInstrPulse 0.85s ease-out;
+        }
+        @keyframes dndInstrPulse {
+            0% { transform: scale(0.96); box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.7); }
+            40% { transform: scale(1.03); box-shadow: 0 0 0 10px rgba(245, 158, 11, 0); }
+            100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
+        }
+        .dropzone.dnd-step-target {
+            outline: 3px solid #f59e0b !important;
+            outline-offset: 2px;
+            box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.25);
+        }
         .dnd-link-node.dnd-link-from,
         .dnd-link-node.dnd-selected {
             outline: 4px solid #f59e0b !important;
@@ -11022,8 +11035,9 @@
                     if (!g.cardUse) g.cardUse = 'unique';
                     if (typeof g.showScore !== 'boolean') g.showScore = true;
                     if (typeof g.showMalus !== 'boolean') g.showMalus = true;
-                    if (g.instructions == null) g.instructions = '';
                     if (typeof g.showInstructions !== 'boolean') g.showInstructions = true;
+                    if (typeof g.enableSteps !== 'boolean') g.enableSteps = false;
+                    if (!Array.isArray(g.steps)) g.steps = [];
                     if (!g.linkMode) g.linkMode = 'one-to-one';
                     if (!Array.isArray(g.allowedLinks)) g.allowedLinks = [];
                     g.dropzones = (g.dropzones || []).map(function (dz) {
@@ -11079,6 +11093,10 @@
                     if (el('ShowMalus')) g.showMalus = el('ShowMalus').checked;
                     if (el('ShowInstructions')) g.showInstructions = el('ShowInstructions').checked;
                     if (el('Instructions')) g.instructions = el('Instructions').value || '';
+                    if (el('EnableSteps')) g.enableSteps = el('EnableSteps').checked;
+                    if (g.enableSteps) {
+                        g.steps = mqReadStepsFromUI(n);
+                    }
                     if (el('EnableLinking')) g.enableLinking = el('EnableLinking').checked || (g.gameType === 'linking');
                     if (g.gameType === 'linking') g.enableLinking = true;
                     if (el('LinkMode')) g.linkMode = val('LinkMode') || 'one-to-one';
@@ -12136,6 +12154,124 @@
                     </div>`).join('');
             }
 
+            // ===== Étapes / consignes =====
+            function mqToggleStepsUI(n, on) {
+                const host = document.getElementById('dndGame' + n + 'AdvancedHost');
+                if (!host) return;
+                host.querySelectorAll('.mq-dnd-steps-only').forEach((row) => {
+                    row.style.display = on ? 'flex' : 'none';
+                });
+                host.querySelectorAll('.mq-dnd-instr-simple').forEach((row) => {
+                    row.style.display = on ? 'none' : 'flex';
+                });
+            }
+            function mqReadStepsFromUI(n) {
+                const list = document.getElementById('dndGame' + n + 'StepsList');
+                if (!list) return [];
+                return Array.from(list.querySelectorAll('[data-step-idx]')).map((card, i) => {
+                    const title = (card.querySelector('[data-field="title"]') || {}).value || ('Étape ' + (i + 1));
+                    const instructions = (card.querySelector('[data-field="instructions"]') || {}).value || '';
+                    const zoneIdsRaw = (card.querySelector('[data-field="zoneIds"]') || {}).value || '';
+                    const goodIds = (card.querySelector('[data-field="goodIds"]') || {}).value || '';
+                    const linksRaw = (card.querySelector('[data-field="linkPairs"]') || {}).value || '';
+                    const zoneIds = zoneIdsRaw.split(/[,;\s]+/).map(s => s.trim()).filter(Boolean);
+                    const linkPairs = (window.MqDndEngine && MqDndEngine.normalizeAllowedLinks)
+                        ? MqDndEngine.normalizeAllowedLinks(linksRaw)
+                        : [];
+                    return { id: String(i + 1), title, instructions, zoneIds, goodIds, linkPairs };
+                });
+            }
+            window.addDndStep = function (gameId) {
+                const g = state.dndGames[gameId];
+                if (!g) return;
+                if (!Array.isArray(g.steps)) g.steps = [];
+                g.enableSteps = true;
+                g.steps.push({
+                    id: String(g.steps.length + 1),
+                    title: 'Étape ' + (g.steps.length + 1),
+                    instructions: '',
+                    zoneIds: [],
+                    goodIds: '',
+                    linkPairs: []
+                });
+                const n = mqGameNum(gameId);
+                const es = document.getElementById('dndGame' + n + 'EnableSteps');
+                if (es) es.checked = true;
+                mqToggleStepsUI(n, true);
+                renderStepsList(gameId);
+                scheduleSaveLocal();
+            };
+            window.removeDndStep = function (gameId, index) {
+                const g = state.dndGames[gameId];
+                if (!g || !g.steps) return;
+                if (!confirm('Supprimer cette étape ?')) return;
+                g.steps.splice(index, 1);
+                renderStepsList(gameId);
+                scheduleSaveLocal();
+            };
+            window.moveDndStep = function (gameId, index, dir) {
+                const g = state.dndGames[gameId];
+                if (!g || !g.steps) return;
+                const j = index + dir;
+                if (j < 0 || j >= g.steps.length) return;
+                const tmp = g.steps[index];
+                g.steps[index] = g.steps[j];
+                g.steps[j] = tmp;
+                renderStepsList(gameId);
+                scheduleSaveLocal();
+            };
+            function renderStepsList(gameId) {
+                const n = mqGameNum(gameId);
+                const list = document.getElementById('dndGame' + n + 'StepsList');
+                if (!list) return;
+                const g = state.dndGames[gameId];
+                if (!g) return;
+                if (!Array.isArray(g.steps)) g.steps = [];
+                if (!g.steps.length) {
+                    list.innerHTML = '<div style="font-size:11px;color:#999;text-align:center;padding:8px;">Aucune étape — cliquez « Ajouter une étape ».</div>';
+                    return;
+                }
+                const linksToText = (pairs) => {
+                    if (window.MqDndEngine && MqDndEngine.allowedLinksToText) return MqDndEngine.allowedLinksToText(pairs || []);
+                    return (pairs || []).map(p => p.from + '>' + p.to).join('\n');
+                };
+                list.innerHTML = g.steps.map((s, index) => {
+                    const zoneStr = Array.isArray(s.zoneIds) ? s.zoneIds.join(',') : String(s.zoneIds || '');
+                    return ''
+                        + '<div data-step-idx="' + index + '" style="border:1px solid #cfd6df;border-radius:8px;padding:8px;margin-bottom:8px;background:#f8fafc;">'
+                        + '<div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;">'
+                        + '<strong style="font-size:12px;">#' + (index + 1) + '</strong>'
+                        + '<input data-field="title" type="text" value="' + String(s.title || '').replace(/"/g, '&quot;') + '" placeholder="Titre de l’étape" style="flex:1;font-size:12px;padding:4px;">'
+                        + '<button type="button" title="Monter" onclick="window.moveDndStep(\'' + gameId + '\',' + index + ',-1)" style="font-size:11px;">↑</button>'
+                        + '<button type="button" title="Descendre" onclick="window.moveDndStep(\'' + gameId + '\',' + index + ',1)" style="font-size:11px;">↓</button>'
+                        + '<button type="button" onclick="window.removeDndStep(\'' + gameId + '\',' + index + ')" style="font-size:11px;color:#fff;background:#ff4444;border:none;border-radius:4px;padding:2px 6px;">✕</button>'
+                        + '</div>'
+                        + '<label style="font-size:11px;font-weight:bold;display:block;">Consigne (s’allume à cette étape)</label>'
+                        + '<textarea data-field="instructions" rows="2" placeholder="Texte affiché pendant cette étape…" style="width:100%;font-size:12px;padding:6px;box-sizing:border-box;resize:vertical;">' + String(s.instructions || '').replace(/</g, '&lt;') + '</textarea>'
+                        + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px;font-size:11px;">'
+                        + '<label>Zones à valider (IDs)<input data-field="zoneIds" type="text" value="' + zoneStr.replace(/"/g, '&quot;') + '" placeholder="Ex: 1,2,3" style="width:100%;font-size:11px;padding:4px;box-sizing:border-box;"></label>'
+                        + '<label>Cartes à placer (IDs)<input data-field="goodIds" type="text" value="' + String(s.goodIds || '').replace(/"/g, '&quot;') + '" placeholder="Ex: 4,5" style="width:100%;font-size:11px;padding:4px;box-sizing:border-box;"></label>'
+                        + '</div>'
+                        + '<label style="font-size:11px;display:block;margin-top:6px;">Flèches à valider (id&gt;id)'
+                        + '<textarea data-field="linkPairs" rows="2" placeholder="Ex: 1&gt;3" style="width:100%;font-size:11px;padding:4px;box-sizing:border-box;font-family:monospace;">' + linksToText(s.linkPairs).replace(/</g, '&lt;') + '</textarea></label>'
+                        + '</div>';
+                }).join('');
+                list.querySelectorAll('input,textarea').forEach((inp) => {
+                    const sync = () => {
+                        try {
+                            const g2 = state.dndGames[gameId];
+                            if (!g2) return;
+                            g2.steps = mqReadStepsFromUI(n);
+                            g2.enableSteps = true;
+                            scheduleSaveLocal();
+                            renderDndGamesPreview();
+                        } catch (e) {}
+                    };
+                    inp.addEventListener('change', sync);
+                    inp.addEventListener('input', sync);
+                });
+            }
+
             // ---------------------------------------------------------
             // GESTION IMPORT / EXPORT COMPLET DU PROJET
             // ---------------------------------------------------------
@@ -12347,15 +12483,26 @@
                             </div>`;
 
                     const instrPrev = String(g.instructions || '').trim();
-                    if (g.showInstructions !== false && instrPrev) {
+                    const stepsOn = !!(g.enableSteps && Array.isArray(g.steps) && g.steps.length);
+                    if (g.showInstructions !== false) {
                         const instrY = (tb.y || 0) + (tb.height || 0) + 10;
-                        const safeInstr = instrPrev
-                            .replace(/&/g, '&amp;')
-                            .replace(/</g, '&lt;')
-                            .replace(/>/g, '&gt;');
-                        html += `
+                        if (stepsOn) {
+                            const lines = g.steps.map((s, i) => (i + 1) + '. ' + (s.title || ('Étape ' + (i + 1))) + ' — ' + String(s.instructions || '').trim()).filter(Boolean);
+                            if (lines.length) {
+                                const safeInstr = lines.join('\n').replace(/&/g, '&amp;').replace(/</g, '&lt;');
+                                html += `
+                            <div class="dnd-instructions-preview" data-game="${gameId}"
+                                 style="top: ${instrY}px; white-space:pre-wrap; text-align:left;" title="Étapes (aperçu admin)">${safeInstr}</div>`;
+                            }
+                        } else if (instrPrev) {
+                            const safeInstr = instrPrev
+                                .replace(/&/g, '&amp;')
+                                .replace(/</g, '&lt;')
+                                .replace(/>/g, '&gt;');
+                            html += `
                             <div class="dnd-instructions-preview" data-game="${gameId}"
                                  style="top: ${instrY}px;" title="Consignes (aperçu admin)">${safeInstr}</div>`;
+                        }
                     }
 
                     if ((g.gameType === 'linking' || g.enableLinking) && Array.isArray(g.allowedLinks) && g.allowedLinks.length) {
@@ -12805,6 +12952,9 @@
                 if (el('ShowMalus')) el('ShowMalus').checked = g.showMalus !== false;
                 if (el('ShowInstructions')) el('ShowInstructions').checked = g.showInstructions !== false;
                 if (el('Instructions')) el('Instructions').value = g.instructions || '';
+                if (el('EnableSteps')) el('EnableSteps').checked = !!g.enableSteps;
+                if (typeof renderStepsList === 'function') renderStepsList(gameId);
+                if (typeof mqToggleStepsUI === 'function') mqToggleStepsUI(mqGameNum(gameId), !!g.enableSteps);
                 if (el('LinkMode')) el('LinkMode').value = g.linkMode || 'one-to-one';
                 if (el('LinkTooltip')) el('LinkTooltip').value = g.linkTooltip || '';
                 if (el('EnableLinking')) el('EnableLinking').checked = !!(g.enableLinking || g.gameType === 'linking');
@@ -12848,9 +12998,9 @@
                     const n = mqGameNum(gid);
                     const host = document.getElementById('dndGame' + n + 'AdvancedHost');
                     if (!host) return;
-                    if (!host.dataset.ready || host.dataset.ready !== 'link-v2') {
+                    if (!host.dataset.ready || host.dataset.ready !== 'steps-v1') {
                         host.innerHTML = mqDndTypeControlsHTML(n);
-                        host.dataset.ready = 'link-v2';
+                        host.dataset.ready = 'steps-v1';
                         const btn = document.getElementById('btnGenGridGame' + n);
                         if (btn) {
                             btn.addEventListener('click', () => mqGenerateDndGrid(gid, n));
@@ -12864,11 +13014,39 @@
                                 row.style.display = isLink ? 'flex' : 'none';
                             });
                         };
+                        const toggleSteps = () => {
+                            const en = document.getElementById('dndGame' + n + 'EnableSteps');
+                            mqToggleStepsUI(n, !!(en && en.checked));
+                            if (en && en.checked) {
+                                const g = state.dndGames[gid];
+                                if (g && (!g.steps || !g.steps.length)) {
+                                    g.steps = [{
+                                        id: '1',
+                                        title: 'Étape 1',
+                                        instructions: g.instructions || '',
+                                        zoneIds: [],
+                                        goodIds: '',
+                                        linkPairs: []
+                                    }];
+                                    g.enableSteps = true;
+                                }
+                                renderStepsList(gid);
+                            }
+                        };
                         const gt = document.getElementById('dndGame' + n + 'GameType');
                         const en = document.getElementById('dndGame' + n + 'EnableLinking');
+                        const es = document.getElementById('dndGame' + n + 'EnableSteps');
                         if (gt) gt.addEventListener('change', toggleLinking);
                         if (en) en.addEventListener('change', toggleLinking);
+                        if (es) es.addEventListener('change', toggleSteps);
                         toggleLinking();
+                        toggleSteps();
+                        const addStepBtn = document.getElementById('btnAddStepGame' + n);
+                        if (addStepBtn) {
+                            addStepBtn.addEventListener('click', () => {
+                                window.addDndStep(gid);
+                            });
+                        }
                         host.querySelectorAll('select,input,textarea').forEach((inp) => {
                             const sync = () => {
                                 try { syncDndGamesFromUI(); renderDropzonesList(gid); renderDndGamesPreview(); scheduleSaveLocal(); } catch (e) {}
@@ -12879,10 +13057,12 @@
                     } else {
                         const gt = document.getElementById('dndGame' + n + 'GameType');
                         const en = document.getElementById('dndGame' + n + 'EnableLinking');
+                        const es = document.getElementById('dndGame' + n + 'EnableSteps');
                         const isLink = (gt && gt.value === 'linking') || (en && en.checked);
                         host.querySelectorAll('.mq-dnd-linking-only').forEach((row) => {
                             row.style.display = isLink ? 'flex' : 'none';
                         });
+                        mqToggleStepsUI(n, !!(es && es.checked));
                     }
                 });
             }
@@ -12963,6 +13143,20 @@
                     showMalus: g.showMalus !== false,
                     showInstructions: g.showInstructions !== false,
                     instructions: g.instructions || '',
+                    enableSteps: !!g.enableSteps,
+                    steps: (g.enableSteps && Array.isArray(g.steps)) ? g.steps.map(function (s, i) {
+                        const ns = (window.MqDndEngine && MqDndEngine.normalizeStep)
+                            ? MqDndEngine.normalizeStep(s, i)
+                            : s;
+                        return {
+                            id: ns.id,
+                            title: ns.title || '',
+                            instructions: ns.instructions || '',
+                            zoneIds: ns.zoneIds || [],
+                            goodIds: ns.goodIds || '',
+                            linkPairs: ns.linkPairs || []
+                        };
+                    }) : [],
                     linkMode: g.linkMode || 'one-to-one',
                     enableLinking: !!(g.enableLinking || g.gameType === 'linking'),
                     linkTooltip: g.linkTooltip || '',
@@ -13010,8 +13204,11 @@
                 out += '\n                        <script type="application/json" id="dnd-config-' + gameId + '" data-dnd-config="1">' + cfgJson + '<\/script>';
                 out += '\n                        <div class="carre_marron" style="position:absolute; left:' + tbX + '%; top:' + tbY + '%; width:' + tbW + '%; height:' + tbH + '%; display:flex; justify-content:center; align-items:center; box-sizing:border-box; z-index:2;">';
                 out += '<h2 style="font-family:' + (hBox.font || 'Verdana, sans-serif') + '; font-size:' + (hBox.fontSize || 60) + 'px; margin:0; width:100%; text-align:' + (hBox.align || 'center') + '; font-weight:' + (hBox.bold ? 'bold' : 'normal') + '; font-style:' + (hBox.italic ? 'italic' : 'normal') + ';">' + (g.title || ('Jeu ' + n)) + '</h2></div>';
-                const instrText = String(g.instructions || '').trim();
-                if (g.showInstructions !== false && instrText) {
+                const stepsOnExport = !!(g.enableSteps && Array.isArray(g.steps) && g.steps.length);
+                const instrText = stepsOnExport
+                    ? String((g.steps[0] && g.steps[0].instructions) || '').trim()
+                    : String(g.instructions || '').trim();
+                if (g.showInstructions !== false && (instrText || stepsOnExport)) {
                     const instrTop = Math.min(70, Math.max(2, (((tb.y || 0) + (tb.height || 0) + 10) / G_H) * 100));
                     const instrEsc = instrText
                         .replace(/&/g, '&amp;')
@@ -14873,11 +15070,18 @@
                     + '<label style="width:auto;"><input type="checkbox" id="dndGame' + n + 'ShowScore" checked> Afficher score</label>'
                     + '<label style="width:auto;"><input type="checkbox" id="dndGame' + n + 'ShowMalus" checked> Afficher malus</label>'
                     + '<label style="width:auto;"><input type="checkbox" id="dndGame' + n + 'ShowInstructions" checked> Afficher consignes</label>'
+                    + '<label style="width:auto;"><input type="checkbox" id="dndGame' + n + 'EnableSteps"> Jeu par étapes</label>'
                     + '</div>'
-                    + '<div class="row" style="flex-direction:column;align-items:stretch;gap:4px;">'
+                    + '<div class="row mq-dnd-instr-simple" style="flex-direction:column;align-items:stretch;gap:4px;">'
                     + '<label style="width:auto;font-size:12px;font-weight:bold;">Consignes (affichées pendant le jeu)</label>'
                     + '<textarea id="dndGame' + n + 'Instructions" rows="3" placeholder="Ex : Placez chaque étiquette dans la bonne zone." style="width:100%;resize:vertical;font-size:12px;padding:6px;border:1px solid #ccc;border-radius:6px;box-sizing:border-box;"></textarea>'
-                    + '<p style="margin:0;font-size:10px;color:#64748b;">Visible pour l’élève jusqu’à la réussite de l’étape.</p>'
+                    + '<p style="margin:0;font-size:10px;color:#64748b;">Visible jusqu’à la réussite. Pour plusieurs consignes, activez « Jeu par étapes ».</p>'
+                    + '</div>'
+                    + '<div class="row mq-dnd-steps-only" style="display:none;flex-direction:column;align-items:stretch;gap:6px;">'
+                    + '<label style="width:auto;font-size:12px;font-weight:bold;">Étapes & consignes</label>'
+                    + '<p style="margin:0;font-size:10px;color:#64748b;">Chaque étape a sa consigne. Elle s’allume quand l’étape devient active (après réussite de la précédente). Critères : zones et/ou cartes et/ou flèches. Sans critère → bouton « Étape suivante ».</p>'
+                    + '<div id="dndGame' + n + 'StepsList"></div>'
+                    + '<button type="button" id="btnAddStepGame' + n + '" style="width:100%;font-weight:bold;">+ Ajouter une étape</button>'
                     + '</div>'
                     + '<details style="margin:8px 0;background:#fff;border:1px solid #ddd;border-radius:6px;padding:6px;">'
                     + '<summary style="cursor:pointer;font-weight:bold;font-size:12px;">Générer une grille</summary>'

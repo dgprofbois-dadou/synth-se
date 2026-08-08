@@ -254,6 +254,8 @@ test('applyGameDefaults instructions', () => {
   const g = Engine.applyGameDefaults({ gameType: 'selection', goodIds: '1', targetCount: 1, dropzones: [{ id: 1 }] });
   assert.strictEqual(g.instructions, '');
   assert.strictEqual(g.showInstructions, true);
+  assert.strictEqual(g.enableSteps, false);
+  assert.ok(Array.isArray(g.steps));
   const g2 = Engine.applyGameDefaults({ instructions: '  Placez les cartes  ', showInstructions: false });
   assert.strictEqual(g2.instructions, '  Placez les cartes  ');
   assert.strictEqual(g2.showInstructions, false);
@@ -265,6 +267,59 @@ test('UI consignes dans placement-inputs.html', () => {
   assert.ok(html.includes('ShowInstructions'));
   assert.ok(html.includes('dnd-instructions'));
   assert.ok(html.includes('Consignes (affichées pendant le jeu)'));
+  assert.ok(html.includes('EnableSteps'));
+  assert.ok(html.includes('Jeu par étapes'));
+  assert.ok(html.includes('StepsList'));
+});
+
+console.log('\n=== Test étapes / consignes ===');
+test('normalizeStep + evaluateStep zones', () => {
+  const g = Engine.applyGameDefaults({
+    gameType: 'exact',
+    enableSteps: true,
+    dropzones: [
+      { id: '1', acceptedIds: ['a'], capacity: 1, required: true },
+      { id: '2', acceptedIds: ['b'], capacity: 1, required: true }
+    ],
+    steps: [
+      { title: 'Étape 1', instructions: 'Placez A', zoneIds: ['1'] },
+      { title: 'Étape 2', instructions: 'Placez B', zoneIds: ['2'] }
+    ]
+  });
+  assert.strictEqual(g.steps.length, 2);
+  const s1 = Engine.evaluateStep(g, g.steps[0], { '1': ['a'] });
+  assert.strictEqual(s1.isComplete, true);
+  assert.strictEqual(s1.hasCriteria, true);
+  const s2empty = Engine.evaluateStep(g, g.steps[1], { '1': ['a'] });
+  assert.strictEqual(s2empty.isComplete, false);
+  const st = Engine.getStepsState(g, { '1': ['a'] });
+  assert.strictEqual(st.currentIndex, 1);
+  assert.strictEqual(st.active.instructions, 'Placez B');
+  assert.strictEqual(st.allComplete, false);
+  const stDone = Engine.getStepsState(g, { '1': ['a'], '2': ['b'] });
+  assert.strictEqual(stDone.allComplete, true);
+});
+
+test('étape sans critère → needsManualNext', () => {
+  const g = Engine.applyGameDefaults({
+    enableSteps: true,
+    steps: [{ title: 'Intro', instructions: 'Lisez…', zoneIds: [], goodIds: '', linkPairs: [] }]
+  });
+  const ev = Engine.evaluateStep(g, g.steps[0], {});
+  assert.strictEqual(ev.hasCriteria, false);
+  assert.strictEqual(ev.needsManualNext, true);
+  assert.strictEqual(ev.isComplete, false);
+});
+
+test('enableSteps seed depuis instructions', () => {
+  const g = Engine.applyGameDefaults({
+    enableSteps: true,
+    instructions: 'Consigne unique',
+    goodIds: '1,2',
+    steps: []
+  });
+  assert.strictEqual(g.steps.length, 1);
+  assert.strictEqual(g.steps[0].instructions, 'Consigne unique');
 });
 
 console.log('\n=== Test linking ===');

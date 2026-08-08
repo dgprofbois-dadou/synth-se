@@ -113,6 +113,19 @@ function rebuild() {
 .dnd-instructions.dnd-instructions-done {
   display: none !important;
 }
+.dnd-instructions.dnd-instructions-pulse {
+  animation: dndInstrPulse 0.85s ease-out;
+}
+@keyframes dndInstrPulse {
+  0% { transform: scale(0.96); box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.7); }
+  40% { transform: scale(1.03); box-shadow: 0 0 0 10px rgba(245, 158, 11, 0); }
+  100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
+}
+.dropzone.dnd-step-target {
+  outline: 3px solid #f59e0b !important;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.25);
+}
 .dnd-link-node.dnd-link-from,
 .dnd-link-node.dnd-selected {
   outline: 4px solid #f59e0b !important;
