@@ -7564,13 +7564,16 @@
                         const dw = drag.width || 250;
                         const dh = drag.height || 250;
                         let el;
-                        if (drag.src && String(drag.src).indexOf('idb:') !== 0) {
+                        if (drag.kind === 'text') {
+                            el = document.createElement('div');
+                            el.innerHTML = mqDndItemInner(drag);
+                        } else if (drag.src && String(drag.src).indexOf('idb:') !== 0) {
                             el = document.createElement('img');
                             el.src = drag.src;
                             el.style.objectFit = 'contain';
                         } else {
                             el = document.createElement('div');
-                            el.textContent = drag.label || drag.title || drag.id;
+                            el.textContent = drag.label || drag.title || drag.text || drag.id;
                             el.style.display = 'flex';
                             el.style.alignItems = 'center';
                             el.style.justifyContent = 'center';
@@ -7587,7 +7590,9 @@
                         el.setAttribute('data-tooltip', drag.title || drag.tooltip || '');
                         el.setAttribute('tabindex', '0');
                         el.setAttribute('role', 'button');
-                        el.setAttribute('aria-label', 'Carte ' + drag.id);
+                        el.setAttribute('aria-label', drag.kind === 'text'
+                            ? ('Étiquette ' + (drag.text || drag.id))
+                            : ('Carte ' + drag.id));
                         el.style.cssText += ';position:absolute; left:' + dx + 'px; top:' + dy + 'px; width:' + dw + 'px; height:' + dh + 'px; cursor:grab; pointer-events:auto; opacity:1; transition:opacity 0.2s, transform 0.2s; box-sizing:border-box;';
                         sourceEl.appendChild(el);
                     });
