@@ -801,14 +801,42 @@
         gameContainer.querySelectorAll('.draggable[data-id], [data-link-node][data-id]')
       );
     }
-    function localPoint(clientX, clientY) {
+    function clientToLocal(clientX, clientY) {
+      // Convertir coords écran → coords locales du jeu (tient compte du zoom/pan CSS)
+      if (svg && svg.getScreenCTM) {
+        try {
+          var ctm = svg.getScreenCTM();
+          if (ctm) {
+            if (typeof DOMPoint === 'function') {
+              var dp = new DOMPoint(clientX, clientY).matrixTransform(ctm.inverse());
+              return { x: dp.x, y: dp.y };
+            }
+            if (typeof svg.createSVGPoint === 'function') {
+              var sp = svg.createSVGPoint();
+              sp.x = clientX;
+              sp.y = clientY;
+              var p = sp.matrixTransform(ctm.inverse());
+              return { x: p.x, y: p.y };
+            }
+          }
+        } catch (err) { /* fallback ci-dessous */ }
+      }
       var cr = gameContainer.getBoundingClientRect();
-      return { x: clientX - cr.left, y: clientY - cr.top };
+      var w = gameContainer.clientWidth || 1;
+      var h = gameContainer.clientHeight || 1;
+      var rw = cr.width || 1;
+      var rh = cr.height || 1;
+      return {
+        x: ((clientX - cr.left) / rw) * w,
+        y: ((clientY - cr.top) / rh) * h
+      };
+    }
+    function localPoint(clientX, clientY) {
+      return clientToLocal(clientX, clientY);
     }
     function nodeCenter(el) {
-      var cr = gameContainer.getBoundingClientRect();
       var er = el.getBoundingClientRect();
-      return { x: (er.left + er.width / 2) - cr.left, y: (er.top + er.height / 2) - cr.top };
+      return clientToLocal(er.left + er.width / 2, er.top + er.height / 2);
     }
     function nodeFromPoint(clientX, clientY) {
       var el = document.elementFromPoint(clientX, clientY);
@@ -930,6 +958,13 @@
       svg.appendChild(defs);
       gameContainer.appendChild(svg);
     }
+    function syncSvgViewBox() {
+      var w = Math.max(1, gameContainer.clientWidth || 1);
+      var h = Math.max(1, gameContainer.clientHeight || 1);
+      svg.setAttribute('viewBox', '0 0 ' + w + ' ' + h);
+      svg.setAttribute('preserveAspectRatio', 'none');
+    }
+    syncSvgViewBox();
 
     function isAllowedPair(from, to) {
       var allowed = normalizeAllowedLinks(game.allowedLinks);
@@ -970,6 +1005,7 @@
     }
 
     function drawLinks(ev) {
+      syncSvgViewBox();
       Array.prototype.slice.call(svg.querySelectorAll('line.dnd-link-line, line.dnd-link-hit')).forEach(function (n) {
         n.parentNode.removeChild(n);
       });
@@ -1040,6 +1076,7 @@
     function startDrag(fromEl, clientX, clientY) {
       var id = fromEl.getAttribute('data-id');
       if (!id) return;
+      syncSvgViewBox();
       var c = nodeCenter(fromEl);
       var line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
       line.setAttribute('class', 'dnd-link-drag');
@@ -1063,7 +1100,23 @@
 
     function moveDrag(clientX, clientY) {
       if (!dragState || !dragState.line) return;
-      var pt = localPoint(clientX, clientY);
+      var target = nodeFromPoint(clientX, clientY);
+      var pt;
+      // Accrocher l’aperçu au centre de la cible (comme le trait final)
+      if (target && target !== dragState.fromEl) {
+        pt = nodeCenter(target);
+        target.classList.add('dnd-link-from');
+        if (dragState.hoverEl && dragState.hoverEl !== target && dragState.hoverEl !== dragState.fromEl) {
+          dragState.hoverEl.classList.remove('dnd-link-from');
+        }
+        dragState.hoverEl = target;
+      } else {
+        pt = localPoint(clientX, clientY);
+        if (dragState.hoverEl && dragState.hoverEl !== dragState.fromEl) {
+          dragState.hoverEl.classList.remove('dnd-link-from');
+        }
+        dragState.hoverEl = null;
+      }
       dragState.line.setAttribute('x2', String(pt.x));
       dragState.line.setAttribute('y2', String(pt.y));
       showTip('Maintenez le clic droit et tirez jusqu’à l’image d’arrivée.', pt.x, pt.y);
@@ -1073,6 +1126,9 @@
       if (!dragState) return;
       var fromId = dragState.fromId;
       var target = nodeFromPoint(clientX, clientY);
+      if (dragState.hoverEl && dragState.hoverEl !== dragState.fromEl) {
+        dragState.hoverEl.classList.remove('dnd-link-from');
+      }
       cancelDrag();
       if (target) {
         var toId = target.getAttribute('data-id');
@@ -1186,7 +1242,10 @@
     var resizeTimer = null;
     function onResize() {
       clearTimeout(resizeTimer);
-      resizeTimer = setTimeout(function () { drawLinks(evaluateLinks(game, links)); }, 80);
+      resizeTimer = setTimeout(function () {
+        syncSvgViewBox();
+        drawLinks(evaluateLinks(game, links));
+      }, 80);
     }
     if (typeof window !== 'undefined' && window.addEventListener) {
       window.addEventListener('resize', onResize);
