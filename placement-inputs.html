@@ -861,6 +861,26 @@
         .dnd-dropzone.mq-dnd-selected .dnd-dropzone-label {
             background: rgba(232, 82, 31, 0.95);
         }
+        .dnd-id-badge {
+            position: absolute;
+            top: 4px;
+            left: 4px;
+            z-index: 5;
+            pointer-events: none;
+            padding: 2px 7px;
+            border-radius: 6px;
+            background: rgba(21, 101, 192, 0.92);
+            color: #fff;
+            font: 700 13px/1.2 Verdana, sans-serif;
+            box-shadow: 0 1px 4px rgba(0,0,0,.3);
+            max-width: calc(100% - 8px);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .dnd-image.mq-dnd-selected .dnd-id-badge {
+            background: rgba(232, 82, 31, 0.95);
+        }
         .dnd-placed.dnd-retry-movable {
             outline: 2px dashed #ef6c00;
             cursor: grab !important;
@@ -12365,13 +12385,17 @@
                         const y = d.y || 120;
                         const w = d.width || 250;
                         const h = d.height || 250;
+                        const idLabel = String(d.id != null ? d.id : (idx + 1));
+                        const safeId = idLabel.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
                         html += `
                             <div class="dnd-element dnd-image png-wrap" data-game="${gameId}" data-type="draggable" data-index="${idx}"
                                  style="left: ${x}px; top: ${y}px; width: ${w}px; height: ${h}px; z-index: 100;"
+                                 title="ID ${safeId}"
                                  data-tooltip="${(d.title || '').replace(/"/g, '&quot;')}"
                                  data-hint-font="${g.tooltipFont || "'OpenDyslexic', sans-serif"}"
                                  data-duration="${g.tooltipDuration || 3000}">
                                 ${mqDndItemInner(d)}
+                                <span class="dnd-id-badge">ID ${safeId}</span>
                                 <div class="dnd-element-handle" data-game="${gameId}" data-type="draggable" data-index="${idx}"></div>
                             </div>`;
                     });
