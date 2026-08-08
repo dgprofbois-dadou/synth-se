@@ -270,9 +270,23 @@ test('UI consignes dans placement-inputs.html', () => {
   assert.ok(html.includes('EnableSteps'));
   assert.ok(html.includes('Jeu par étapes'));
   assert.ok(html.includes('StepsList'));
+  assert.ok(html.includes('InstrW'));
+  assert.ok(html.includes('instructionsBox'));
+  assert.ok(html.includes('Disposition consignes'));
 });
 
 console.log('\n=== Test étapes / consignes ===');
+test('normalizeInstructionsBox', () => {
+  const box = Engine.normalizeInstructionsBox({ x: 10, y: 20, width: 300, height: 50, fontSize: 18 }, { width: 800, height: 400 });
+  assert.strictEqual(box.x, 10);
+  assert.strictEqual(box.y, 20);
+  assert.strictEqual(box.width, 300);
+  assert.strictEqual(box.fontSize, 18);
+  assert.ok(box.bgColor);
+  const def = Engine.normalizeInstructionsBox(null, { width: 800, titleBox: { x: 0, y: 0, height: 80 } });
+  assert.strictEqual(def.y, 90);
+});
+
 test('normalizeStep + evaluateStep zones', () => {
   const g = Engine.applyGameDefaults({
     gameType: 'exact',

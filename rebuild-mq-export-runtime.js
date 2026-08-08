@@ -92,22 +92,21 @@ function rebuild() {
 }
 .dnd-instructions {
   position: absolute;
-  left: 4%;
-  right: 4%;
   z-index: 5;
   pointer-events: none;
   box-sizing: border-box;
   padding: 10px 14px;
   border-radius: 12px;
-  background: rgba(255, 248, 225, 0.96);
+  background: #fff8e1;
   border: 2px solid #f59e0b;
   color: #78350f;
-  font-size: clamp(14px, 2.2vw, 22px);
+  font-size: 22px;
   font-weight: 600;
   text-align: center;
   line-height: 1.35;
   box-shadow: 0 2px 8px rgba(0,0,0,0.12);
   white-space: pre-wrap;
+  overflow: auto;
 }
 .dnd-game-complete .dnd-instructions,
 .dnd-instructions.dnd-instructions-done {
@@ -173,22 +172,21 @@ function rebuild() {
     styleCss += `
 .dnd-instructions {
   position: absolute;
-  left: 4%;
-  right: 4%;
   z-index: 5;
   pointer-events: none;
   box-sizing: border-box;
   padding: 10px 14px;
   border-radius: 12px;
-  background: rgba(255, 248, 225, 0.96);
+  background: #fff8e1;
   border: 2px solid #f59e0b;
   color: #78350f;
-  font-size: clamp(14px, 2.2vw, 22px);
+  font-size: 22px;
   font-weight: 600;
   text-align: center;
   line-height: 1.35;
   box-shadow: 0 2px 8px rgba(0,0,0,0.12);
   white-space: pre-wrap;
+  overflow: auto;
 }
 .dnd-game-complete .dnd-instructions,
 .dnd-instructions.dnd-instructions-done {
