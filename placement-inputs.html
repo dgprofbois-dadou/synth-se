@@ -2286,6 +2286,20 @@
             box-sizing: border-box !important;
             background: #fff !important;
         }
+        /* Saisie panneau gauche : ne jamais hériter d’un curseur « main » (drag canvas) */
+        #left input[type="text"],
+        #left input[type="number"],
+        #left input:not([type]),
+        #left textarea {
+            cursor: text !important;
+            pointer-events: auto !important;
+            user-select: text !important;
+            -webkit-user-select: text !important;
+        }
+        #left select {
+            cursor: default !important;
+            pointer-events: auto !important;
+        }
 
         /* Steppers dim/pos : ne pas forcer width:100% (sinon le champ entre +/- disparaît) */
         #left .mq-dnd-card .mq-step {
@@ -13133,174 +13147,121 @@
                 });
             }
 
-            // Gestionnaires pour drag & drop et resize des éléments individuels
-            function attachDndElementHandlers() {
-                let draggedElement = null;
-                let dragOffsetX = 0;
-                let dragOffsetY = 0;
-                let resizingElement = null;
-                let resizeStartX = 0;
-                let resizeStartY = 0;
-                let resizeStartWidth = 0;
-                let resizeStartHeight = 0;
+            // État drag DnD admin (unique) — évite curseur « main » collé + écouteurs document empilés
+            let mqDndUiDragEl = null;
+            let mqDndUiResizeEl = null;
+            let mqDndUiResizeStartX = 0, mqDndUiResizeStartY = 0;
+            let mqDndUiResizeStartW = 0, mqDndUiResizeStartH = 0;
+            let mqDndUiDragGame = null;
+            let mqDndUiDragGameOffX = 0, mqDndUiDragGameOffY = 0;
+            let mqDndUiResizeGame = null;
+            let mqDndUiResizeGameStartX = 0, mqDndUiResizeGameStartY = 0;
+            let mqDndUiResizeGameStartW = 0, mqDndUiResizeGameStartH = 0;
+            let mqDndUiDocListenersBound = false;
 
-                // Drag & drop des éléments
-                document.querySelectorAll('.dnd-element').forEach(el => {
-                    el.addEventListener('mousedown', (e) => {
-                        // Ignorer si c'est la poignée
-                        if (e.target.classList.contains('dnd-element-handle')) return;
+            function mqClearDndUiDragChrome() {
+                try {
+                    if (viewport) viewport.style.pointerEvents = '';
+                    document.body.style.userSelect = '';
+                    document.body.style.cursor = '';
+                    document.body.classList.remove('mq-dnd-ui-dragging');
+                } catch (err) { /* ignore */ }
+            }
+            function mqBeginDndUiDragChrome(cursor) {
+                document.body.classList.add('mq-dnd-ui-dragging');
+                document.body.style.userSelect = 'none';
+                if (cursor) document.body.style.cursor = cursor;
+                // Ne pas couper pointer-events du viewport : ça bloquait aussi la sortie de drag
+            }
+            function mqFinishDndUiGesture(e) {
+                const movedEl = mqDndUiDragEl || mqDndUiResizeEl;
+                const wasClick = mqDndUiDragEl && e && Math.hypot(
+                    (e.clientX || 0) - (mqDndUiDragEl.startX || 0),
+                    (e.clientY || 0) - (mqDndUiDragEl.startY || 0)
+                ) < 6;
+                const hadGameGesture = !!(mqDndUiDragGame || mqDndUiResizeGame);
+                mqDndUiDragEl = null;
+                mqDndUiResizeEl = null;
+                mqDndUiDragGame = null;
+                mqDndUiResizeGame = null;
+                mqClearDndUiDragChrome();
+                if (!movedEl && !hadGameGesture) return;
+                try { saveLocal(); } catch (err) { console.warn(err); }
+                if (movedEl && movedEl.type === 'decor') renderDecorList(movedEl.gameId);
+                if (movedEl && movedEl.type === 'decorText') renderDecorTextList(movedEl.gameId);
+                if (movedEl && movedEl.type === 'linkZone') {
+                    if (typeof renderLinkZoneList === 'function') renderLinkZoneList(movedEl.gameId);
+                    renderDndGamesPreview();
+                }
+                if (hadGameGesture) renderDndGamesPreview();
+                if (wasClick && movedEl && movedEl.type === 'dropzone' && typeof window.mqSelectDropzoneForEdit === 'function') {
+                    window.mqSelectDropzoneForEdit(movedEl.gameId, parseInt(movedEl.index, 10));
+                } else if (movedEl && movedEl.type === 'dropzone' && window.mqSetDndSel) {
+                    window.mqSetDndSel({ gameId: movedEl.gameId, type: 'dropzone', index: String(movedEl.index) });
+                }
+            }
 
-                        // Déplacement libre à la souris (désactivé pendant les outils alignement/taille)
-                        if (mqDndAlignTarget || mqDndSizeBrush || mqDndSizePipetteTarget) return;
-
-                        e.stopPropagation();
-                        e.preventDefault();
-
-                        const gameId = el.dataset.game;
-                        const type = el.dataset.type;
-                        const index = el.dataset.index;
-
-                        const idx0 = parseInt(index);
-                        const g0 = state.dndGames[gameId];
-                        let ox = 0, oy = 0;
-                        if (type === 'title') { ox = g0.titleBox.x || 0; oy = g0.titleBox.y || 0; }
-                        else if (type === 'instructions') {
-                            if (!g0.instructionsBox) g0.instructionsBox = {};
-                            ox = g0.instructionsBox.x || 0; oy = g0.instructionsBox.y || 0;
-                        }
-                        else if (type === 'relierBtn') {
-                            if (!g0.relierBtn) g0.relierBtn = {};
-                            ox = g0.relierBtn.x || 0; oy = g0.relierBtn.y || 0;
-                        }
-                        else if (type === 'linkZone') {
-                            const z = (g0.linkZones || [])[idx0];
-                            const bb = mqLinkZoneBBox(z && z.points);
-                            ox = bb.x || 0; oy = bb.y || 0;
-                        }
-                        else if (type === 'draggable') { ox = (g0.draggables[idx0].x) || 0; oy = (g0.draggables[idx0].y) || 0; }
-                        else if (type === 'dropzone') { ox = (g0.dropzones[idx0].x) || 0; oy = (g0.dropzones[idx0].y) || 0; }
-                        else if (type === 'decor') { const a = (g0.decorImages || [])[idx0] || {}; ox = a.x || 0; oy = a.y || 0; }
-                        else if (type === 'decorText') { const a = (g0.decorTexts || [])[idx0] || {}; ox = a.x || 0; oy = a.y || 0; }
-
-                        draggedElement = { el, gameId, type, index, startX: e.clientX, startY: e.clientY, origX: ox, origY: oy };
-                        if (type === 'linkZone') {
-                            const z0 = (g0.linkZones || [])[idx0];
-                            draggedElement.origPoints = (z0 && z0.points) ? z0.points.map(function (p) { return [p[0], p[1]]; }) : [];
-                        }
-
-                        if (viewport) viewport.style.pointerEvents = 'none';
-                        document.body.style.userSelect = 'none';
-                        document.body.style.cursor = 'grabbing';
-                    });
-                });
-
-                // Resize des éléments
-                document.querySelectorAll('.dnd-element-handle').forEach(handle => {
-                    handle.addEventListener('mousedown', (e) => {
-                        if (mqDndAlignTarget || mqDndSizeBrush || mqDndSizePipetteTarget) return;
-
-                        e.stopImmediatePropagation();
-                        e.stopPropagation();
-                        e.preventDefault();
-
-                        const gameId = handle.dataset.game;
-                        const type = handle.dataset.type;
-                        const index = handle.dataset.index;
-                        const el = handle.parentElement;
-
-                        resizingElement = { el, gameId, type, index };
-                        resizeStartX = e.clientX;
-                        resizeStartY = e.clientY;
-                        resizeStartWidth = el.offsetWidth;
-                        resizeStartHeight = el.offsetHeight;
-
-                        if (viewport) viewport.style.pointerEvents = 'none';
-                        document.body.style.userSelect = 'none';
-                        document.body.style.cursor = 'nwse-resize';
-                    }, { capture: true });
-                });
-
-                // Mouvement de la souris
+            function mqEnsureDndUiDocListeners() {
+                if (mqDndUiDocListenersBound) return;
+                mqDndUiDocListenersBound = true;
                 document.addEventListener('mousemove', (e) => {
-                    if (draggedElement) {
-                        const { el, gameId, type, index } = draggedElement;
+                    if (mqDndUiDragEl) {
+                        const { el, gameId, type, index } = mqDndUiDragEl;
+                        if (!el || !el.isConnected) { mqFinishDndUiGesture(e); return; }
                         const sc = state.scale || 1;
-                        // Déplacement = position d'origine + (delta souris converti en coords du stage)
-                        const newX = Math.max(0, Math.round(draggedElement.origX + (e.clientX - draggedElement.startX) / sc));
-                        const newY = Math.max(0, Math.round(draggedElement.origY + (e.clientY - draggedElement.startY) / sc));
-
-                        // Mettre à jour la position dans le state
-                        const idx = parseInt(index);
-                        if (type === 'title') {
-                            state.dndGames[gameId].titleBox.x = newX;
-                            state.dndGames[gameId].titleBox.y = newY;
-                        } else if (type === 'instructions') {
-                            if (!state.dndGames[gameId].instructionsBox) state.dndGames[gameId].instructionsBox = {};
-                            state.dndGames[gameId].instructionsBox.x = newX;
-                            state.dndGames[gameId].instructionsBox.y = newY;
+                        const newX = Math.max(0, Math.round(mqDndUiDragEl.origX + (e.clientX - mqDndUiDragEl.startX) / sc));
+                        const newY = Math.max(0, Math.round(mqDndUiDragEl.origY + (e.clientY - mqDndUiDragEl.startY) / sc));
+                        const idx = parseInt(index, 10);
+                        const g = state.dndGames[gameId];
+                        if (!g) return;
+                        if (type === 'title') { g.titleBox.x = newX; g.titleBox.y = newY; }
+                        else if (type === 'instructions') {
+                            if (!g.instructionsBox) g.instructionsBox = {};
+                            g.instructionsBox.x = newX; g.instructionsBox.y = newY;
                             const n = mqGameNum(gameId);
                             const xEl = document.getElementById('dndGame' + n + 'InstrX');
                             const yEl = document.getElementById('dndGame' + n + 'InstrY');
                             if (xEl) xEl.value = newX;
                             if (yEl) yEl.value = newY;
                         } else if (type === 'relierBtn') {
-                            if (!state.dndGames[gameId].relierBtn) state.dndGames[gameId].relierBtn = { size: 52 };
-                            state.dndGames[gameId].relierBtn.x = newX;
-                            state.dndGames[gameId].relierBtn.y = newY;
+                            if (!g.relierBtn) g.relierBtn = { size: 52 };
+                            g.relierBtn.x = newX; g.relierBtn.y = newY;
                             if (window.MqDndEngine && MqDndEngine.normalizeRelierBtn) {
-                                state.dndGames[gameId].relierBtn = MqDndEngine.normalizeRelierBtn(state.dndGames[gameId].relierBtn, state.dndGames[gameId]);
+                                g.relierBtn = MqDndEngine.normalizeRelierBtn(g.relierBtn, g);
                             }
                         } else if (type === 'linkZone') {
-                            const z = (state.dndGames[gameId].linkZones || [])[idx];
-                            if (z && Array.isArray(draggedElement.origPoints)) {
-                                const dx = newX - draggedElement.origX;
-                                const dy = newY - draggedElement.origY;
-                                z.points = draggedElement.origPoints.map(function (p) {
-                                    return [p[0] + dx, p[1] + dy];
-                                });
+                            const z = (g.linkZones || [])[idx];
+                            if (z && Array.isArray(mqDndUiDragEl.origPoints)) {
+                                const dx = newX - mqDndUiDragEl.origX;
+                                const dy = newY - mqDndUiDragEl.origY;
+                                z.points = mqDndUiDragEl.origPoints.map(function (p) { return [p[0] + dx, p[1] + dy]; });
                             }
-                        } else if (type === 'draggable') {
-                            state.dndGames[gameId].draggables[idx].x = newX;
-                            state.dndGames[gameId].draggables[idx].y = newY;
-                        } else if (type === 'dropzone') {
-                            state.dndGames[gameId].dropzones[idx].x = newX;
-                            state.dndGames[gameId].dropzones[idx].y = newY;
-                        } else if (type === 'decor') {
-                            state.dndGames[gameId].decorImages[idx].x = newX;
-                            state.dndGames[gameId].decorImages[idx].y = newY;
-                        } else if (type === 'decorText') {
-                            state.dndGames[gameId].decorTexts[idx].x = newX;
-                            state.dndGames[gameId].decorTexts[idx].y = newY;
-                        }
-
-                        // Mise à jour visuelle immédiate
+                        } else if (type === 'draggable') { g.draggables[idx].x = newX; g.draggables[idx].y = newY; }
+                        else if (type === 'dropzone') { g.dropzones[idx].x = newX; g.dropzones[idx].y = newY; }
+                        else if (type === 'decor') { g.decorImages[idx].x = newX; g.decorImages[idx].y = newY; }
+                        else if (type === 'decorText') { g.decorTexts[idx].x = newX; g.decorTexts[idx].y = newY; }
                         el.style.left = newX + 'px';
                         el.style.top = newY + 'px';
-
-                    } else if (resizingElement) {
-                        const { el, gameId, type, index } = resizingElement;
-                        const deltaX = (e.clientX - resizeStartX) / state.scale;
-                        const deltaY = (e.clientY - resizeStartY) / state.scale;
-
-                        const newWidth = Math.max(50, Math.round(resizeStartWidth + deltaX));
-                        const newHeight = Math.max(30, Math.round(resizeStartHeight + deltaY));
-
-                        // Mettre à jour dans le state
+                    } else if (mqDndUiResizeEl) {
+                        const { el, gameId, type, index } = mqDndUiResizeEl;
+                        if (!el || !el.isConnected) { mqFinishDndUiGesture(e); return; }
+                        const deltaX = (e.clientX - mqDndUiResizeStartX) / state.scale;
+                        const deltaY = (e.clientY - mqDndUiResizeStartY) / state.scale;
+                        const newWidth = Math.max(50, Math.round(mqDndUiResizeStartW + deltaX));
+                        const newHeight = Math.max(30, Math.round(mqDndUiResizeStartH + deltaY));
+                        const g = state.dndGames[gameId];
+                        if (!g) return;
                         if (type === 'title') {
-                            state.dndGames[gameId].titleBox.width = newWidth;
-                            state.dndGames[gameId].titleBox.height = newHeight;
-                            // Synchroniser le bandeau (header) + les champs du panneau de gauche
-                            if (!state.dndGames[gameId].header) state.dndGames[gameId].header = {};
-                            state.dndGames[gameId].header.width = newWidth;
-                            state.dndGames[gameId].header.height = newHeight;
+                            g.titleBox.width = newWidth; g.titleBox.height = newHeight;
+                            if (!g.header) g.header = {};
+                            g.header.width = newWidth; g.header.height = newHeight;
                             const wEl = document.getElementById('dndGame' + mqGameNum(gameId) + 'HeaderWidth');
                             const hEl = document.getElementById('dndGame' + mqGameNum(gameId) + 'HeaderHeight');
                             if (wEl) wEl.value = newWidth;
                             if (hEl) hEl.value = newHeight;
                         } else if (type === 'instructions') {
-                            if (!state.dndGames[gameId].instructionsBox) state.dndGames[gameId].instructionsBox = {};
-                            state.dndGames[gameId].instructionsBox.width = newWidth;
-                            state.dndGames[gameId].instructionsBox.height = newHeight;
+                            if (!g.instructionsBox) g.instructionsBox = {};
+                            g.instructionsBox.width = newWidth; g.instructionsBox.height = newHeight;
                             const n = mqGameNum(gameId);
                             const wEl = document.getElementById('dndGame' + n + 'InstrW');
                             const hEl = document.getElementById('dndGame' + n + 'InstrH');
@@ -13308,15 +13269,12 @@
                             if (hEl) hEl.value = newHeight;
                         } else if (type === 'relierBtn') {
                             const size = Math.max(28, Math.min(180, Math.round(Math.max(
-                                resizeStartWidth + deltaX,
-                                resizeStartHeight + deltaY
+                                mqDndUiResizeStartW + deltaX, mqDndUiResizeStartH + deltaY
                             ))));
-                            if (!state.dndGames[gameId].relierBtn) state.dndGames[gameId].relierBtn = {};
-                            state.dndGames[gameId].relierBtn.size = size;
-                            state.dndGames[gameId].relierBtn.width = size;
-                            state.dndGames[gameId].relierBtn.height = size;
+                            if (!g.relierBtn) g.relierBtn = {};
+                            g.relierBtn.size = size; g.relierBtn.width = size; g.relierBtn.height = size;
                             if (window.MqDndEngine && MqDndEngine.normalizeRelierBtn) {
-                                state.dndGames[gameId].relierBtn = MqDndEngine.normalizeRelierBtn(state.dndGames[gameId].relierBtn, state.dndGames[gameId]);
+                                g.relierBtn = MqDndEngine.normalizeRelierBtn(g.relierBtn, g);
                             }
                             el.style.width = size + 'px';
                             el.style.height = size + 'px';
@@ -13328,165 +13286,189 @@
                             }
                             return;
                         } else if (type === 'draggable') {
-                            const idx = parseInt(index);
-                            if (!state.dndGames[gameId].draggables[idx].width) state.dndGames[gameId].draggables[idx].width = 60;
-                            if (!state.dndGames[gameId].draggables[idx].height) state.dndGames[gameId].draggables[idx].height = 60;
-                            state.dndGames[gameId].draggables[idx].width = newWidth;
-                            state.dndGames[gameId].draggables[idx].height = newHeight;
+                            const idx = parseInt(index, 10);
+                            if (!g.draggables[idx].width) g.draggables[idx].width = 60;
+                            if (!g.draggables[idx].height) g.draggables[idx].height = 60;
+                            g.draggables[idx].width = newWidth; g.draggables[idx].height = newHeight;
                         } else if (type === 'dropzone') {
-                            const idx = parseInt(index);
-                            state.dndGames[gameId].dropzones[idx].width = newWidth;
-                            state.dndGames[gameId].dropzones[idx].height = newHeight;
+                            const idx = parseInt(index, 10);
+                            g.dropzones[idx].width = newWidth; g.dropzones[idx].height = newHeight;
                         } else if (type === 'decor') {
-                            const idx = parseInt(index);
-                            state.dndGames[gameId].decorImages[idx].width = newWidth;
-                            state.dndGames[gameId].decorImages[idx].height = newHeight;
+                            const idx = parseInt(index, 10);
+                            g.decorImages[idx].width = newWidth; g.decorImages[idx].height = newHeight;
                         } else if (type === 'decorText') {
-                            const idx = parseInt(index);
-                            state.dndGames[gameId].decorTexts[idx].width = newWidth;
-                            state.dndGames[gameId].decorTexts[idx].height = newHeight;
+                            const idx = parseInt(index, 10);
+                            g.decorTexts[idx].width = newWidth; g.decorTexts[idx].height = newHeight;
                         }
-
-                        // Mise à jour visuelle immédiate
                         el.style.width = newWidth + 'px';
                         el.style.height = newHeight + 'px';
+                    } else if (mqDndUiDragGame) {
+                        const game = state.dndGames[mqDndUiDragGame];
+                        if (!game) return;
+                        const stageRect = stage.getBoundingClientRect();
+                        game.x = Math.round((e.clientX - stageRect.left - state.tx) / state.scale - mqDndUiDragGameOffX);
+                        game.y = Math.round((e.clientY - stageRect.top - state.ty) / state.scale - mqDndUiDragGameOffY);
+                        const gameEl = document.querySelector('.dnd-game-container[data-game="' + mqDndUiDragGame + '"]');
+                        if (gameEl) {
+                            gameEl.style.left = game.x + 'px';
+                            gameEl.style.top = game.y + 'px';
+                        }
+                    } else if (mqDndUiResizeGame) {
+                        const game = state.dndGames[mqDndUiResizeGame];
+                        if (!game) return;
+                        const deltaX = (e.clientX - mqDndUiResizeGameStartX) / state.scale;
+                        const deltaY = (e.clientY - mqDndUiResizeGameStartY) / state.scale;
+                        game.width = Math.max(200, Math.round(mqDndUiResizeGameStartW + deltaX));
+                        game.height = Math.max(150, Math.round(mqDndUiResizeGameStartH + deltaY));
+                        const gameEl = document.querySelector('.dnd-game-container[data-game="' + mqDndUiResizeGame + '"]');
+                        if (gameEl) {
+                            gameEl.style.width = game.width + 'px';
+                            gameEl.style.height = game.height + 'px';
+                        }
                     }
                 });
-
-                // Relâchement de la souris
-                document.addEventListener('mouseup', (e) => {
-                    if (draggedElement || resizingElement) {
-                        const moved = draggedElement || resizingElement;
-                        const wasClick = draggedElement && Math.hypot(
-                            (e.clientX || 0) - (draggedElement.startX || 0),
-                            (e.clientY || 0) - (draggedElement.startY || 0)
-                        ) < 6;
-                        saveLocal();
-                        if (viewport) viewport.style.pointerEvents = '';
-                        document.body.style.userSelect = '';
-                        document.body.style.cursor = '';
-                        if (moved && moved.type === 'decor') renderDecorList(moved.gameId);
-                        if (moved && moved.type === 'decorText') renderDecorTextList(moved.gameId);
-                        if (moved && moved.type === 'linkZone') {
-                            if (typeof renderLinkZoneList === 'function') renderLinkZoneList(moved.gameId);
-                            renderDndGamesPreview();
-                        }
-                        if (wasClick && moved.type === 'dropzone' && typeof window.mqSelectDropzoneForEdit === 'function') {
-                            window.mqSelectDropzoneForEdit(moved.gameId, parseInt(moved.index, 10));
-                        } else if (moved && moved.type === 'dropzone' && window.mqSetDndSel) {
-                            window.mqSetDndSel({ gameId: moved.gameId, type: 'dropzone', index: String(moved.index) });
-                        }
+                document.addEventListener('mouseup', (e) => { mqFinishDndUiGesture(e); });
+                document.addEventListener('pointercancel', () => { mqFinishDndUiGesture(null); });
+                window.addEventListener('blur', () => { mqFinishDndUiGesture(null); });
+                document.addEventListener('keydown', (e) => {
+                    if (e.key === 'Escape' && (mqDndUiDragEl || mqDndUiResizeEl || mqDndUiDragGame || mqDndUiResizeGame
+                        || document.body.classList.contains('mq-dnd-ui-dragging')
+                        || document.body.style.cursor === 'grabbing'
+                        || document.body.style.cursor === 'nwse-resize')) {
+                        mqFinishDndUiGesture(null);
                     }
-                    draggedElement = null;
-                    resizingElement = null;
+                }, true);
+                const leftPanel = document.getElementById('left');
+                if (leftPanel) {
+                    leftPanel.addEventListener('pointerdown', () => {
+                        // Clic panneau config → libérer curseur / user-select coincés
+                        if (mqDndUiDragEl || mqDndUiResizeEl || mqDndUiDragGame || mqDndUiResizeGame
+                            || document.body.classList.contains('mq-dnd-ui-dragging')
+                            || document.body.style.cursor === 'grabbing'
+                            || document.body.style.cursor === 'nwse-resize'
+                            || document.body.style.userSelect === 'none') {
+                            mqFinishDndUiGesture(null);
+                        }
+                        if (typeof drawingLinkZone !== 'undefined' && drawingLinkZone && typeof mqCancelLinkZoneDraw === 'function') {
+                            mqCancelLinkZoneDraw();
+                        }
+                    }, true);
+                }
+            }
+
+            // Gestionnaires pour drag & drop et resize des éléments individuels
+            function attachDndElementHandlers() {
+                mqEnsureDndUiDocListeners();
+
+                document.querySelectorAll('.dnd-element').forEach(el => {
+                    el.addEventListener('mousedown', (e) => {
+                        if (e.target.classList.contains('dnd-element-handle')) return;
+                        if (mqDndAlignTarget || mqDndSizeBrush || mqDndSizePipetteTarget) return;
+                        if (e.button !== 0) return;
+
+                        e.stopPropagation();
+                        e.preventDefault();
+
+                        const gameId = el.dataset.game;
+                        const type = el.dataset.type;
+                        const index = el.dataset.index;
+                        const idx0 = parseInt(index, 10);
+                        const g0 = state.dndGames[gameId];
+                        if (!g0) return;
+                        let ox = 0, oy = 0;
+                        if (type === 'title') { ox = g0.titleBox.x || 0; oy = g0.titleBox.y || 0; }
+                        else if (type === 'instructions') {
+                            if (!g0.instructionsBox) g0.instructionsBox = {};
+                            ox = g0.instructionsBox.x || 0; oy = g0.instructionsBox.y || 0;
+                        } else if (type === 'relierBtn') {
+                            if (!g0.relierBtn) g0.relierBtn = {};
+                            ox = g0.relierBtn.x || 0; oy = g0.relierBtn.y || 0;
+                        } else if (type === 'linkZone') {
+                            const z = (g0.linkZones || [])[idx0];
+                            const bb = mqLinkZoneBBox(z && z.points);
+                            ox = bb.x || 0; oy = bb.y || 0;
+                        } else if (type === 'draggable') { ox = (g0.draggables[idx0].x) || 0; oy = (g0.draggables[idx0].y) || 0; }
+                        else if (type === 'dropzone') { ox = (g0.dropzones[idx0].x) || 0; oy = (g0.dropzones[idx0].y) || 0; }
+                        else if (type === 'decor') { const a = (g0.decorImages || [])[idx0] || {}; ox = a.x || 0; oy = a.y || 0; }
+                        else if (type === 'decorText') { const a = (g0.decorTexts || [])[idx0] || {}; ox = a.x || 0; oy = a.y || 0; }
+
+                        mqDndUiDragEl = { el, gameId, type, index, startX: e.clientX, startY: e.clientY, origX: ox, origY: oy };
+                        if (type === 'linkZone') {
+                            const z0 = (g0.linkZones || [])[idx0];
+                            mqDndUiDragEl.origPoints = (z0 && z0.points) ? z0.points.map(function (p) { return [p[0], p[1]]; }) : [];
+                        }
+                        mqBeginDndUiDragChrome('grabbing');
+                    });
+                });
+
+                document.querySelectorAll('.dnd-element-handle').forEach(handle => {
+                    handle.addEventListener('mousedown', (e) => {
+                        if (mqDndAlignTarget || mqDndSizeBrush || mqDndSizePipetteTarget) return;
+                        if (e.button !== 0) return;
+                        e.stopImmediatePropagation();
+                        e.stopPropagation();
+                        e.preventDefault();
+                        const gameId = handle.dataset.game;
+                        const type = handle.dataset.type;
+                        const index = handle.dataset.index;
+                        const el = handle.parentElement;
+                        mqDndUiResizeEl = { el, gameId, type, index };
+                        mqDndUiResizeStartX = e.clientX;
+                        mqDndUiResizeStartY = e.clientY;
+                        mqDndUiResizeStartW = el.offsetWidth;
+                        mqDndUiResizeStartH = el.offsetHeight;
+                        mqBeginDndUiDragChrome('nwse-resize');
+                    }, { capture: true });
                 });
             }
 
 
             // Attacher les gestionnaires pour déplacer et redimensionner les jeux
             function attachDndGameHandlers() {
-                let draggedGame = null;
-                let dragOffsetX = 0;
-                let dragOffsetY = 0;
-                let resizingGame = null;
-                let resizeStartX = 0;
-                let resizeStartY = 0;
-                let resizeStartWidth = 0;
-                let resizeStartHeight = 0;
+                mqEnsureDndUiDocListeners();
 
-                // Gestion du déplacement
                 document.querySelectorAll('.dnd-game-container').forEach(gameEl => {
                     const contentEl = gameEl.querySelector('.dnd-game-background');
                     if (!contentEl) return;
 
                     contentEl.addEventListener('mousedown', (e) => {
-                        // Ne pas déplacer si on clique sur la poignée de resize ou un élément DnD
                         if (e.target.classList.contains('dnd-resize-handle')) return;
                         if (e.target.classList.contains('dnd-element')) return;
                         if (e.target.closest('.dnd-element')) return;
-
-                        // IMPORTANT : Nécessite Ctrl + clic pour éviter le conflit avec le PAN
                         if (!e.ctrlKey) return;
+                        if (e.button !== 0) return;
 
-                        // Empêcher la propagation pour éviter le PAN
                         e.stopPropagation();
                         e.preventDefault();
 
                         const gameId = gameEl.dataset.game;
                         const game = state.dndGames[gameId];
-
-                        draggedGame = gameId;
+                        if (!game) return;
+                        mqDndUiDragGame = gameId;
                         const stageRect = stage.getBoundingClientRect();
-
-                        dragOffsetX = (e.clientX - stageRect.left - state.tx) / state.scale - game.x;
-                        dragOffsetY = (e.clientY - stageRect.top - state.ty) / state.scale - game.y;
-
-                        // Désactiver temporairement le pointer-events sur le viewport
-                        if (viewport) viewport.style.pointerEvents = 'none';
+                        mqDndUiDragGameOffX = (e.clientX - stageRect.left - state.tx) / state.scale - game.x;
+                        mqDndUiDragGameOffY = (e.clientY - stageRect.top - state.ty) / state.scale - game.y;
+                        mqBeginDndUiDragChrome('grabbing');
                     });
                 });
 
-                // Gestion du redimensionnement
                 document.querySelectorAll('.dnd-resize-handle').forEach(handle => {
-                    // Utiliser capture:true pour intercepter AVANT le PAN
                     handle.addEventListener('mousedown', (e) => {
-                        // IMPORTANT : Nécessite Ctrl + clic pour éviter le conflit avec le PAN
                         if (!e.ctrlKey) return;
-
-                        // Bloquer COMPLÈTEMENT la propagation
+                        if (e.button !== 0) return;
                         e.stopImmediatePropagation();
                         e.stopPropagation();
                         e.preventDefault();
-
                         const gameId = handle.dataset.game;
                         const game = state.dndGames[gameId];
-
-                        resizingGame = gameId;
-                        resizeStartX = e.clientX;
-                        resizeStartY = e.clientY;
-                        resizeStartWidth = game.width;
-                        resizeStartHeight = game.height;
-
-                        // Bloquer COMPLÈTEMENT le PAN et la sélection
-                        if (viewport) viewport.style.pointerEvents = 'none';
-                        document.body.style.userSelect = 'none';
-                        document.body.style.cursor = 'nwse-resize';
+                        if (!game) return;
+                        mqDndUiResizeGame = gameId;
+                        mqDndUiResizeGameStartX = e.clientX;
+                        mqDndUiResizeGameStartY = e.clientY;
+                        mqDndUiResizeGameStartW = game.width;
+                        mqDndUiResizeGameStartH = game.height;
+                        mqBeginDndUiDragChrome('nwse-resize');
                     }, { capture: true });
-                });
-
-                // Événements globaux
-                document.addEventListener('mousemove', (e) => {
-                    if (draggedGame) {
-                        const game = state.dndGames[draggedGame];
-                        const stageRect = stage.getBoundingClientRect();
-
-                        game.x = Math.round((e.clientX - stageRect.left - state.tx) / state.scale - dragOffsetX);
-                        game.y = Math.round((e.clientY - stageRect.top - state.ty) / state.scale - dragOffsetY);
-
-                        renderDndGamesPreview();
-                    } else if (resizingGame) {
-                        const game = state.dndGames[resizingGame];
-                        const deltaX = (e.clientX - resizeStartX) / state.scale;
-                        const deltaY = (e.clientY - resizeStartY) / state.scale;
-
-                        // Redimensionnement INDÉPENDANT en largeur ET hauteur
-                        game.width = Math.max(200, Math.round(resizeStartWidth + deltaX));
-                        game.height = Math.max(150, Math.round(resizeStartHeight + deltaY));
-
-                        renderDndGamesPreview();
-                    }
-                });
-
-                document.addEventListener('mouseup', () => {
-                    if (draggedGame || resizingGame) {
-                        saveLocal();
-                        // Réactiver tout
-                        if (viewport) viewport.style.pointerEvents = '';
-                        document.body.style.userSelect = '';
-                        document.body.style.cursor = '';
-                    }
-                    draggedGame = null;
-                    resizingGame = null;
                 });
             }
 
