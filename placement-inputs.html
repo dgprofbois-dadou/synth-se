@@ -11364,7 +11364,22 @@
                     if (g.gameType === 'linking') g.enableLinking = true;
                     if (el('LinkMode')) g.linkMode = val('LinkMode') || 'one-to-one';
                     if (el('LinkTooltip')) g.linkTooltip = val('LinkTooltip') || '';
-                    if (el('AllowedLinks')) {
+                    // Avec étapes : paires des étapes primenet (union → allowedLinks pour le runtime)
+                    if (g.enableSteps && Array.isArray(g.steps) && g.steps.length) {
+                        if (window.MqDndEngine && MqDndEngine.effectiveAllowedLinks) {
+                            g.allowedLinks = MqDndEngine.effectiveAllowedLinks(g);
+                        } else {
+                            const seen = {};
+                            const out = [];
+                            g.steps.forEach((s) => {
+                                (s.linkPairs || []).forEach((l) => {
+                                    const k = String(l.from) + '>' + String(l.to);
+                                    if (!seen[k]) { seen[k] = true; out.push({ from: String(l.from), to: String(l.to) }); }
+                                });
+                            });
+                            g.allowedLinks = out;
+                        }
+                    } else if (el('AllowedLinks')) {
                         g.allowedLinks = (window.MqDndEngine && MqDndEngine.normalizeAllowedLinks)
                             ? MqDndEngine.normalizeAllowedLinks(el('AllowedLinks').value)
                             : String(el('AllowedLinks').value || '').split(/[\n;]+/).map((line) => {
@@ -12527,6 +12542,20 @@
                 host.querySelectorAll('.mq-dnd-instr-simple').forEach((row) => {
                     row.style.display = on ? 'none' : 'flex';
                 });
+                mqUpdateLinkingPairsVisibility(n);
+            }
+            /** Paires globales masquées si « Jeu par étapes » (les flèches se règlent dans chaque étape). */
+            function mqUpdateLinkingPairsVisibility(n) {
+                const host = document.getElementById('dndGame' + n + 'AdvancedHost');
+                if (!host) return;
+                const gt = document.getElementById('dndGame' + n + 'GameType');
+                const en = document.getElementById('dndGame' + n + 'EnableLinking');
+                const es = document.getElementById('dndGame' + n + 'EnableSteps');
+                const isLink = (gt && gt.value === 'linking') || (en && en.checked);
+                const stepsOn = !!(es && es.checked);
+                host.querySelectorAll('.mq-dnd-global-pairs').forEach((row) => {
+                    row.style.display = (isLink && !stepsOn) ? 'flex' : 'none';
+                });
             }
             function mqReadStepsFromUI(n) {
                 const list = document.getElementById('dndGame' + n + 'StepsList');
@@ -12626,6 +12655,9 @@
                             if (!g2) return;
                             g2.steps = mqReadStepsFromUI(n);
                             g2.enableSteps = true;
+                            if (window.MqDndEngine && MqDndEngine.effectiveAllowedLinks) {
+                                g2.allowedLinks = MqDndEngine.effectiveAllowedLinks(g2);
+                            }
                             scheduleSaveLocal();
                             renderDndGamesPreview();
                         } catch (e) {}
@@ -12870,7 +12902,11 @@
                             </div>`;
                     }
 
-                    if ((g.gameType === 'linking' || g.enableLinking) && Array.isArray(g.allowedLinks) && g.allowedLinks.length) {
+                    if ((g.gameType === 'linking' || g.enableLinking)) {
+                        const previewLinks = (window.MqDndEngine && MqDndEngine.effectiveAllowedLinks)
+                            ? MqDndEngine.effectiveAllowedLinks(g)
+                            : (Array.isArray(g.allowedLinks) ? g.allowedLinks : []);
+                        if (previewLinks.length) {
                         const byId = {};
                         (g.draggables || []).forEach((d) => { byId[String(d.id)] = d; });
                         (g.decorImages || []).forEach((d) => { if (d && d.id != null) byId[String(d.id)] = d; });
@@ -12881,7 +12917,7 @@
                             byId[String(d.id)] = { x: bb.x, y: bb.y, width: bb.width, height: bb.height };
                         });
                         let lines = '';
-                        g.allowedLinks.forEach((l) => {
+                        previewLinks.forEach((l) => {
                             const a = byId[String(l.from)];
                             const b = byId[String(l.to)];
                             if (!a || !b) return;
@@ -12896,6 +12932,7 @@
                                 + '<defs><marker id="mq-link-preview-arrow-' + gameId + '" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">'
                                 + '<path d="M0,0 L0,6 L9,3 z" fill="#6366f1"/></marker></defs>'
                                 + lines.replace(/url\(#mq-link-preview-arrow\)/g, 'url(#mq-link-preview-arrow-' + gameId + ')') + '</svg>';
+                        }
                         }
                     }
 
@@ -13501,6 +13538,9 @@
                     hostEl.querySelectorAll('.mq-dnd-linking-only').forEach((row) => {
                         row.style.display = isLink ? 'flex' : 'none';
                     });
+                    if (typeof mqUpdateLinkingPairsVisibility === 'function') {
+                        mqUpdateLinkingPairsVisibility(mqGameNum(gameId));
+                    }
                 }
                 if (el('ZoneWidth')) el('ZoneWidth').value = g.zoneWidth ?? 250;
                 if (el('ZoneHeight')) el('ZoneHeight').value = g.zoneHeight ?? 250;
@@ -13531,9 +13571,9 @@
                     const n = mqGameNum(gid);
                     const host = document.getElementById('dndGame' + n + 'AdvancedHost');
                     if (!host) return;
-                    if (!host.dataset.ready || host.dataset.ready !== 'linkzone-v1') {
+                    if (!host.dataset.ready || host.dataset.ready !== 'steps-pairs-v1') {
                         host.innerHTML = mqDndTypeControlsHTML(n);
-                        host.dataset.ready = 'linkzone-v1';
+                        host.dataset.ready = 'steps-pairs-v1';
                         const btn = document.getElementById('btnGenGridGame' + n);
                         if (btn) {
                             btn.addEventListener('click', () => mqGenerateDndGrid(gid, n));
@@ -13546,25 +13586,44 @@
                             host.querySelectorAll('.mq-dnd-linking-only').forEach((row) => {
                                 row.style.display = isLink ? 'flex' : 'none';
                             });
+                            mqUpdateLinkingPairsVisibility(n);
                         };
                         const toggleSteps = () => {
                             const en = document.getElementById('dndGame' + n + 'EnableSteps');
-                            mqToggleStepsUI(n, !!(en && en.checked));
-                            if (en && en.checked) {
-                                const g = state.dndGames[gid];
+                            const stepsOn = !!(en && en.checked);
+                            mqToggleStepsUI(n, stepsOn);
+                            const g = state.dndGames[gid];
+                            if (stepsOn) {
                                 if (g && (!g.steps || !g.steps.length)) {
+                                    const seedPairs = Array.isArray(g.allowedLinks) ? g.allowedLinks.slice() : [];
                                     g.steps = [{
                                         id: '1',
                                         title: 'Étape 1',
                                         instructions: g.instructions || '',
                                         zoneIds: [],
                                         goodIds: '',
-                                        linkPairs: []
+                                        linkPairs: seedPairs
                                     }];
                                     g.enableSteps = true;
                                 }
                                 renderStepsList(gid);
+                            } else if (g) {
+                                // Repasser les paires d’étapes dans la config globale Relier
+                                g.enableSteps = false;
+                                if (g.steps && g.steps.length && (g.enableLinking || g.gameType === 'linking')) {
+                                    const merged = (window.MqDndEngine && MqDndEngine.effectiveAllowedLinks)
+                                        ? MqDndEngine.effectiveAllowedLinks(Object.assign({}, g, { enableSteps: true }))
+                                        : [];
+                                    if (merged.length) {
+                                        g.allowedLinks = merged;
+                                        const ta = document.getElementById('dndGame' + n + 'AllowedLinks');
+                                        if (ta && window.MqDndEngine && MqDndEngine.allowedLinksToText) {
+                                            ta.value = MqDndEngine.allowedLinksToText(merged);
+                                        }
+                                    }
+                                }
                             }
+                            mqUpdateLinkingPairsVisibility(n);
                         };
                         const gt = document.getElementById('dndGame' + n + 'GameType');
                         const en = document.getElementById('dndGame' + n + 'EnableLinking');
@@ -13596,6 +13655,7 @@
                             row.style.display = isLink ? 'flex' : 'none';
                         });
                         mqToggleStepsUI(n, !!(es && es.checked));
+                        mqUpdateLinkingPairsVisibility(n);
                     }
                 });
             }
@@ -15639,10 +15699,13 @@
                     + '<option value="one-to-one">Un départ → une arrivée</option>'
                     + '<option value="one-to-many">Un départ → plusieurs arrivées</option>'
                     + '</select>'
+                    + '<div class="mq-dnd-global-pairs" style="display:flex;flex-direction:column;align-items:stretch;gap:4px;">'
                     + '<label style="width:auto;font-size:12px;font-weight:bold;margin-top:4px;">Paires correctes (flèches)</label>'
                     + '<textarea id="dndGame' + n + 'AllowedLinks" rows="4" placeholder="Une paire par ligne : idDépart&gt;idArrivée&#10;Ex :&#10;1&gt;3&#10;zone-1&gt;decor-1" style="width:100%;resize:vertical;font-size:12px;padding:6px;border:1px solid #ccc;border-radius:6px;box-sizing:border-box;font-family:monospace;"></textarea>'
+                    + '<p style="margin:0;font-size:10px;color:#64748b;">Sans « Jeu par étapes » : ces paires valident tout le jeu. Avec étapes, utilisez les flèches dans chaque étape (ci-dessous).</p>'
+                    + '</div>'
                     + '<label style="width:auto;font-size:12px;font-weight:bold;margin-top:4px;">Zones SVG Relier (transparentes élève)</label>'
-                    + '<p style="margin:0;font-size:10px;color:#64748b;">Dessinez comme un hotspot (points ou crayon). Visible en admin, invisible pour l’élève, ID utilisable dans les paires ci-dessus.</p>'
+                    + '<p style="margin:0;font-size:10px;color:#64748b;">Dessinez comme un hotspot (points ou crayon). Visible en admin, invisible pour l’élève, ID utilisable dans les paires.</p>'
                     + '<div id="dndGame' + n + 'LinkZoneList" style="max-height:120px;overflow-y:auto;background:#fff;padding:5px;border-radius:4px;border:1px solid #ddd;margin:4px 0;"></div>'
                     + '<div style="display:flex;gap:6px;flex-wrap:wrap;">'
                     + '<button type="button" id="btnLinkZonePtsGame' + n + '" style="flex:1;font-size:11px;font-weight:bold;">📍 Zone SVG (points)</button>'

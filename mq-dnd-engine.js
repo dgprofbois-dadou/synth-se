@@ -90,6 +90,25 @@
     }).join('\n');
   }
 
+  /** Paires flèches effectives : union des étapes si enableSteps, sinon allowedLinks. */
+  function effectiveAllowedLinks(game) {
+    if (game && game.enableSteps && Array.isArray(game.steps) && game.steps.length) {
+      var out = [];
+      var seen = {};
+      game.steps.forEach(function (s) {
+        normalizeAllowedLinks((s && (s.linkPairs || s.allowedLinks || s.links)) || []).forEach(function (l) {
+          var k = String(l.from) + '>' + String(l.to);
+          if (!seen[k]) {
+            seen[k] = true;
+            out.push({ from: String(l.from), to: String(l.to) });
+          }
+        });
+      });
+      return out;
+    }
+    return normalizeAllowedLinks(game && game.allowedLinks);
+  }
+
   function linkPairKey(from, to) {
     return String(from) + '\0' + String(to);
   }
@@ -297,11 +316,11 @@
   function computeGameMaxScore(game) {
     if (!game) return 0;
     if (isLinking(game)) {
-      return normalizeAllowedLinks(game.allowedLinks).length;
+      return effectiveAllowedLinks(game).length;
     }
     var total = computeDndBaseMaxScore(game);
     if (game.enableLinking) {
-      total += normalizeAllowedLinks(game.allowedLinks).length;
+      total += effectiveAllowedLinks(game).length;
     }
     return total;
   }
@@ -309,9 +328,11 @@
   /**
    * Évalue les liaisons (flèches) pour un jeu linking.
    * links: [{ from, to }]
+   * Avec étapes : union des linkPairs ; sinon allowedLinks.
+   * evaluateStep passe { allowedLinks: stepPairs } → même chemin via effectiveAllowedLinks.
    */
   function evaluateLinks(game, links) {
-    var allowed = normalizeAllowedLinks(game && game.allowedLinks);
+    var allowed = effectiveAllowedLinks(game);
     var allowedSet = {};
     allowed.forEach(function (l) {
       allowedSet[linkPairKey(l.from, l.to)] = true;
@@ -1034,7 +1055,7 @@
     svg.removeAttribute('preserveAspectRatio');
 
     function isAllowedPair(from, to) {
-      var allowed = normalizeAllowedLinks(game.allowedLinks);
+      var allowed = effectiveAllowedLinks(game);
       for (var i = 0; i < allowed.length; i++) {
         if (String(allowed[i].from) === String(from) && String(allowed[i].to) === String(to)) return true;
       }
@@ -2060,6 +2081,7 @@
     normalizeLinkMode: normalizeLinkMode,
     normalizeAllowedLinks: normalizeAllowedLinks,
     allowedLinksToText: allowedLinksToText,
+    effectiveAllowedLinks: effectiveAllowedLinks,
     isSingleUse: isSingleUse,
     normalizeDropzone: normalizeDropzone,
     applyGameDefaults: applyGameDefaults,

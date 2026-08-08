@@ -28,7 +28,7 @@ node rebuild-mq-export-runtime.js --extract
 | `instructionsBox` | Disposition consignes : `{ x, y, width, height, font, fontSize, bold, italic, align, bgColor, color, borderColor }` |
 | `enableSteps` | Jeu par étapes avec consignes successives |
 | `steps` | Liste d’étapes `{ id, title, instructions, zoneIds, goodIds, linkPairs }` |
-| `allowedLinks` | Paires `{ from, to }` pour le type `linking` |
+| `allowedLinks` | Paires `{ from, to }` pour Relier **sans** étapes. Avec `enableSteps`, les `linkPairs` des étapes primenet (union exposée aussi via `effectiveAllowedLinks`). |
 | `linkMode` | `one-to-one` (défaut) ou `one-to-many` |
 | `enableLinking` | Active les flèches **en plus** d’un autre type de jeu |
 | `linkTooltip` | Texte d’aide (défaut : clic droit maintenu) |
@@ -43,6 +43,8 @@ Dans l’admin : cocher **Jeu par étapes**, puis ajouter des étapes. Chaque é
 - des **critères de passage** (optionnels) : IDs de zones à valider, IDs de cartes à placer, et/ou flèches `id>id`.
 
 La consigne de l’étape N s’affiche dès que l’étape N−1 est réussie. Sans critère → bouton **Étape suivante**. Le jeu est réussi quand **toutes** les étapes sont terminées.
+
+Dans le panneau admin Relier : si **Jeu par étapes** est coché, le champ global **Paires correctes (flèches)** est masqué — configurez les flèches dans chaque étape (`Flèches à valider`).
 
 ### Type `linking` / option Relier
 

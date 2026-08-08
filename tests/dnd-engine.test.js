@@ -381,11 +381,41 @@ test('normalizeAllowedLinks texte', () => {
   assert.strictEqual(links[1].to, '4');
 });
 
+test('effectiveAllowedLinks : étapes primenet sur allowedLinks', () => {
+  const g = Engine.applyGameDefaults({
+    gameType: 'linking',
+    enableSteps: true,
+    allowedLinks: [{ from: 'x', to: 'y' }],
+    steps: [
+      { title: 'E1', instructions: '', linkPairs: [{ from: '1', to: '2' }] },
+      { title: 'E2', instructions: '', linkPairs: [{ from: '3', to: '4' }, { from: '1', to: '2' }] }
+    ]
+  });
+  const eff = Engine.effectiveAllowedLinks(g);
+  assert.strictEqual(eff.length, 2);
+  assert.strictEqual(eff[0].from, '1');
+  assert.strictEqual(eff[1].from, '3');
+  assert.strictEqual(Engine.computeGameMaxScore(g), 2);
+  const ev = Engine.evaluateLinks(g, [{ from: '1', to: '2' }, { from: '3', to: '4' }]);
+  assert.strictEqual(ev.isComplete, true);
+  assert.strictEqual(ev.score, 2);
+  // Sans étapes : allowedLinks classiques
+  const g2 = Engine.applyGameDefaults({
+    gameType: 'linking',
+    enableSteps: false,
+    allowedLinks: [{ from: 'a', to: 'b' }]
+  });
+  assert.strictEqual(Engine.effectiveAllowedLinks(g2).length, 1);
+  assert.strictEqual(Engine.effectiveAllowedLinks(g2)[0].from, 'a');
+});
+
 test('UI linking dans placement-inputs.html', () => {
   const html = fs.readFileSync(path.join(__dirname, '..', 'placement-inputs.html'), 'utf8');
   assert.ok(html.includes('value="linking"'));
   assert.ok(html.includes('AllowedLinks'));
   assert.ok(html.includes('EnableLinking'));
+  assert.ok(html.includes('mq-dnd-global-pairs'));
+  assert.ok(html.includes('mqUpdateLinkingPairsVisibility'));
   assert.ok(html.includes('dnd-relier-btn') || html.includes('Activer Relier'));
 });
 
