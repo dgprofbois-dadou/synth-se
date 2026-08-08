@@ -33,6 +33,7 @@ node rebuild-mq-export-runtime.js --extract
 | `enableLinking` | Active les flèches **en plus** d’un autre type de jeu |
 | `linkTooltip` | Texte d’aide (défaut : clic droit maintenu) |
 | `relierBtn` | Position/taille du bouton flèche `{ x, y, size }` |
+| `linkZones` | Zones SVG transparentes Relier `{ id, points:[[x,y],…] }` (visibles admin) |
 
 ### Jeu par étapes (`enableSteps`)
 
@@ -50,6 +51,7 @@ La consigne de l’étape N s’affiche dès que l’étape N−1 est réussie. 
 - Le **clic gauche** seul déplace la vue (**pas de pan au clic droit**).
 - Tooltip d’explication sur le bouton et pendant la manip.
 - Peut être utilisé seul (`gameType: linking`) ou combiné (`enableLinking: true` + selection/exact/…).
+- **Zones SVG Relier** : polygones dessinés (points ou crayon) — visibles en admin, **transparents** pour l’élève, avec un **ID** utilisable dans les paires (`zone-1>2`).
 - Score = score DnD + nombre de paires correctes.
 - Les **images fixes** et **textes fixes** ont un **ID** éditable (badge vert sur le canvas) et peuvent servir de nœuds Relier (`idDépart>idArrivée`).
 

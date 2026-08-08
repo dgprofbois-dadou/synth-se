@@ -146,6 +146,7 @@
       g.linkTooltip = String(g.linkTooltip);
     }
     g.relierBtn = normalizeRelierBtn(g.relierBtn, g);
+    g.linkZones = normalizeLinkZones(g.linkZones);
     if (typeof g.enableSteps !== 'boolean') g.enableSteps = false;
     g.steps = normalizeSteps(g.steps);
     g.instructionsBox = normalizeInstructionsBox(g.instructionsBox, g);
@@ -377,6 +378,55 @@
     var x = typeof src.x === 'number' ? Math.round(src.x) : Math.round(gw * 0.02);
     var y = typeof src.y === 'number' ? Math.round(src.y) : Math.max(0, Math.round(gh * 0.90 - size));
     return { x: x, y: y, size: size, width: size, height: size };
+  }
+
+  function normalizeLinkZone(raw, index) {
+    var src = raw && typeof raw === 'object' ? raw : {};
+    var pts = Array.isArray(src.points) ? src.points : [];
+    var points = pts.map(function (p) {
+      if (Array.isArray(p) && p.length >= 2) {
+        return [Math.round(Number(p[0]) || 0), Math.round(Number(p[1]) || 0)];
+      }
+      if (p && typeof p === 'object') {
+        return [Math.round(Number(p.x) || 0), Math.round(Number(p.y) || 0)];
+      }
+      return null;
+    }).filter(Boolean);
+    var id = src.id != null && String(src.id).trim() !== ''
+      ? String(src.id).trim()
+      : ('zone-' + (index + 1));
+    return {
+      id: id,
+      points: points,
+      label: src.label != null ? String(src.label) : ''
+    };
+  }
+
+  function normalizeLinkZones(raw) {
+    if (!Array.isArray(raw)) return [];
+    return raw.map(normalizeLinkZone).filter(function (z) {
+      return z.points && z.points.length >= 3;
+    });
+  }
+
+  function linkZoneBBox(points) {
+    var pts = Array.isArray(points) ? points : [];
+    if (!pts.length) return { x: 0, y: 0, width: 0, height: 0 };
+    var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    pts.forEach(function (p) {
+      var x = Array.isArray(p) ? p[0] : 0;
+      var y = Array.isArray(p) ? p[1] : 0;
+      if (x < minX) minX = x;
+      if (y < minY) minY = y;
+      if (x > maxX) maxX = x;
+      if (y > maxY) maxY = y;
+    });
+    return {
+      x: minX,
+      y: minY,
+      width: Math.max(0, maxX - minX),
+      height: Math.max(0, maxY - minY)
+    };
   }
 
   function applyRelierBtnLayout(btn, game) {
@@ -819,6 +869,19 @@
     /** Centre d’un nœud en coords layout (même repère que left/top des images). */
     function nodeCenter(el) {
       if (!el) return { x: 0, y: 0 };
+      // Zones SVG Relier (<g> / <polygon>)
+      try {
+        var geo = el;
+        if (el.tagName === 'g') {
+          geo = el.querySelector('polygon, path, polyline') || el;
+        }
+        if (geo && typeof geo.getBBox === 'function' && (geo.ownerSVGElement || geo.tagName === 'svg')) {
+          var bb = geo.getBBox();
+          if (bb && isFinite(bb.x) && (bb.width > 0 || bb.height > 0 || (bb.x !== 0 || bb.y !== 0))) {
+            return { x: bb.x + bb.width / 2, y: bb.y + bb.height / 2 };
+          }
+        }
+      } catch (errBb) { /* ignore */ }
       var left = parseFloat(el.style.left);
       var top = parseFloat(el.style.top);
       var w = el.offsetWidth || parseFloat(el.style.width) || 0;
@@ -2022,6 +2085,9 @@
     normalizeInstructionsBox: normalizeInstructionsBox,
     applyInstructionsBoxToElement: applyInstructionsBoxToElement,
     normalizeRelierBtn: normalizeRelierBtn,
-    applyRelierBtnLayout: applyRelierBtnLayout
+    applyRelierBtnLayout: applyRelierBtnLayout,
+    normalizeLinkZone: normalizeLinkZone,
+    normalizeLinkZones: normalizeLinkZones,
+    linkZoneBBox: linkZoneBBox
   };
 });
