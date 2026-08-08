@@ -141,7 +141,7 @@
     }
     if (normalizeGameType(g.gameType) === 'linking') g.enableLinking = true;
     if (g.linkTooltip == null || g.linkTooltip === '') {
-      g.linkTooltip = 'Maintenez le clic sur une image et tirez la flèche jusqu’à l’arrivée.';
+      g.linkTooltip = 'Clic droit maintenu sur une image, puis tirez la flèche jusqu’à l’arrivée.';
     } else {
       g.linkTooltip = String(g.linkTooltip);
     }
@@ -674,7 +674,8 @@
   }
 
   /**
-   * Couche Relier (flèches) — bouton Relier + tirage au clic maintenu.
+   * Couche Relier (flèches) — bouton flèche + tirage au clic droit maintenu
+   * (le clic gauche reste libre pour le pan de la page).
    * opts.hybrid: true = en plus d'un jeu DnD (ne masque pas les zones).
    * opts.onChange: callback après modification des liens.
    * opts.getVerifiedOnce / opts.addErrors: pont avec le score parent (hybrid).
@@ -692,6 +693,8 @@
     var linkModeActive = false;
     var dragState = null;
     var completeFired = false;
+    var DEFAULT_LINK_TIP = 'Clic droit maintenu sur une image, puis tirez la flèche jusqu’à l’arrivée.';
+    var BTN_TIP = 'Mode Relier — clic droit maintenu pour tracer une flèche entre deux images';
 
     gameContainer.classList.add('dnd-linking-ready');
     if (!hybrid) {
@@ -731,6 +734,9 @@
       if (node && gameContainer.contains(node)) return node;
       return null;
     }
+    function tipText() {
+      return game.linkTooltip || DEFAULT_LINK_TIP;
+    }
 
     var tip = gameContainer.querySelector('.dnd-link-tooltip');
     if (!tip) {
@@ -750,16 +756,25 @@
     }
     function hideTip() { tip.style.display = 'none'; }
 
+    var ARROW_BTN_SVG = '<svg class="dnd-relier-icon" width="28" height="28" viewBox="0 0 24 24" aria-hidden="true" focusable="false">'
+      + '<circle cx="5" cy="12" r="2.4" fill="currentColor"/>'
+      + '<circle cx="19" cy="5" r="2.4" fill="currentColor"/>'
+      + '<path d="M7.2 11.2 L16.2 6.2" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>'
+      + '<path d="M13.2 4.2 L17.2 5.2 L15.4 8.8" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>'
+      + '</svg>';
+
     var btn = gameContainer.querySelector('.dnd-relier-btn');
     if (!btn) {
       btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'dnd-relier-btn';
-      btn.textContent = 'Relier';
-      btn.title = 'Activer le mode flèches';
-      btn.style.cssText = 'position:absolute;left:2%;bottom:10%;z-index:12;pointer-events:auto;padding:10px 16px;font-size:16px;font-weight:bold;cursor:pointer;border:none;border-radius:10px;background:#1565c0;color:#fff;box-shadow:0 2px 8px rgba(0,0,0,0.25);';
+      btn.style.cssText = 'position:absolute;left:2%;bottom:10%;z-index:12;pointer-events:auto;width:52px;height:52px;padding:0;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;border:none;border-radius:50%;background:#1565c0;color:#fff;box-shadow:0 2px 8px rgba(0,0,0,0.25);';
       gameContainer.appendChild(btn);
     }
+    btn.innerHTML = ARROW_BTN_SVG;
+    btn.title = BTN_TIP;
+    btn.setAttribute('aria-label', BTN_TIP);
+    btn.setAttribute('aria-pressed', 'false');
 
     function setLinkMode(on) {
       linkModeActive = !!on;
@@ -767,7 +782,10 @@
       btn.classList.toggle('active', linkModeActive);
       btn.setAttribute('aria-pressed', linkModeActive ? 'true' : 'false');
       btn.style.background = linkModeActive ? '#ef6c00' : '#1565c0';
-      btn.textContent = linkModeActive ? 'Relier (actif)' : 'Relier';
+      btn.title = linkModeActive
+        ? 'Mode Relier actif — clic droit maintenu pour tracer une flèche'
+        : BTN_TIP;
+      btn.setAttribute('aria-label', btn.title);
       allNodes().forEach(function (el) {
         if (linkModeActive) {
           el.classList.add('dnd-link-node');
@@ -786,7 +804,7 @@
         }
       });
       if (linkModeActive) {
-        showTip(game.linkTooltip || 'Maintenez le clic sur une image et tirez la flèche jusqu’à l’arrivée.', (gameContainer.clientWidth || 200) / 2, 40);
+        showTip(tipText(), (gameContainer.clientWidth || 200) / 2, 40);
       } else {
         hideTip();
         cancelDrag();
@@ -797,6 +815,10 @@
       e.preventDefault();
       e.stopPropagation();
       setLinkMode(!linkModeActive);
+    });
+    gameContainer.addEventListener('contextmenu', function (e) {
+      if (!linkModeActive) return;
+      e.preventDefault();
     });
 
     var svg = gameContainer.querySelector('svg.dnd-links-layer');
@@ -904,6 +926,7 @@
         (function (linkIndex) {
           hit.addEventListener('pointerdown', function (e) {
             if (!linkModeActive) return;
+            if (e.button != null && e.button !== 0) return;
             e.preventDefault();
             e.stopPropagation();
             removeLinkAt(linkIndex);
@@ -924,7 +947,7 @@
       }
       dragState = null;
       if (linkModeActive) {
-        showTip(game.linkTooltip || 'Maintenez le clic sur une image et tirez la flèche jusqu’à l’arrivée.', (gameContainer.clientWidth || 200) / 2, 40);
+        showTip(tipText(), (gameContainer.clientWidth || 200) / 2, 40);
       } else {
         hideTip();
       }
@@ -951,7 +974,7 @@
       svg.style.pointerEvents = 'none';
       fromEl.classList.add('dnd-link-from', 'dnd-selected');
       dragState = { fromId: id, fromEl: fromEl, line: line };
-      showTip('Tirez jusqu’à l’image d’arrivée, puis relâchez.', pt.x, pt.y);
+      showTip('Maintenez le clic droit et tirez jusqu’à l’image d’arrivée.', pt.x, pt.y);
     }
 
     function moveDrag(clientX, clientY) {
@@ -959,7 +982,7 @@
       var pt = localPoint(clientX, clientY);
       dragState.line.setAttribute('x2', String(pt.x));
       dragState.line.setAttribute('y2', String(pt.y));
-      showTip('Tirez jusqu’à l’image d’arrivée, puis relâchez.', pt.x, pt.y);
+      showTip('Maintenez le clic droit et tirez jusqu’à l’image d’arrivée.', pt.x, pt.y);
     }
 
     function endDrag(clientX, clientY) {
@@ -972,13 +995,14 @@
         if (toId && String(toId) !== String(fromId)) addLink(fromId, toId);
       }
       if (linkModeActive) {
-        showTip(game.linkTooltip || 'Maintenez le clic sur une image et tirez la flèche jusqu’à l’arrivée.', (gameContainer.clientWidth || 200) / 2, 40);
+        showTip(tipText(), (gameContainer.clientWidth || 200) / 2, 40);
       }
     }
 
     function onPointerDown(e) {
       if (!linkModeActive) return;
-      if (e.button != null && e.button !== 0) return;
+      // Clic droit uniquement — le clic gauche reste pour le pan
+      if (e.button != null && e.button !== 2) return;
       var el = e.currentTarget;
       e.preventDefault();
       e.stopPropagation();
@@ -1109,7 +1133,7 @@
     var instructionsEl = gameContainer.querySelector('.dnd-instructions');
     var instructionsText = String(game.instructions || '').trim();
     if (!instructionsText && game.showInstructions !== false) {
-      instructionsText = 'Cliquez sur Relier, puis maintenez le clic sur une image et tirez jusqu’à l’arrivée.';
+      instructionsText = 'Cliquez sur le bouton flèche, puis maintenez le clic droit sur une image et tirez jusqu’à l’arrivée.';
     }
     var showInstructions = game.showInstructions !== false && !!instructionsText;
     if (showInstructions && !instructionsEl) {

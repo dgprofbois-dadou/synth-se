@@ -139,6 +139,20 @@ function rebuild() {
   z-index: 6;
   overflow: visible;
 }
+.dnd-relier-btn {
+  width: 52px;
+  height: 52px;
+  padding: 0 !important;
+  border-radius: 50% !important;
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+}
+.dnd-relier-btn .dnd-relier-icon {
+  display: block;
+  pointer-events: none;
+}
 .dnd-relier-btn.active {
   background: #ef6c00 !important;
 }
@@ -198,14 +212,50 @@ function rebuild() {
   overflow: visible;
 }
 .dnd-relier-btn.active { background: #ef6c00 !important; }
+.dnd-relier-btn {
+  width: 52px;
+  height: 52px;
+  padding: 0 !important;
+  border-radius: 50% !important;
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+}
+.dnd-relier-btn .dnd-relier-icon { display: block; pointer-events: none; }
 .dnd-link-mode .draggable,
 .dnd-link-mode .dnd-link-node { cursor: crosshair !important; }
 `;
   } else if (styleCss.indexOf('.dnd-relier-btn') < 0) {
     styleCss += `
+.dnd-relier-btn {
+  width: 52px;
+  height: 52px;
+  padding: 0 !important;
+  border-radius: 50% !important;
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+}
+.dnd-relier-btn .dnd-relier-icon { display: block; pointer-events: none; }
 .dnd-relier-btn.active { background: #ef6c00 !important; }
 .dnd-link-mode .draggable,
 .dnd-link-mode .dnd-link-node { cursor: crosshair !important; }
+`;
+  } else if (styleCss.indexOf('.dnd-relier-icon') < 0) {
+    styleCss += `
+.dnd-relier-btn {
+  width: 52px;
+  height: 52px;
+  padding: 0 !important;
+  border-radius: 50% !important;
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+}
+.dnd-relier-btn .dnd-relier-icon { display: block; pointer-events: none; }
 `;
   }
 

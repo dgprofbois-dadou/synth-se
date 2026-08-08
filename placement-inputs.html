@@ -1047,6 +1047,20 @@
             z-index: 6;
             overflow: visible;
         }
+        .dnd-relier-btn {
+            width: 52px;
+            height: 52px;
+            padding: 0 !important;
+            border-radius: 50% !important;
+            display: inline-flex !important;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+        }
+        .dnd-relier-btn .dnd-relier-icon {
+            display: block;
+            pointer-events: none;
+        }
         .dnd-relier-btn.active {
             background: #ef6c00 !important;
         }
@@ -15063,8 +15077,8 @@
                     + '<label style="width:auto;font-size:12px;font-weight:bold;margin-top:4px;">Paires correctes (flèches)</label>'
                     + '<textarea id="dndGame' + n + 'AllowedLinks" rows="4" placeholder="Une paire par ligne : idDépart&gt;idArrivée&#10;Ex :&#10;1&gt;3&#10;2&gt;4" style="width:100%;resize:vertical;font-size:12px;padding:6px;border:1px solid #ccc;border-radius:6px;box-sizing:border-box;font-family:monospace;"></textarea>'
                     + '<label style="width:auto;font-size:12px;font-weight:bold;margin-top:4px;">Tooltip Relier</label>'
-                    + '<input id="dndGame' + n + 'LinkTooltip" type="text" placeholder="Maintenez le clic… tirez jusqu’à l’arrivée" style="width:100%;font-size:12px;padding:6px;box-sizing:border-box;">'
-                    + '<p style="margin:0;font-size:10px;color:#64748b;">L’élève clique Relier, puis maintient le clic et tire la flèche. Peut se combiner avec un autre type de jeu.</p>'
+                    + '<input id="dndGame' + n + 'LinkTooltip" type="text" placeholder="Clic droit maintenu… tirez jusqu’à l’arrivée" style="width:100%;font-size:12px;padding:6px;box-sizing:border-box;">'
+                    + '<p style="margin:0;font-size:10px;color:#64748b;">L’élève active le bouton flèche, puis maintient le <strong>clic droit</strong> pour tracer (le clic gauche reste pour déplacer la vue). Peut se combiner avec un autre type de jeu.</p>'
                     + '</div>'
                     + '<div class="row" style="gap:12px;flex-wrap:wrap;">'
                     + '<label style="width:auto;"><input type="checkbox" id="dndGame' + n + 'ShowScore" checked> Afficher score</label>'

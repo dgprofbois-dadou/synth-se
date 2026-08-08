@@ -722,7 +722,12 @@
     ].join(',');
 
     function isInteractiveTarget(t) {
-      return !!(t && t.closest && t.closest(INTERACTIVE_SELECTOR));
+      if (!t || !t.closest) return false;
+      // Mode Relier actif : clic gauche = pan (les flèches se tracent au clic droit)
+      if (t.closest('.dnd-link-mode')) {
+        return !!(t.closest('.dnd-relier-btn, .dnd-verify-btn, .dnd-next-step-btn, button, input, textarea, select, a, label, .pdf-buttons, .controls, .mobile-zoom-bar, #btnFullscreen'));
+      }
+      return !!t.closest(INTERACTIVE_SELECTOR);
     }
 
     function getViewport() {
