@@ -25,12 +25,14 @@ node rebuild-mq-export-runtime.js --extract
 |-----------|-------------|
 | `instructions` | Consigne unique (si `enableSteps` est off) |
 | `showInstructions` | Afficher les consignes (défaut `true`) |
+| `instructionsBox` | Disposition consignes : `{ x, y, width, height, font, fontSize, bold, italic, align, bgColor, color, borderColor }` |
 | `enableSteps` | Jeu par étapes avec consignes successives |
 | `steps` | Liste d’étapes `{ id, title, instructions, zoneIds, goodIds, linkPairs }` |
 | `allowedLinks` | Paires `{ from, to }` pour le type `linking` |
 | `linkMode` | `one-to-one` (défaut) ou `one-to-many` |
 | `enableLinking` | Active les flèches **en plus** d’un autre type de jeu |
 | `linkTooltip` | Texte d’aide (défaut : clic droit maintenu) |
+| `relierBtn` | Position/taille du bouton flèche `{ x, y, size }` |
 
 ### Jeu par étapes (`enableSteps`)
 
@@ -43,9 +45,9 @@ La consigne de l’étape N s’affiche dès que l’étape N−1 est réussie. 
 
 ### Type `linking` / option Relier
 
-- Bouton **flèche** (icône) → active le mode Relier.
+- Bouton **flèche** (icône) → active le mode Relier — **glissable** + **poignée de taille** en admin.
 - **Clic droit maintenu** sur une image, puis **tirer** jusqu’à l’arrivée (flèche élastique orange).
-- Le **clic gauche** reste libre pour le **pan** de la page (plus de conflit).
+- Le **clic gauche** seul déplace la vue (**pas de pan au clic droit**).
 - Tooltip d’explication sur le bouton et pendant la manip.
 - Peut être utilisé seul (`gameType: linking`) ou combiné (`enableLinking: true` + selection/exact/…).
 - Score = score DnD + nombre de paires correctes.

@@ -145,8 +145,10 @@
     } else {
       g.linkTooltip = String(g.linkTooltip);
     }
+    g.relierBtn = normalizeRelierBtn(g.relierBtn, g);
     if (typeof g.enableSteps !== 'boolean') g.enableSteps = false;
     g.steps = normalizeSteps(g.steps);
+    g.instructionsBox = normalizeInstructionsBox(g.instructionsBox, g);
     if (g.enableSteps && (!g.steps || !g.steps.length) && String(g.instructions || '').trim()) {
       g.steps = [normalizeStep({
         title: 'Étape 1',
@@ -339,6 +341,87 @@
       isComplete: maxScore > 0 && score >= maxScore && wrong.length === 0,
       gameType: 'linking'
     };
+  }
+
+  function normalizeInstructionsBox(raw, game) {
+    var src = raw && typeof raw === 'object' ? raw : {};
+    var tb = (game && game.titleBox) || {};
+    var gw = Math.max(200, parseInt(game && game.width, 10) || 800);
+    var defaultY = (typeof tb.y === 'number' ? tb.y : 10) + (typeof tb.height === 'number' ? tb.height : 80) + 10;
+    var align = src.align === 'left' || src.align === 'right' ? src.align : 'center';
+    return {
+      x: typeof src.x === 'number' ? src.x : 20,
+      y: typeof src.y === 'number' ? src.y : defaultY,
+      width: typeof src.width === 'number' ? Math.max(80, src.width) : Math.max(200, gw - 40),
+      height: typeof src.height === 'number' ? Math.max(40, src.height) : 90,
+      font: src.font != null && String(src.font).trim() ? String(src.font) : 'Verdana, sans-serif',
+      fontSize: Math.max(10, parseInt(src.fontSize, 10) || 22),
+      bold: src.bold === false ? false : (src.bold != null ? !!src.bold : true),
+      italic: !!src.italic,
+      align: align,
+      bgColor: src.bgColor != null && String(src.bgColor).trim() ? String(src.bgColor) : '#fff8e1',
+      color: src.color != null && String(src.color).trim() ? String(src.color) : '#78350f',
+      borderColor: src.borderColor != null && String(src.borderColor).trim() ? String(src.borderColor) : '#f59e0b'
+    };
+  }
+
+  /** Bouton Relier (flèche) : position + taille carrée. */
+  function normalizeRelierBtn(raw, game) {
+    var src = raw && typeof raw === 'object' ? raw : {};
+    var gw = Math.max(200, parseInt(game && game.width, 10) || 800);
+    var gh = Math.max(100, parseInt(game && game.height, 10) || 400);
+    var size = typeof src.size === 'number' ? src.size
+      : (typeof src.width === 'number' ? src.width
+        : (typeof src.height === 'number' ? src.height : 52));
+    size = Math.max(28, Math.min(180, Math.round(size) || 52));
+    var x = typeof src.x === 'number' ? Math.round(src.x) : Math.round(gw * 0.02);
+    var y = typeof src.y === 'number' ? Math.round(src.y) : Math.max(0, Math.round(gh * 0.90 - size));
+    return { x: x, y: y, size: size, width: size, height: size };
+  }
+
+  function applyRelierBtnLayout(btn, game) {
+    if (!btn || !game) return normalizeRelierBtn(null, game);
+    var box = normalizeRelierBtn(game.relierBtn, game);
+    game.relierBtn = box;
+    btn.style.position = 'absolute';
+    btn.style.left = box.x + 'px';
+    btn.style.top = box.y + 'px';
+    btn.style.right = 'auto';
+    btn.style.bottom = 'auto';
+    btn.style.width = box.size + 'px';
+    btn.style.height = box.size + 'px';
+    var iconSize = Math.max(14, Math.round(box.size * 0.55));
+    var svg = btn.querySelector && btn.querySelector('svg.dnd-relier-icon, svg');
+    if (svg) {
+      svg.setAttribute('width', String(iconSize));
+      svg.setAttribute('height', String(iconSize));
+    }
+    return box;
+  }
+
+  function applyInstructionsBoxToElement(el, game) {
+    if (!el || !game) return;
+    var box = normalizeInstructionsBox(game.instructionsBox, game);
+    game.instructionsBox = box;
+    var gw = Math.max(1, parseInt(game.width, 10) || 800);
+    var gh = Math.max(1, parseInt(game.height, 10) || 400);
+    el.style.left = ((box.x / gw) * 100) + '%';
+    el.style.top = ((box.y / gh) * 100) + '%';
+    el.style.width = ((box.width / gw) * 100) + '%';
+    el.style.height = ((box.height / gh) * 100) + '%';
+    el.style.right = 'auto';
+    el.style.fontFamily = box.font;
+    el.style.fontSize = box.fontSize + 'px';
+    el.style.fontWeight = box.bold ? 'bold' : '600';
+    el.style.fontStyle = box.italic ? 'italic' : 'normal';
+    el.style.textAlign = box.align || 'center';
+    el.style.background = box.bgColor;
+    el.style.color = box.color;
+    el.style.borderColor = box.borderColor;
+    el.style.borderStyle = 'solid';
+    el.style.borderWidth = '2px';
+    el.style.overflow = 'auto';
+    el.style.boxSizing = 'border-box';
   }
 
   function normalizeStep(raw, index) {
@@ -768,13 +851,14 @@
       btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'dnd-relier-btn';
-      btn.style.cssText = 'position:absolute;left:2%;bottom:10%;z-index:12;pointer-events:auto;width:52px;height:52px;padding:0;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;border:none;border-radius:50%;background:#1565c0;color:#fff;box-shadow:0 2px 8px rgba(0,0,0,0.25);';
+      btn.style.cssText = 'position:absolute;z-index:12;pointer-events:auto;padding:0;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;border:none;border-radius:50%;background:#1565c0;color:#fff;box-shadow:0 2px 8px rgba(0,0,0,0.25);';
       gameContainer.appendChild(btn);
     }
     btn.innerHTML = ARROW_BTN_SVG;
     btn.title = BTN_TIP;
     btn.setAttribute('aria-label', BTN_TIP);
     btn.setAttribute('aria-pressed', 'false');
+    applyRelierBtnLayout(btn, game);
 
     function setLinkMode(on) {
       linkModeActive = !!on;
@@ -1143,16 +1227,11 @@
       gameContainer.appendChild(instructionsEl);
     }
     if (instructionsEl) {
-      var tbPos = game.titleBox || gameConfig.titleBox || null;
-      var gH = game.height || gameContainer.clientHeight || 400;
-      var topPct = 8;
-      if (tbPos && typeof tbPos.y === 'number') {
-        topPct = Math.min(70, Math.max(2, (((tbPos.y || 0) + (tbPos.height || 0) + 10) / Math.max(1, gH)) * 100));
-      }
-      if (!instructionsEl.style.top) instructionsEl.style.top = topPct + '%';
+      applyInstructionsBoxToElement(instructionsEl, game);
       if (showInstructions) {
         instructionsEl.textContent = instructionsText;
         instructionsEl.hidden = false;
+        instructionsEl.style.display = '';
       } else {
         instructionsEl.hidden = true;
         instructionsEl.style.display = 'none';
@@ -1217,16 +1296,8 @@
         instructionsEl.setAttribute('role', 'status');
         instructionsEl.setAttribute('aria-live', 'polite');
         gameContainer.appendChild(instructionsEl);
-        var tbPos = game.titleBox || gameConfig.titleBox || null;
-        var gH = game.height || gameContainer.clientHeight || 400;
-        var topPct = 8;
-        if (tbPos && typeof tbPos.y === 'number') {
-          topPct = (((tbPos.y || 0) + (tbPos.height || 0) + 10) / Math.max(1, gH)) * 100;
-          if (topPct < 2) topPct = 2;
-          if (topPct > 70) topPct = 70;
-        }
-        instructionsEl.style.top = topPct + '%';
       }
+      applyInstructionsBoxToElement(instructionsEl, game);
       return instructionsEl;
     }
 
@@ -1870,6 +1941,10 @@
     normalizeStep: normalizeStep,
     normalizeSteps: normalizeSteps,
     evaluateStep: evaluateStep,
-    getStepsState: getStepsState
+    getStepsState: getStepsState,
+    normalizeInstructionsBox: normalizeInstructionsBox,
+    applyInstructionsBoxToElement: applyInstructionsBoxToElement,
+    normalizeRelierBtn: normalizeRelierBtn,
+    applyRelierBtnLayout: applyRelierBtnLayout
   };
 });

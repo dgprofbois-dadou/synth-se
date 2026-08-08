@@ -1000,22 +1000,21 @@
         }
         .dnd-instructions {
             position: absolute;
-            left: 4%;
-            right: 4%;
             z-index: 5;
             pointer-events: none;
             box-sizing: border-box;
             padding: 10px 14px;
             border-radius: 12px;
-            background: rgba(255, 248, 225, 0.96);
+            background: #fff8e1;
             border: 2px solid #f59e0b;
             color: #78350f;
-            font-size: clamp(14px, 2.2vw, 22px);
+            font-size: 22px;
             font-weight: 600;
             text-align: center;
             line-height: 1.35;
             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
             white-space: pre-wrap;
+            overflow: auto;
         }
         .dnd-game-complete .dnd-instructions,
         .dnd-instructions.dnd-instructions-done {
@@ -1078,14 +1077,13 @@
         .dnd-link-line.dnd-link-bad { stroke: #d32f2f; }
         .dnd-instructions-preview {
             position: absolute;
-            left: 4%;
-            right: 4%;
             z-index: 4;
-            pointer-events: none;
+            pointer-events: auto;
+            cursor: move;
             box-sizing: border-box;
             padding: 8px 12px;
             border-radius: 10px;
-            background: rgba(255, 248, 225, 0.9);
+            background: #fff8e1;
             border: 2px dashed #f59e0b;
             color: #78350f;
             font-size: 14px;
@@ -1093,6 +1091,7 @@
             text-align: center;
             line-height: 1.3;
             white-space: pre-wrap;
+            overflow: hidden;
             opacity: 0.95;
         }
         .mq-dz-cards { display:flex; flex-wrap:wrap; gap:4px; margin-top:6px; }
@@ -3737,6 +3736,7 @@
                         bgColor: 'rgba(255, 255, 255, 1)',
                         // Zone titre (draggable)
                         titleBox: { x: 10, y: 10, width: 600, height: 80 },
+                        instructionsBox: { x: 20, y: 100, width: 760, height: 90, font: 'Verdana, sans-serif', fontSize: 22, bold: true, italic: false, align: 'center', bgColor: '#fff8e1', color: '#78350f', borderColor: '#f59e0b' },
                         // Zones de dépôt (draggables)
                         dropzones: [
                             { id: 1, x: 10, y: 250, width: 250, height: 250 },
@@ -3772,6 +3772,7 @@
                         bgColor: 'rgba(255, 255, 255, 1)',
                         // Zone titre (draggable)
                         titleBox: { x: 10, y: 10, width: 500, height: 70 },
+                        instructionsBox: { x: 20, y: 90, width: 660, height: 80, font: 'Verdana, sans-serif', fontSize: 20, bold: true, italic: false, align: 'center', bgColor: '#fff8e1', color: '#78350f', borderColor: '#f59e0b' },
                         // Zones de dépôt (draggables)
                         dropzones: [
                             { id: 1, x: 10, y: 220, width: 80, height: 80 },
@@ -6991,6 +6992,8 @@
             }
 
             viewport.addEventListener('pointerdown', (e) => {
+                // Pan uniquement au clic gauche — le clic droit sert au tracé Relier (flèches)
+                if (e.button !== 0) return;
                 // Pas de pan pendant le dessin de hotspot
                 if (drawingHotspot && state.mode === 'admin') return;
                 // BLOQUER LE PAN si Ctrl est enfoncé (pour manipulation des éléments DnD)
@@ -7004,7 +7007,8 @@
                     e.target.closest('.box') ||
                     e.target.closest('.hotspot-group') ||
                     e.target.closest('#hotspots-ui') ||
-                    e.target.closest('#mqCtxBar')
+                    e.target.closest('#mqCtxBar') ||
+                    e.target.closest('.dnd-relier-btn')
                 )) return;
 
                 mqSetPanning(true);
@@ -9532,6 +9536,8 @@
                 if (!g) return null;
                 let obj = null;
                 if (sel.type === 'title') obj = g.titleBox;
+                else if (sel.type === 'instructions') obj = g.instructionsBox;
+                else if (sel.type === 'relierBtn') obj = g.relierBtn;
                 else if (sel.type === 'draggable') obj = (g.draggables || [])[parseInt(sel.index)];
                 else if (sel.type === 'dropzone') obj = (g.dropzones || [])[parseInt(sel.index)];
                 else if (sel.type === 'decor') obj = (g.decorImages || [])[parseInt(sel.index)];
@@ -10879,6 +10885,7 @@
                         bgColor: 'rgba(255, 255, 255, 1)',
                         zoneWidth: 250, zoneHeight: 250, zoneGap: 10,
                         titleBox: { x: 10, y: 10, width: 600, height: 80 },
+                        instructionsBox: { x: 20, y: 100, width: 760, height: 90, font: 'Verdana, sans-serif', fontSize: 22, bold: true, italic: false, align: 'center', bgColor: '#fff8e1', color: '#78350f', borderColor: '#f59e0b' },
                         header: { width: 600, height: 80, font: 'Verdana, sans-serif', fontSize: 60 },
                         dropzones: [
                             { id: 1, x: 10, y: 250, width: 250, height: 250 },
@@ -10903,6 +10910,7 @@
                         bgColor: 'rgba(255, 255, 255, 1)',
                         zoneWidth: 250, zoneHeight: 250, zoneGap: 10,
                         titleBox: { x: 10, y: 10, width: 500, height: 70 },
+                        instructionsBox: { x: 20, y: 90, width: 660, height: 80, font: 'Verdana, sans-serif', fontSize: 20, bold: true, italic: false, align: 'center', bgColor: '#fff8e1', color: '#78350f', borderColor: '#f59e0b' },
                         header: { width: 500, height: 70, font: 'Verdana, sans-serif', fontSize: 50 },
                         dropzones: [
                             { id: 1, x: 10, y: 220, width: 80, height: 80 },
@@ -10937,6 +10945,7 @@
                         bgColor: 'rgba(255, 255, 255, 1)',
                         zoneWidth: 250, zoneHeight: 250, zoneGap: 10,
                         titleBox: { x: 10, y: 10, width: 600, height: 80 },
+                        instructionsBox: { x: 20, y: 100, width: 760, height: 90, font: 'Verdana, sans-serif', fontSize: 22, bold: true, italic: false, align: 'center', bgColor: '#fff8e1', color: '#78350f', borderColor: '#f59e0b' },
                         header: { width: 600, height: 80, font: 'Verdana, sans-serif', fontSize: 60 },
                         decorImages: [],
                         decorTexts: [],
@@ -11016,6 +11025,16 @@
                     }, d))
                     : [];
                 g.titleBox = Object.assign({}, defaults.titleBox || {}, (saved && saved.titleBox) || {});
+                g.instructionsBox = Object.assign({
+                    x: 20, y: 100, width: Math.max(200, (g.width || defaults.width || 800) - 40), height: 90,
+                    font: 'Verdana, sans-serif', fontSize: 22, bold: true, italic: false, align: 'center',
+                    bgColor: '#fff8e1', color: '#78350f', borderColor: '#f59e0b'
+                }, defaults.instructionsBox || {}, (saved && saved.instructionsBox) || g.instructionsBox || {});
+                g.relierBtn = Object.assign({
+                    x: Math.round((g.width || defaults.width || 800) * 0.02),
+                    y: Math.max(0, Math.round((g.height || defaults.height || 400) * 0.90 - 52)),
+                    size: 52
+                }, defaults.relierBtn || {}, (saved && saved.relierBtn) || g.relierBtn || {});
                 g.header = Object.assign({}, defaults.header || {}, (saved && saved.header) || {});
                 const ttDef = defaults.tooltip || {};
                 const ttSaved = (saved && saved.tooltip) || {};
@@ -11110,6 +11129,22 @@
                     if (el('EnableSteps')) g.enableSteps = el('EnableSteps').checked;
                     if (g.enableSteps) {
                         g.steps = mqReadStepsFromUI(n);
+                    }
+                    if (!g.instructionsBox) g.instructionsBox = {};
+                    if (el('InstrX')) g.instructionsBox.x = parseInt(val('InstrX'), 10) || 0;
+                    if (el('InstrY')) g.instructionsBox.y = parseInt(val('InstrY'), 10) || 0;
+                    if (el('InstrW')) g.instructionsBox.width = Math.max(80, parseInt(val('InstrW'), 10) || 200);
+                    if (el('InstrH')) g.instructionsBox.height = Math.max(40, parseInt(val('InstrH'), 10) || 60);
+                    if (el('InstrFont')) g.instructionsBox.font = val('InstrFont') || 'Verdana, sans-serif';
+                    if (el('InstrFontSize')) g.instructionsBox.fontSize = Math.max(10, parseInt(val('InstrFontSize'), 10) || 22);
+                    if (el('InstrBold')) g.instructionsBox.bold = el('InstrBold').checked;
+                    if (el('InstrItalic')) g.instructionsBox.italic = el('InstrItalic').checked;
+                    if (el('InstrAlign')) g.instructionsBox.align = val('InstrAlign') || 'center';
+                    if (el('InstrBg')) g.instructionsBox.bgColor = val('InstrBg') || '#fff8e1';
+                    if (el('InstrColor')) g.instructionsBox.color = val('InstrColor') || '#78350f';
+                    if (el('InstrBorder')) g.instructionsBox.borderColor = val('InstrBorder') || '#f59e0b';
+                    if (window.MqDndEngine && MqDndEngine.normalizeInstructionsBox) {
+                        g.instructionsBox = MqDndEngine.normalizeInstructionsBox(g.instructionsBox, g);
                     }
                     if (el('EnableLinking')) g.enableLinking = el('EnableLinking').checked || (g.gameType === 'linking');
                     if (g.gameType === 'linking') g.enableLinking = true;
@@ -12499,24 +12534,26 @@
                     const instrPrev = String(g.instructions || '').trim();
                     const stepsOn = !!(g.enableSteps && Array.isArray(g.steps) && g.steps.length);
                     if (g.showInstructions !== false) {
-                        const instrY = (tb.y || 0) + (tb.height || 0) + 10;
+                        const ib = (window.MqDndEngine && MqDndEngine.normalizeInstructionsBox)
+                            ? MqDndEngine.normalizeInstructionsBox(g.instructionsBox, g)
+                            : Object.assign({ x: 20, y: (tb.y || 0) + (tb.height || 0) + 10, width: Math.max(200, (g.width || 800) - 40), height: 90, font: 'Verdana, sans-serif', fontSize: 22, bold: true, italic: false, align: 'center', bgColor: '#fff8e1', color: '#78350f', borderColor: '#f59e0b' }, g.instructionsBox || {});
+                        g.instructionsBox = ib;
+                        let previewText = '';
                         if (stepsOn) {
-                            const lines = g.steps.map((s, i) => (i + 1) + '. ' + (s.title || ('Étape ' + (i + 1))) + ' — ' + String(s.instructions || '').trim()).filter(Boolean);
-                            if (lines.length) {
-                                const safeInstr = lines.join('\n').replace(/&/g, '&amp;').replace(/</g, '&lt;');
-                                html += `
-                            <div class="dnd-instructions-preview" data-game="${gameId}"
-                                 style="top: ${instrY}px; white-space:pre-wrap; text-align:left;" title="Étapes (aperçu admin)">${safeInstr}</div>`;
-                            }
-                        } else if (instrPrev) {
-                            const safeInstr = instrPrev
-                                .replace(/&/g, '&amp;')
-                                .replace(/</g, '&lt;')
-                                .replace(/>/g, '&gt;');
-                            html += `
-                            <div class="dnd-instructions-preview" data-game="${gameId}"
-                                 style="top: ${instrY}px;" title="Consignes (aperçu admin)">${safeInstr}</div>`;
+                            previewText = g.steps.map((s, i) => (i + 1) + '. ' + (s.title || ('Étape ' + (i + 1))) + ' — ' + String(s.instructions || '').trim()).filter(Boolean).join('\n');
+                        } else {
+                            previewText = instrPrev;
                         }
+                        const safeInstr = (previewText || 'Consignes…')
+                            .replace(/&/g, '&amp;')
+                            .replace(/</g, '&lt;')
+                            .replace(/>/g, '&gt;');
+                        html += `
+                            <div class="dnd-element dnd-instructions-preview" data-game="${gameId}" data-type="instructions"
+                                 style="left:${ib.x}px;top:${ib.y}px;width:${ib.width}px;height:${ib.height}px;z-index:4;font-family:${ib.font};font-size:${ib.fontSize}px;font-weight:${ib.bold ? 'bold' : '600'};font-style:${ib.italic ? 'italic' : 'normal'};text-align:${ib.align || 'center'};background:${ib.bgColor};color:${ib.color};border-color:${ib.borderColor};${!previewText ? 'opacity:0.7;' : ''}"
+                                 title="Consignes — glisser / redimensionner">${safeInstr}
+                                <div class="dnd-element-handle" data-game="${gameId}" data-type="instructions"></div>
+                            </div>`;
                     }
 
                     if ((g.gameType === 'linking' || g.enableLinking) && Array.isArray(g.allowedLinks) && g.allowedLinks.length) {
@@ -12593,6 +12630,26 @@
                                 <div class="dnd-element-handle" data-game="${gameId}" data-type="decorText" data-index="${idx}"></div>
                             </div>`;
                     });
+
+                    if (g.gameType === 'linking' || g.enableLinking) {
+                        const rb = (window.MqDndEngine && MqDndEngine.normalizeRelierBtn)
+                            ? MqDndEngine.normalizeRelierBtn(g.relierBtn, g)
+                            : Object.assign({ x: Math.round((g.width || 800) * 0.02), y: Math.max(0, Math.round((g.height || 400) * 0.9 - 52)), size: 52 }, g.relierBtn || {});
+                        g.relierBtn = rb;
+                        const iconSz = Math.max(14, Math.round(rb.size * 0.55));
+                        html += `
+                            <div class="dnd-element dnd-relier-preview" data-game="${gameId}" data-type="relierBtn"
+                                 title="Bouton Relier — glisser pour positionner, poignée pour la taille"
+                                 style="left:${rb.x}px;top:${rb.y}px;width:${rb.size}px;height:${rb.size}px;z-index:12;border-radius:50%;background:#1565c0;color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(0,0,0,0.25);box-sizing:border-box;border:3px solid #fff;">
+                                <svg class="dnd-relier-icon" width="${iconSz}" height="${iconSz}" viewBox="0 0 24 24" aria-hidden="true" focusable="false" style="pointer-events:none;">
+                                    <circle cx="5" cy="12" r="2.4" fill="currentColor"/>
+                                    <circle cx="19" cy="5" r="2.4" fill="currentColor"/>
+                                    <path d="M7.2 11.2 L16.2 6.2" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>
+                                    <path d="M13.2 4.2 L17.2 5.2 L15.4 8.8" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+                                </svg>
+                                <div class="dnd-element-handle" data-game="${gameId}" data-type="relierBtn"></div>
+                            </div>`;
+                    }
 
                     html += `
                         </div>`;
@@ -12701,6 +12758,14 @@
                         const g0 = state.dndGames[gameId];
                         let ox = 0, oy = 0;
                         if (type === 'title') { ox = g0.titleBox.x || 0; oy = g0.titleBox.y || 0; }
+                        else if (type === 'instructions') {
+                            if (!g0.instructionsBox) g0.instructionsBox = {};
+                            ox = g0.instructionsBox.x || 0; oy = g0.instructionsBox.y || 0;
+                        }
+                        else if (type === 'relierBtn') {
+                            if (!g0.relierBtn) g0.relierBtn = {};
+                            ox = g0.relierBtn.x || 0; oy = g0.relierBtn.y || 0;
+                        }
                         else if (type === 'draggable') { ox = (g0.draggables[idx0].x) || 0; oy = (g0.draggables[idx0].y) || 0; }
                         else if (type === 'dropzone') { ox = (g0.dropzones[idx0].x) || 0; oy = (g0.dropzones[idx0].y) || 0; }
                         else if (type === 'decor') { const a = (g0.decorImages || [])[idx0] || {}; ox = a.x || 0; oy = a.y || 0; }
@@ -12754,6 +12819,22 @@
                         if (type === 'title') {
                             state.dndGames[gameId].titleBox.x = newX;
                             state.dndGames[gameId].titleBox.y = newY;
+                        } else if (type === 'instructions') {
+                            if (!state.dndGames[gameId].instructionsBox) state.dndGames[gameId].instructionsBox = {};
+                            state.dndGames[gameId].instructionsBox.x = newX;
+                            state.dndGames[gameId].instructionsBox.y = newY;
+                            const n = mqGameNum(gameId);
+                            const xEl = document.getElementById('dndGame' + n + 'InstrX');
+                            const yEl = document.getElementById('dndGame' + n + 'InstrY');
+                            if (xEl) xEl.value = newX;
+                            if (yEl) yEl.value = newY;
+                        } else if (type === 'relierBtn') {
+                            if (!state.dndGames[gameId].relierBtn) state.dndGames[gameId].relierBtn = { size: 52 };
+                            state.dndGames[gameId].relierBtn.x = newX;
+                            state.dndGames[gameId].relierBtn.y = newY;
+                            if (window.MqDndEngine && MqDndEngine.normalizeRelierBtn) {
+                                state.dndGames[gameId].relierBtn = MqDndEngine.normalizeRelierBtn(state.dndGames[gameId].relierBtn, state.dndGames[gameId]);
+                            }
                         } else if (type === 'draggable') {
                             state.dndGames[gameId].draggables[idx].x = newX;
                             state.dndGames[gameId].draggables[idx].y = newY;
@@ -12792,6 +12873,36 @@
                             const hEl = document.getElementById('dndGame' + mqGameNum(gameId) + 'HeaderHeight');
                             if (wEl) wEl.value = newWidth;
                             if (hEl) hEl.value = newHeight;
+                        } else if (type === 'instructions') {
+                            if (!state.dndGames[gameId].instructionsBox) state.dndGames[gameId].instructionsBox = {};
+                            state.dndGames[gameId].instructionsBox.width = newWidth;
+                            state.dndGames[gameId].instructionsBox.height = newHeight;
+                            const n = mqGameNum(gameId);
+                            const wEl = document.getElementById('dndGame' + n + 'InstrW');
+                            const hEl = document.getElementById('dndGame' + n + 'InstrH');
+                            if (wEl) wEl.value = newWidth;
+                            if (hEl) hEl.value = newHeight;
+                        } else if (type === 'relierBtn') {
+                            const size = Math.max(28, Math.min(180, Math.round(Math.max(
+                                resizeStartWidth + deltaX,
+                                resizeStartHeight + deltaY
+                            ))));
+                            if (!state.dndGames[gameId].relierBtn) state.dndGames[gameId].relierBtn = {};
+                            state.dndGames[gameId].relierBtn.size = size;
+                            state.dndGames[gameId].relierBtn.width = size;
+                            state.dndGames[gameId].relierBtn.height = size;
+                            if (window.MqDndEngine && MqDndEngine.normalizeRelierBtn) {
+                                state.dndGames[gameId].relierBtn = MqDndEngine.normalizeRelierBtn(state.dndGames[gameId].relierBtn, state.dndGames[gameId]);
+                            }
+                            el.style.width = size + 'px';
+                            el.style.height = size + 'px';
+                            const svg = el.querySelector('svg.dnd-relier-icon');
+                            if (svg) {
+                                const iconSz = Math.max(14, Math.round(size * 0.55));
+                                svg.setAttribute('width', String(iconSz));
+                                svg.setAttribute('height', String(iconSz));
+                            }
+                            return;
                         } else if (type === 'draggable') {
                             const idx = parseInt(index);
                             if (!state.dndGames[gameId].draggables[idx].width) state.dndGames[gameId].draggables[idx].width = 60;
@@ -12967,6 +13078,22 @@
                 if (el('ShowInstructions')) el('ShowInstructions').checked = g.showInstructions !== false;
                 if (el('Instructions')) el('Instructions').value = g.instructions || '';
                 if (el('EnableSteps')) el('EnableSteps').checked = !!g.enableSteps;
+                const ib = (window.MqDndEngine && MqDndEngine.normalizeInstructionsBox)
+                    ? MqDndEngine.normalizeInstructionsBox(g.instructionsBox, g)
+                    : (g.instructionsBox || {});
+                g.instructionsBox = ib;
+                if (el('InstrX')) el('InstrX').value = ib.x ?? 20;
+                if (el('InstrY')) el('InstrY').value = ib.y ?? 100;
+                if (el('InstrW')) el('InstrW').value = ib.width ?? 760;
+                if (el('InstrH')) el('InstrH').value = ib.height ?? 90;
+                if (el('InstrFont')) el('InstrFont').value = ib.font || 'Verdana, sans-serif';
+                if (el('InstrFontSize')) el('InstrFontSize').value = ib.fontSize ?? 22;
+                if (el('InstrBold')) el('InstrBold').checked = ib.bold !== false;
+                if (el('InstrItalic')) el('InstrItalic').checked = !!ib.italic;
+                if (el('InstrAlign')) el('InstrAlign').value = ib.align || 'center';
+                if (el('InstrBg')) el('InstrBg').value = ib.bgColor || '#fff8e1';
+                if (el('InstrColor')) el('InstrColor').value = ib.color || '#78350f';
+                if (el('InstrBorder')) el('InstrBorder').value = ib.borderColor || '#f59e0b';
                 if (typeof renderStepsList === 'function') renderStepsList(gameId);
                 if (typeof mqToggleStepsUI === 'function') mqToggleStepsUI(mqGameNum(gameId), !!g.enableSteps);
                 if (el('LinkMode')) el('LinkMode').value = g.linkMode || 'one-to-one';
@@ -13012,9 +13139,9 @@
                     const n = mqGameNum(gid);
                     const host = document.getElementById('dndGame' + n + 'AdvancedHost');
                     if (!host) return;
-                    if (!host.dataset.ready || host.dataset.ready !== 'steps-v1') {
+                    if (!host.dataset.ready || host.dataset.ready !== 'instr-box-v1') {
                         host.innerHTML = mqDndTypeControlsHTML(n);
-                        host.dataset.ready = 'steps-v1';
+                        host.dataset.ready = 'instr-box-v1';
                         const btn = document.getElementById('btnGenGridGame' + n);
                         if (btn) {
                             btn.addEventListener('click', () => mqGenerateDndGrid(gid, n));
@@ -13157,6 +13284,9 @@
                     showMalus: g.showMalus !== false,
                     showInstructions: g.showInstructions !== false,
                     instructions: g.instructions || '',
+                    instructionsBox: (window.MqDndEngine && MqDndEngine.normalizeInstructionsBox)
+                        ? MqDndEngine.normalizeInstructionsBox(g.instructionsBox, g)
+                        : (g.instructionsBox || null),
                     enableSteps: !!g.enableSteps,
                     steps: (g.enableSteps && Array.isArray(g.steps)) ? g.steps.map(function (s, i) {
                         const ns = (window.MqDndEngine && MqDndEngine.normalizeStep)
@@ -13174,6 +13304,9 @@
                     linkMode: g.linkMode || 'one-to-one',
                     enableLinking: !!(g.enableLinking || g.gameType === 'linking'),
                     linkTooltip: g.linkTooltip || '',
+                    relierBtn: (window.MqDndEngine && MqDndEngine.normalizeRelierBtn)
+                        ? MqDndEngine.normalizeRelierBtn(g.relierBtn, g)
+                        : (g.relierBtn || { x: 16, y: 300, size: 52 }),
                     allowedLinks: (g.allowedLinks || []).map(function (l) {
                         return { from: String(l.from), to: String(l.to) };
                     }),
@@ -13186,6 +13319,7 @@
                         width: tb.width || hBox.width || 600,
                         height: tb.height || hBox.height || 80
                     },
+                    width: G_W,
                     height: G_H,
                     dropzones: (g.dropzones || []).map(function (dz, i) {
                         return {
@@ -13223,13 +13357,19 @@
                     ? String((g.steps[0] && g.steps[0].instructions) || '').trim()
                     : String(g.instructions || '').trim();
                 if (g.showInstructions !== false && (instrText || stepsOnExport)) {
-                    const instrTop = Math.min(70, Math.max(2, (((tb.y || 0) + (tb.height || 0) + 10) / G_H) * 100));
+                    const ib = (window.MqDndEngine && MqDndEngine.normalizeInstructionsBox)
+                        ? MqDndEngine.normalizeInstructionsBox(g.instructionsBox, g)
+                        : Object.assign({ x: 20, y: (tb.y || 0) + (tb.height || 0) + 10, width: G_W - 40, height: 90, font: 'Verdana, sans-serif', fontSize: 22, bold: true, italic: false, align: 'center', bgColor: '#fff8e1', color: '#78350f', borderColor: '#f59e0b' }, g.instructionsBox || {});
+                    const ibX = ((ib.x || 0) / G_W) * 100;
+                    const ibY = ((ib.y || 0) / G_H) * 100;
+                    const ibW = ((ib.width || 200) / G_W) * 100;
+                    const ibH = ((ib.height || 60) / G_H) * 100;
                     const instrEsc = instrText
                         .replace(/&/g, '&amp;')
                         .replace(/</g, '&lt;')
                         .replace(/>/g, '&gt;')
                         .replace(/"/g, '&quot;');
-                    out += '\n                        <div class="dnd-instructions" role="status" aria-live="polite" style="top:' + instrTop + '%;">' + instrEsc + '</div>';
+                    out += '\n                        <div class="dnd-instructions" role="status" aria-live="polite" style="left:' + ibX + '%;top:' + ibY + '%;width:' + ibW + '%;height:' + ibH + '%;font-family:' + String(ib.font || 'Verdana, sans-serif').replace(/"/g, '&quot;') + ';font-size:' + (ib.fontSize || 22) + 'px;font-weight:' + (ib.bold !== false ? 'bold' : '600') + ';font-style:' + (ib.italic ? 'italic' : 'normal') + ';text-align:' + (ib.align || 'center') + ';background:' + (ib.bgColor || '#fff8e1') + ';color:' + (ib.color || '#78350f') + ';border-color:' + (ib.borderColor || '#f59e0b') + ';">' + instrEsc + '</div>';
                 }
                 out += '\n                        <div id="targets" style="position:absolute; inset:0; z-index:1; box-sizing:border-box; pointer-events:none;">';
                 out += (g.dropzones || []).map(function (dz, i) {
@@ -15078,13 +15218,38 @@
                     + '<textarea id="dndGame' + n + 'AllowedLinks" rows="4" placeholder="Une paire par ligne : idDépart&gt;idArrivée&#10;Ex :&#10;1&gt;3&#10;2&gt;4" style="width:100%;resize:vertical;font-size:12px;padding:6px;border:1px solid #ccc;border-radius:6px;box-sizing:border-box;font-family:monospace;"></textarea>'
                     + '<label style="width:auto;font-size:12px;font-weight:bold;margin-top:4px;">Tooltip Relier</label>'
                     + '<input id="dndGame' + n + 'LinkTooltip" type="text" placeholder="Clic droit maintenu… tirez jusqu’à l’arrivée" style="width:100%;font-size:12px;padding:6px;box-sizing:border-box;">'
-                    + '<p style="margin:0;font-size:10px;color:#64748b;">L’élève active le bouton flèche, puis maintient le <strong>clic droit</strong> pour tracer (le clic gauche reste pour déplacer la vue). Peut se combiner avec un autre type de jeu.</p>'
+                    + '<p style="margin:0;font-size:10px;color:#64748b;">L’élève active le bouton flèche, puis maintient le <strong>clic droit</strong> pour tracer (le clic gauche = déplacer la vue). En admin : glisser le bouton pour le positionner, poignée pour la taille.</p>'
                     + '</div>'
                     + '<div class="row" style="gap:12px;flex-wrap:wrap;">'
                     + '<label style="width:auto;"><input type="checkbox" id="dndGame' + n + 'ShowScore" checked> Afficher score</label>'
                     + '<label style="width:auto;"><input type="checkbox" id="dndGame' + n + 'ShowMalus" checked> Afficher malus</label>'
                     + '<label style="width:auto;"><input type="checkbox" id="dndGame' + n + 'ShowInstructions" checked> Afficher consignes</label>'
                     + '<label style="width:auto;"><input type="checkbox" id="dndGame' + n + 'EnableSteps"> Jeu par étapes</label>'
+                    + '</div>'
+                    + '<div class="row" style="flex-direction:column;align-items:stretch;gap:4px;">'
+                    + '<label style="width:auto;font-size:12px;font-weight:bold;">Disposition consignes (déplaçable sur le canvas)</label>'
+                    + '<div style="display:flex;flex-wrap:wrap;gap:4px;align-items:center;font-size:11px;">'
+                    + '<label>X <input id="dndGame' + n + 'InstrX" type="number" value="20" style="width:52px;font-size:11px;padding:2px;"></label>'
+                    + '<label>Y <input id="dndGame' + n + 'InstrY" type="number" value="100" style="width:52px;font-size:11px;padding:2px;"></label>'
+                    + '<label>L <input id="dndGame' + n + 'InstrW" type="number" value="760" style="width:52px;font-size:11px;padding:2px;"></label>'
+                    + '<label>H <input id="dndGame' + n + 'InstrH" type="number" value="90" style="width:52px;font-size:11px;padding:2px;"></label>'
+                    + '<select id="dndGame' + n + 'InstrFont" style="width:78px;font-size:10px;height:22px;" title="Police">'
+                    + '<option value="Arial, sans-serif">Arial</option>'
+                    + '<option value="\'OpenDyslexic\', sans-serif">Dyslexic</option>'
+                    + '<option value="\'Comic Sans MS\', sans-serif">Comic</option>'
+                    + '<option value="Verdana, sans-serif" selected>Verdana</option></select>'
+                    + '<input id="dndGame' + n + 'InstrFontSize" type="number" value="22" min="10" max="120" style="width:40px;font-size:10px;height:22px;" title="Taille police">'
+                    + '<label style="font-weight:bold;"><input type="checkbox" id="dndGame' + n + 'InstrBold" checked> G</label>'
+                    + '<label style="font-style:italic;"><input type="checkbox" id="dndGame' + n + 'InstrItalic"> I</label>'
+                    + '<select id="dndGame' + n + 'InstrAlign" style="width:70px;font-size:10px;height:22px;" title="Alignement">'
+                    + '<option value="left">Gauche</option>'
+                    + '<option value="center" selected>Centre</option>'
+                    + '<option value="right">Droite</option></select>'
+                    + '<input id="dndGame' + n + 'InstrBg" type="color" value="#fff8e1" title="Fond" style="width:28px;height:22px;padding:0;border:1px solid #ccc;">'
+                    + '<input id="dndGame' + n + 'InstrColor" type="color" value="#78350f" title="Texte" style="width:28px;height:22px;padding:0;border:1px solid #ccc;">'
+                    + '<input id="dndGame' + n + 'InstrBorder" type="color" value="#f59e0b" title="Bordure" style="width:28px;height:22px;padding:0;border:1px solid #ccc;">'
+                    + '</div>'
+                    + '<p style="margin:0;font-size:10px;color:#64748b;">Glissez la zone jaune sur le canvas, ou réglez X/Y/L/H ici.</p>'
                     + '</div>'
                     + '<div class="row mq-dnd-instr-simple" style="flex-direction:column;align-items:stretch;gap:4px;">'
                     + '<label style="width:auto;font-size:12px;font-weight:bold;">Consignes (affichées pendant le jeu)</label>'
