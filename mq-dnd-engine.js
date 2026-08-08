@@ -802,25 +802,7 @@
       );
     }
     function clientToLocal(clientX, clientY) {
-      // Convertir coords écran → coords locales du jeu (tient compte du zoom/pan CSS)
-      if (svg && svg.getScreenCTM) {
-        try {
-          var ctm = svg.getScreenCTM();
-          if (ctm) {
-            if (typeof DOMPoint === 'function') {
-              var dp = new DOMPoint(clientX, clientY).matrixTransform(ctm.inverse());
-              return { x: dp.x, y: dp.y };
-            }
-            if (typeof svg.createSVGPoint === 'function') {
-              var sp = svg.createSVGPoint();
-              sp.x = clientX;
-              sp.y = clientY;
-              var p = sp.matrixTransform(ctm.inverse());
-              return { x: p.x, y: p.y };
-            }
-          }
-        } catch (err) { /* fallback ci-dessous */ }
-      }
+      // Écran → coords layout du jeu (indépendant du zoom/pan CSS sur le stage)
       var cr = gameContainer.getBoundingClientRect();
       var w = gameContainer.clientWidth || 1;
       var h = gameContainer.clientHeight || 1;
@@ -834,7 +816,33 @@
     function localPoint(clientX, clientY) {
       return clientToLocal(clientX, clientY);
     }
+    /** Centre d’un nœud en coords layout (même repère que left/top des images). */
     function nodeCenter(el) {
+      if (!el) return { x: 0, y: 0 };
+      var left = parseFloat(el.style.left);
+      var top = parseFloat(el.style.top);
+      var w = el.offsetWidth || parseFloat(el.style.width) || 0;
+      var h = el.offsetHeight || parseFloat(el.style.height) || 0;
+      if (!isNaN(left) && !isNaN(top) && (w > 0 || h > 0)) {
+        return { x: left + w / 2, y: top + h / 2 };
+      }
+      // Remonter offsetLeft/Top jusqu’au conteneur de jeu
+      var x = 0;
+      var y = 0;
+      var cur = el;
+      while (cur && cur !== gameContainer) {
+        x += cur.offsetLeft || 0;
+        y += cur.offsetTop || 0;
+        var op = cur.offsetParent;
+        if (!op || (op !== gameContainer && !gameContainer.contains(op))) {
+          break;
+        }
+        cur = op;
+      }
+      if (cur === gameContainer || gameContainer.contains(cur)) {
+        return { x: x + w / 2, y: y + h / 2 };
+      }
+      // Dernier recours : projection écran
       var er = el.getBoundingClientRect();
       return clientToLocal(er.left + er.width / 2, er.top + er.height / 2);
     }
@@ -958,13 +966,9 @@
       svg.appendChild(defs);
       gameContainer.appendChild(svg);
     }
-    function syncSvgViewBox() {
-      var w = Math.max(1, gameContainer.clientWidth || 1);
-      var h = Math.max(1, gameContainer.clientHeight || 1);
-      svg.setAttribute('viewBox', '0 0 ' + w + ' ' + h);
-      svg.setAttribute('preserveAspectRatio', 'none');
-    }
-    syncSvgViewBox();
+    // Pas de viewBox : coords SVG = pixels layout (même repère que left/top des images)
+    svg.removeAttribute('viewBox');
+    svg.removeAttribute('preserveAspectRatio');
 
     function isAllowedPair(from, to) {
       var allowed = normalizeAllowedLinks(game.allowedLinks);
@@ -1005,7 +1009,6 @@
     }
 
     function drawLinks(ev) {
-      syncSvgViewBox();
       Array.prototype.slice.call(svg.querySelectorAll('line.dnd-link-line, line.dnd-link-hit')).forEach(function (n) {
         n.parentNode.removeChild(n);
       });
@@ -1059,6 +1062,9 @@
     }
 
     function cancelDrag() {
+      if (dragState && dragState.hoverEl && dragState.hoverEl !== (dragState && dragState.fromEl)) {
+        try { dragState.hoverEl.classList.remove('dnd-link-from'); } catch (err) {}
+      }
       if (dragState && dragState.line && dragState.line.parentNode) {
         dragState.line.parentNode.removeChild(dragState.line);
       }
@@ -1076,7 +1082,6 @@
     function startDrag(fromEl, clientX, clientY) {
       var id = fromEl.getAttribute('data-id');
       if (!id) return;
-      syncSvgViewBox();
       var c = nodeCenter(fromEl);
       var line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
       line.setAttribute('class', 'dnd-link-drag');
@@ -1094,7 +1099,7 @@
       svg.appendChild(line);
       svg.style.pointerEvents = 'none';
       fromEl.classList.add('dnd-link-from', 'dnd-selected');
-      dragState = { fromId: id, fromEl: fromEl, line: line };
+      dragState = { fromId: id, fromEl: fromEl, line: line, hoverEl: null };
       showTip('Maintenez le clic droit et tirez jusqu’à l’image d’arrivée.', pt.x, pt.y);
     }
 
@@ -1117,6 +1122,10 @@
         }
         dragState.hoverEl = null;
       }
+      // Recaler aussi le départ (au cas où le layout a bougé)
+      var c0 = nodeCenter(dragState.fromEl);
+      dragState.line.setAttribute('x1', String(c0.x));
+      dragState.line.setAttribute('y1', String(c0.y));
       dragState.line.setAttribute('x2', String(pt.x));
       dragState.line.setAttribute('y2', String(pt.y));
       showTip('Maintenez le clic droit et tirez jusqu’à l’image d’arrivée.', pt.x, pt.y);
@@ -1125,14 +1134,24 @@
     function endDrag(clientX, clientY) {
       if (!dragState) return;
       var fromId = dragState.fromId;
-      var target = nodeFromPoint(clientX, clientY);
-      if (dragState.hoverEl && dragState.hoverEl !== dragState.fromEl) {
-        dragState.hoverEl.classList.remove('dnd-link-from');
-      }
-      cancelDrag();
-      if (target) {
-        var toId = target.getAttribute('data-id');
-        if (toId && String(toId) !== String(fromId)) addLink(fromId, toId);
+      var fromEl = dragState.fromEl;
+      // Préférer la cible accrochée pendant le drag (évite un trait final différent)
+      var target = dragState.hoverEl || nodeFromPoint(clientX, clientY);
+      if (target === fromEl) target = null;
+      var toId = target ? target.getAttribute('data-id') : null;
+      if (toId && String(toId) !== String(fromId)) {
+        var ca = nodeCenter(fromEl);
+        var cb = nodeCenter(target);
+        if (dragState.line) {
+          dragState.line.setAttribute('x1', String(ca.x));
+          dragState.line.setAttribute('y1', String(ca.y));
+          dragState.line.setAttribute('x2', String(cb.x));
+          dragState.line.setAttribute('y2', String(cb.y));
+        }
+        cancelDrag();
+        addLink(fromId, toId);
+      } else {
+        cancelDrag();
       }
       if (linkModeActive) {
         showTip(tipText(), (gameContainer.clientWidth || 200) / 2, 40);
@@ -1243,7 +1262,6 @@
     function onResize() {
       clearTimeout(resizeTimer);
       resizeTimer = setTimeout(function () {
-        syncSvgViewBox();
         drawLinks(evaluateLinks(game, links));
       }, 80);
     }
