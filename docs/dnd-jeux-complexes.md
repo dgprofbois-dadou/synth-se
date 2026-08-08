@@ -51,5 +51,6 @@ La consigne de l’étape N s’affiche dès que l’étape N−1 est réussie. 
 - Tooltip d’explication sur le bouton et pendant la manip.
 - Peut être utilisé seul (`gameType: linking`) ou combiné (`enableLinking: true` + selection/exact/…).
 - Score = score DnD + nombre de paires correctes.
+- Les **images fixes** et **textes fixes** ont un **ID** éditable (badge vert sur le canvas) et peuvent servir de nœuds Relier (`idDépart>idArrivée`).
 
 Les consignes restent visibles jusqu’à la réussite du jeu (`dnd-game-complete`), puis sont masquées.

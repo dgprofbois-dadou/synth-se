@@ -878,8 +878,14 @@
             text-overflow: ellipsis;
             white-space: nowrap;
         }
-        .dnd-image.mq-dnd-selected .dnd-id-badge {
+        .dnd-image.mq-dnd-selected .dnd-id-badge,
+        .dnd-decor.mq-dnd-selected .dnd-id-badge,
+        .dnd-decor-text.mq-dnd-selected .dnd-id-badge {
             background: rgba(232, 82, 31, 0.95);
+        }
+        .dnd-decor .dnd-id-badge,
+        .dnd-decor-text .dnd-id-badge {
+            background: rgba(46, 125, 50, 0.92);
         }
         .dnd-placed.dnd-retry-movable {
             outline: 2px dashed #ef6c00;
@@ -7355,18 +7361,34 @@
                     gameEl.appendChild(titleEl);
 
                     (gameConfig.decorImages || []).forEach((dc) => {
+                        const wrap = document.createElement('div');
+                        const decorId = (dc.id != null && String(dc.id).trim() !== '') ? String(dc.id).trim() : '';
+                        wrap.className = 'dnd-decor-fixed';
+                        if (decorId) {
+                            wrap.setAttribute('data-id', decorId);
+                            wrap.setAttribute('data-link-node', '1');
+                        }
+                        const linkable = !!(gameConfig.enableLinking || gameConfig.gameType === 'linking') && !!decorId;
+                        wrap.style.cssText = 'position:absolute; left:' + (dc.x || 0) + 'px; top:' + (dc.y || 0) + 'px; width:' + (dc.width || 300) + 'px; height:' + (dc.height || 200) + 'px; z-index:' + (dc.z || 0) + '; box-sizing:border-box; pointer-events:' + (linkable ? 'auto' : 'none') + ';';
                         const img = document.createElement('img');
                         if (dc.src && String(dc.src).indexOf('idb:') !== 0) img.src = dc.src;
                         img.alt = '';
-                        img.style.cssText = 'position:absolute; left:' + (dc.x || 0) + 'px; top:' + (dc.y || 0) + 'px; width:' + (dc.width || 300) + 'px; height:' + (dc.height || 200) + 'px; object-fit:contain; pointer-events:none; z-index:' + (dc.z || 0) + ';';
-                        gameEl.appendChild(img);
+                        img.style.cssText = 'width:100%;height:100%;object-fit:contain;display:block;pointer-events:none;';
+                        wrap.appendChild(img);
+                        gameEl.appendChild(wrap);
                     });
 
                     (gameConfig.decorTexts || []).forEach((dt) => {
                         const el = document.createElement('div');
+                        const decorId = (dt.id != null && String(dt.id).trim() !== '') ? String(dt.id).trim() : '';
                         el.className = 'dnd-decor-text';
+                        if (decorId) {
+                            el.setAttribute('data-id', decorId);
+                            el.setAttribute('data-link-node', '1');
+                        }
+                        const linkable = !!(gameConfig.enableLinking || gameConfig.gameType === 'linking') && !!decorId;
                         el.textContent = dt.text || 'Texte';
-                        el.style.cssText = 'position:absolute; left:' + (dt.x || 0) + 'px; top:' + (dt.y || 0) + 'px; width:' + (dt.width || 240) + 'px; height:' + (dt.height || 80) + 'px; z-index:' + (dt.z != null ? dt.z : 1) + '; pointer-events:none; box-sizing:border-box;'
+                        el.style.cssText = 'position:absolute; left:' + (dt.x || 0) + 'px; top:' + (dt.y || 0) + 'px; width:' + (dt.width || 240) + 'px; height:' + (dt.height || 80) + 'px; z-index:' + (dt.z != null ? dt.z : 1) + '; pointer-events:' + (linkable ? 'auto' : 'none') + '; box-sizing:border-box;'
                             + 'display:flex;align-items:center;justify-content:center;text-align:center;padding:4px;overflow:hidden;'
                             + 'font-family:' + (dt.font || 'Arial, sans-serif') + ';'
                             + 'font-size:' + (dt.fontSize || 28) + 'px;'
@@ -11015,14 +11037,30 @@
                     ? saved.dropzones.map((d) => Object.assign({}, d))
                     : (defaults.dropzones || []).map((d) => Object.assign({}, d));
                 g.decorImages = Array.isArray(saved && saved.decorImages)
-                    ? saved.decorImages.map((d) => Object.assign({ x: 50, y: 50, width: 300, height: 200, z: 0 }, d))
+                    ? saved.decorImages.map((d, i) => {
+                        const row = Object.assign({ x: 50, y: 50, width: 300, height: 200, z: 0 }, d);
+                        if (row.id == null || String(row.id).trim() === '') {
+                            row.id = 'decor-' + (i + 1);
+                        } else {
+                            row.id = String(row.id).trim();
+                        }
+                        return row;
+                    })
                     : [];
                 g.decorTexts = Array.isArray(saved && saved.decorTexts)
-                    ? saved.decorTexts.map((d) => Object.assign({
-                        text: 'Texte', x: 50, y: 50, width: 240, height: 80, z: 1,
-                        fontSize: 28, font: 'Arial, sans-serif', color: '#000000',
-                        bold: false, italic: false, bgOn: false, bg: '#ffffff'
-                    }, d))
+                    ? saved.decorTexts.map((d, i) => {
+                        const row = Object.assign({
+                            text: 'Texte', x: 50, y: 50, width: 240, height: 80, z: 1,
+                            fontSize: 28, font: 'Arial, sans-serif', color: '#000000',
+                            bold: false, italic: false, bgOn: false, bg: '#ffffff'
+                        }, d);
+                        if (row.id == null || String(row.id).trim() === '') {
+                            row.id = 'dtext-' + (i + 1);
+                        } else {
+                            row.id = String(row.id).trim();
+                        }
+                        return row;
+                    })
                     : [];
                 g.titleBox = Object.assign({}, defaults.titleBox || {}, (saved && saved.titleBox) || {});
                 g.instructionsBox = Object.assign({
@@ -12058,8 +12096,15 @@
             window.updateDecorPosition = function (gameId, index, property, value) {
                 const arr = state.dndGames[gameId].decorImages;
                 if (!arr || !arr[index]) return;
-                arr[index][property] = parseInt(value) || 0;
+                if (property === 'id') {
+                    const id = String(value == null ? '' : value).trim();
+                    if (!id) return;
+                    arr[index].id = id;
+                } else {
+                    arr[index][property] = parseInt(value) || 0;
+                }
                 renderDndGamesPreview();
+                if (property === 'id') renderDecorList(gameId);
                 saveLocal();
             };
             window.removeDecorImage = function (gameId, index) {
@@ -12088,11 +12133,14 @@
                 input.type = 'file'; input.accept = 'image/*';
                 input.onchange = (e) => {
                     const f = e.target.files[0]; if (!f) return;
+                    if (!state.dndGames[gameId].decorImages) state.dndGames[gameId].decorImages = [];
+                    const arr = state.dndGames[gameId].decorImages;
+                    const id = prompt('ID de l\'image fixe (utilisable dans Relier / étapes) :', 'decor-' + (arr.length + 1));
+                    if (!id) return;
                     const r = new FileReader();
                     r.onload = (ev) => {
-                        if (!state.dndGames[gameId].decorImages) state.dndGames[gameId].decorImages = [];
-                        state.dndGames[gameId].decorImages.push({
-                            id: 'decor-' + Math.random().toString(36).slice(2, 7),
+                        arr.push({
+                            id: String(id).trim(),
                             src: ev.target.result,
                             x: 50, y: 50, width: 300, height: 200, z: 0
                         });
@@ -12114,6 +12162,12 @@
                     <div style="padding:6px; border-bottom:1px solid #eee; background:#fff; display:flex; gap:6px; align-items:flex-start;">
                         <img src="${d.src}" style="width:42px; height:42px; object-fit:contain; border:1px solid #ccc; background:#f0f0f0;">
                         <div style="flex:1; display:flex; flex-direction:column; gap:5px;">
+                            <div style="display:flex; align-items:center; gap:6px;">
+                                <label style="font-weight:bold; font-size:11px; color:#2e7d32; white-space:nowrap;">ID</label>
+                                <input type="text" value="${String(d.id || '').replace(/"/g, '&quot;')}" placeholder="ex: decor-1"
+                                    onchange="window.updateDecorPosition('${gameId}', ${index}, 'id', this.value)"
+                                    style="flex:1; padding:3px 6px; font-size:12px; border:1px solid #ccc; border-radius:4px; font-family:monospace;">
+                            </div>
                             <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px 8px; padding:8px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px;">
                                 ${mqDimPosField('Largeur', d.width || 300, 'updateDecorPosition', gameId, index, 'width', 10)}
                                 ${mqDimPosField('Hauteur', d.height || 200, 'updateDecorPosition', gameId, index, 'height', 10)}
@@ -12131,8 +12185,10 @@
             window.addDecorText = function (gameId) {
                 if (!state.dndGames[gameId].decorTexts) state.dndGames[gameId].decorTexts = [];
                 const arr = state.dndGames[gameId].decorTexts;
+                const id = prompt('ID du texte fixe (utilisable dans Relier / étapes) :', 'dtext-' + (arr.length + 1));
+                if (!id) return;
                 arr.push({
-                    id: 'dtext-' + Math.random().toString(36).slice(2, 7),
+                    id: String(id).trim(),
                     text: 'Texte fixe',
                     x: 60 + arr.length * 20, y: 60 + arr.length * 20,
                     width: 240, height: 80, z: 1,
@@ -12154,13 +12210,17 @@
                 const arr = state.dndGames[gameId].decorTexts;
                 if (!arr || !arr[index]) return;
                 if (property === 'bold' || property === 'italic' || property === 'bgOn') arr[index][property] = !!value;
-                else if (property === 'fontSize' || property === 'x' || property === 'y' || property === 'width' || property === 'height' || property === 'z') {
+                else if (property === 'id') {
+                    const id = String(value == null ? '' : value).trim();
+                    if (!id) return;
+                    arr[index].id = id;
+                } else if (property === 'fontSize' || property === 'x' || property === 'y' || property === 'width' || property === 'height' || property === 'z') {
                     arr[index][property] = parseInt(value, 10) || 0;
                 } else {
                     arr[index][property] = value;
                 }
                 renderDndGamesPreview();
-                if (property === 'width' || property === 'height' || property === 'z') renderDecorTextList(gameId);
+                if (property === 'width' || property === 'height' || property === 'z' || property === 'id') renderDecorTextList(gameId);
                 saveLocal();
             };
             function renderDecorTextList(gameId) {
@@ -12174,6 +12234,12 @@
                 const fonts = ['Arial, sans-serif', 'Verdana, sans-serif', 'Georgia, serif', "'Comic Sans MS', sans-serif", "'OpenDyslexic', sans-serif", "'Courier New', monospace"];
                 list.innerHTML = arr.map((d, index) => `
                     <div style="padding:6px; border-bottom:1px solid #eee; background:#fffdf5; display:flex; flex-direction:column; gap:5px;">
+                        <div style="display:flex; align-items:center; gap:6px;">
+                            <label style="font-weight:bold; font-size:11px; color:#2e7d32; white-space:nowrap;">ID</label>
+                            <input type="text" value="${String(d.id || '').replace(/"/g, '&quot;')}" placeholder="ex: dtext-1"
+                                onchange="window.updateDecorText('${gameId}', ${index}, 'id', this.value)"
+                                style="flex:1; padding:3px 6px; font-size:12px; border:1px solid #ccc; border-radius:4px; font-family:monospace;">
+                        </div>
                         <input type="text" value="${String(d.text || '').replace(/"/g, '&quot;')}" placeholder="Texte fixe"
                             oninput="window.updateDecorText('${gameId}', ${index}, 'text', this.value)"
                             style="width:100%; padding:4px; font-size:13px; border:1px solid #ddd; box-sizing:border-box;">
@@ -12559,6 +12625,8 @@
                     if ((g.gameType === 'linking' || g.enableLinking) && Array.isArray(g.allowedLinks) && g.allowedLinks.length) {
                         const byId = {};
                         (g.draggables || []).forEach((d) => { byId[String(d.id)] = d; });
+                        (g.decorImages || []).forEach((d) => { if (d && d.id != null) byId[String(d.id)] = d; });
+                        (g.decorTexts || []).forEach((d) => { if (d && d.id != null) byId[String(d.id)] = d; });
                         let lines = '';
                         g.allowedLinks.forEach((l) => {
                             const a = byId[String(l.from)];
@@ -12613,20 +12681,27 @@
                     });
 
                     (g.decorImages || []).forEach((dc, idx) => {
+                        const idLabel = String(dc.id != null && String(dc.id).trim() !== '' ? dc.id : ('decor-' + (idx + 1)));
+                        const safeId = idLabel.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
                         html += `
                             <div class="dnd-element dnd-decor" data-game="${gameId}" data-type="decor" data-index="${idx}"
+                                 title="ID ${safeId}"
                                  style="left: ${dc.x || 0}px; top: ${dc.y || 0}px; width: ${dc.width || 300}px; height: ${dc.height || 200}px; z-index: ${dc.z || 0};">
                                 <img src="${dc.src}" style="width:100%; height:100%; object-fit:contain; pointer-events:none; display:block;">
+                                <span class="dnd-id-badge">ID ${safeId}</span>
                                 <div class="dnd-element-handle" data-game="${gameId}" data-type="decor" data-index="${idx}"></div>
                             </div>`;
                     });
 
                     (g.decorTexts || []).forEach((dt, idx) => {
+                        const idLabel = String(dt.id != null && String(dt.id).trim() !== '' ? dt.id : ('dtext-' + (idx + 1)));
+                        const safeId = idLabel.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
                         html += `
                             <div class="dnd-element dnd-decor-text" data-game="${gameId}" data-type="decorText" data-index="${idx}"
-                                 title="Texte fixe"
+                                 title="ID ${safeId}"
                                  style="left: ${dt.x || 0}px; top: ${dt.y || 0}px; width: ${dt.width || 240}px; height: ${dt.height || 80}px; z-index: ${dt.z != null ? dt.z : 1};">
                                 <div class="dnd-label" style="${mqDndTextStyle(dt)}pointer-events:none;">${escapeHtml(dt.text || 'Texte')}</div>
+                                <span class="dnd-id-badge">ID ${safeId}</span>
                                 <div class="dnd-element-handle" data-game="${gameId}" data-type="decorText" data-index="${idx}"></div>
                             </div>`;
                     });
@@ -13402,7 +13477,15 @@
                     const cY = ((dc.y || 0) / G_H) * 100;
                     const cW = ((dc.width || 300) / G_W) * 100;
                     const cH = ((dc.height || 200) / G_H) * 100;
-                    return '<img src="' + dc.src + '" alt="" style="position:absolute; left:' + cX + '%; top:' + cY + '%; width:' + cW + '%; height:' + cH + '%; object-fit:contain; pointer-events:none; z-index:' + (dc.z || 0) + ';">';
+                    const decorId = (dc.id != null && String(dc.id).trim() !== '') ? String(dc.id).trim() : '';
+                    const linkable = !!(g.enableLinking || g.gameType === 'linking') && !!decorId;
+                    const idAttr = decorId
+                        ? (' data-id="' + decorId.replace(/"/g, '&quot;') + '" data-link-node="1"')
+                        : '';
+                    return '<div class="dnd-decor-fixed"' + idAttr
+                        + ' style="position:absolute; left:' + cX + '%; top:' + cY + '%; width:' + cW + '%; height:' + cH + '%; z-index:' + (dc.z || 0) + '; box-sizing:border-box; pointer-events:' + (linkable ? 'auto' : 'none') + ';">'
+                        + '<img src="' + dc.src + '" alt="" style="width:100%;height:100%;object-fit:contain;display:block;pointer-events:none;">'
+                        + '</div>';
                 }).join('');
                 out += (g.decorTexts || []).map(function (dt) {
                     const cX = ((dt.x || 0) / G_W) * 100;
@@ -13411,7 +13494,12 @@
                     const cH = ((dt.height || 80) / G_H) * 100;
                     const safe = String(dt.text || 'Texte')
                         .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-                    return '<div class="dnd-decor-text" style="position:absolute; left:' + cX + '%; top:' + cY + '%; width:' + cW + '%; height:' + cH + '%; z-index:' + (dt.z != null ? dt.z : 1) + '; pointer-events:none; box-sizing:border-box;'
+                    const decorId = (dt.id != null && String(dt.id).trim() !== '') ? String(dt.id).trim() : '';
+                    const linkable = !!(g.enableLinking || g.gameType === 'linking') && !!decorId;
+                    const idAttr = decorId
+                        ? (' data-id="' + decorId.replace(/"/g, '&quot;') + '" data-link-node="1"')
+                        : '';
+                    return '<div class="dnd-decor-text"' + idAttr + ' style="position:absolute; left:' + cX + '%; top:' + cY + '%; width:' + cW + '%; height:' + cH + '%; z-index:' + (dt.z != null ? dt.z : 1) + '; pointer-events:' + (linkable ? 'auto' : 'none') + '; box-sizing:border-box;'
                         + 'display:flex;align-items:center;justify-content:center;text-align:center;padding:4px;overflow:hidden;'
                         + 'font-family:' + (dt.font || 'Arial, sans-serif') + ';'
                         + 'font-size:' + (dt.fontSize || 28) + 'px;'
@@ -15215,7 +15303,7 @@
                     + '<option value="one-to-many">Un départ → plusieurs arrivées</option>'
                     + '</select>'
                     + '<label style="width:auto;font-size:12px;font-weight:bold;margin-top:4px;">Paires correctes (flèches)</label>'
-                    + '<textarea id="dndGame' + n + 'AllowedLinks" rows="4" placeholder="Une paire par ligne : idDépart&gt;idArrivée&#10;Ex :&#10;1&gt;3&#10;2&gt;4" style="width:100%;resize:vertical;font-size:12px;padding:6px;border:1px solid #ccc;border-radius:6px;box-sizing:border-box;font-family:monospace;"></textarea>'
+                    + '<textarea id="dndGame' + n + 'AllowedLinks" rows="4" placeholder="Une paire par ligne : idDépart&gt;idArrivée&#10;Ex :&#10;1&gt;3&#10;decor-1&gt;dtext-1" style="width:100%;resize:vertical;font-size:12px;padding:6px;border:1px solid #ccc;border-radius:6px;box-sizing:border-box;font-family:monospace;"></textarea>'
                     + '<label style="width:auto;font-size:12px;font-weight:bold;margin-top:4px;">Tooltip Relier</label>'
                     + '<input id="dndGame' + n + 'LinkTooltip" type="text" placeholder="Clic droit maintenu… tirez jusqu’à l’arrivée" style="width:100%;font-size:12px;padding:6px;box-sizing:border-box;">'
                     + '<p style="margin:0;font-size:10px;color:#64748b;">L’élève active le bouton flèche, puis maintient le <strong>clic droit</strong> pour tracer (le clic gauche = déplacer la vue). En admin : glisser le bouton pour le positionner, poignée pour la taille.</p>'
