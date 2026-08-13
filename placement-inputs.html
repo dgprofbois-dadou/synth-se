@@ -7164,7 +7164,19 @@
                     e.target.closest('.hotspot-group') ||
                     e.target.closest('#hotspots-ui') ||
                     e.target.closest('#mqCtxBar') ||
-                    e.target.closest('.dnd-relier-btn')
+                    e.target.closest('.dnd-relier-btn') ||
+                    e.target.closest('.dnd-verify-btn') ||
+                    e.target.closest('.dnd-next-step-btn') ||
+                    // Mode élève : ne pas voler le glisser-déposer (setPointerCapture bloquait dragstart)
+                    e.target.closest('.draggable') ||
+                    e.target.closest('.dropzone') ||
+                    e.target.closest('.dnd-placed') ||
+                    e.target.closest('[data-link-node]') ||
+                    e.target.closest('.dnd-link-zone-hit') ||
+                    // Admin : zones / cartes éditables (déplacement via Ctrl+glisser)
+                    e.target.closest('.dnd-element') ||
+                    e.target.closest('.dnd-resize-handle') ||
+                    e.target.closest('.dnd-element-handle')
                 )) return;
 
                 mqSetPanning(true);

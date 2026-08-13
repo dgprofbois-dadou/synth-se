@@ -716,7 +716,9 @@
     const INTERACTIVE_SELECTOR = [
       'input', 'textarea', 'button', 'select', 'a', 'label',
       '.input-wrapper',
-      '.drag-game', '.draggable', '.dropzone',
+      '.drag-game', '.draggable', '.dropzone', '.dnd-placed',
+      '[data-link-node]', '.dnd-link-zone-hit',
+      '.dnd-relier-btn', '.dnd-verify-btn', '.dnd-next-step-btn',
       '.pdf-buttons', '.controls', '.mobile-zoom-bar',
       '#svg-tooltip', '#btnFullscreen'
     ].join(',');
