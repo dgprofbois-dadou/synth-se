@@ -1004,11 +1004,85 @@
       dragCenterOverrides[String(id)] = clientToLocal(clientX, clientY);
       drawLinks(evaluateLinks(game, links));
     }
+    function setDragCenterLocal(id, x, y) {
+      if (!id || !isFinite(x) || !isFinite(y)) return;
+      dragCenterOverrides[String(id)] = { x: x, y: y };
+      drawLinks(evaluateLinks(game, links));
+    }
     function clearDragCenter(id) {
       if (id) delete dragCenterOverrides[String(id)];
       else dragCenterOverrides = Object.create(null);
       drawLinks(evaluateLinks(game, links));
     }
+
+    /** Suivi HTML5 drag : dragover document (fiable sous Firefox, contrairement à drag). */
+    var htmlDragId = null;
+    var htmlDragLast = null;
+    var htmlDragDropped = false;
+    function beginCardDrag(id) {
+      htmlDragId = id != null ? String(id) : null;
+      htmlDragLast = null;
+      htmlDragDropped = false;
+    }
+    function markCardDropped() {
+      htmlDragDropped = true;
+    }
+    function applyFreeMoveToEl(el, center) {
+      if (!el || !center) return;
+      var w = el.offsetWidth || parseFloat(el.style.width) || 0;
+      var h = el.offsetHeight || parseFloat(el.style.height) || 0;
+      var nx = Math.round(center.x - w / 2);
+      var ny = Math.round(center.y - h / 2);
+      el.style.position = 'absolute';
+      el.style.left = nx + 'px';
+      el.style.top = ny + 'px';
+      var cid = el.getAttribute('data-id');
+      if (cid && Array.isArray(game.draggables)) {
+        for (var i = 0; i < game.draggables.length; i++) {
+          if (String(game.draggables[i].id) === String(cid)) {
+            game.draggables[i].x = nx;
+            game.draggables[i].y = ny;
+            break;
+          }
+        }
+      }
+    }
+    function endCardDrag(id, el) {
+      // Reposition libre si le drop n’est pas allé dans une zone
+      if (htmlDragId && htmlDragLast && !htmlDragDropped && el && el.classList.contains('draggable')) {
+        applyFreeMoveToEl(el, htmlDragLast);
+      }
+      htmlDragId = null;
+      htmlDragLast = null;
+      htmlDragDropped = false;
+      clearDragCenter(id);
+    }
+    function onDocDragOver(e) {
+      if (!htmlDragId) return;
+      if (!e.clientX && !e.clientY) return;
+      try { e.preventDefault(); } catch (err) { /* ignore */ }
+      htmlDragLast = clientToLocal(e.clientX, e.clientY);
+      setDragCenterLocal(htmlDragId, htmlDragLast.x, htmlDragLast.y);
+    }
+    if (typeof document !== 'undefined' && document.addEventListener) {
+      document.addEventListener('dragover', onDocDragOver, true);
+    }
+    gameContainer.addEventListener('dragover', function (e) {
+      if (!htmlDragId) return;
+      e.preventDefault();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+    });
+    gameContainer.addEventListener('drop', function (e) {
+      if (!htmlDragId) return;
+      // Les dropzones gèrent leur propre drop ; ici = dépôt libre sur le plateau
+      if (e.target && e.target.closest && e.target.closest('.dropzone')) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.clientX || e.clientY) {
+        htmlDragLast = clientToLocal(e.clientX, e.clientY);
+      }
+    });
+
     function tipText() {
       return game.linkTooltip || DEFAULT_LINK_TIP;
     }
@@ -1066,7 +1140,11 @@
           el.style.cursor = 'crosshair';
         } else {
           el.classList.remove('dnd-link-node', 'dnd-link-from', 'dnd-selected');
-          if (hybrid) {
+          // Autoriser le déplacement des images (flèches suivent) hors mode Relier
+          if (el.classList.contains('draggable')) {
+            el.draggable = true;
+            el.style.cursor = 'grab';
+          } else if (hybrid) {
             el.draggable = el.dataset._prevDraggable === '1';
             el.style.cursor = '';
           } else {
@@ -1344,6 +1422,36 @@
       el.addEventListener('pointercancel', function () { cancelDrag(); });
     });
 
+    // Déplacement libre des images hors mode Relier → la flèche suit (x1/y1)
+    Array.prototype.forEach.call(gameContainer.querySelectorAll('.draggable[data-id]'), function (img) {
+      var id = img.getAttribute('data-id');
+      if (!id || img.dataset.mqLinkFreeMove) return;
+      img.dataset.mqLinkFreeMove = '1';
+      img.addEventListener('dragstart', function (e) {
+        if (linkModeActive) {
+          e.preventDefault();
+          return;
+        }
+        // En hybrid, le gestionnaire DnD principal gère aussi ; on démarre le suivi flèche
+        beginCardDrag(id);
+        try {
+          e.dataTransfer.setData('text/plain', id);
+          e.dataTransfer.effectAllowed = 'move';
+        } catch (err) { /* ignore */ }
+        img.style.opacity = '0.55';
+      });
+      img.addEventListener('drag', function (e) {
+        if (linkModeActive) return;
+        if (!e.clientX && !e.clientY) return;
+        setDragCenter(id, e.clientX, e.clientY);
+        htmlDragLast = clientToLocal(e.clientX, e.clientY);
+      });
+      img.addEventListener('dragend', function () {
+        img.style.opacity = img.classList.contains('used') ? '0.3' : '1';
+        endCardDrag(id, img);
+      });
+    });
+
     setLinkMode(false);
 
     function getVerified() {
@@ -1431,7 +1539,10 @@
       isLinkModeActive: function () { return linkModeActive; },
       setLinkMode: setLinkMode,
       setDragCenter: setDragCenter,
-      clearDragCenter: clearDragCenter
+      clearDragCenter: clearDragCenter,
+      beginCardDrag: beginCardDrag,
+      markCardDropped: markCardDropped,
+      endCardDrag: endCardDrag
     };
   }
 
@@ -1746,6 +1857,7 @@
           e.dataTransfer.effectAllowed = 'move';
           selectCard(id, clone);
           clone.style.opacity = '0.6';
+          if (linkingApi && linkingApi.beginCardDrag) linkingApi.beginCardDrag(id);
         });
         clone.addEventListener('drag', function (e) {
           if (!linkingApi || !linkingApi.setDragCenter) return;
@@ -1754,7 +1866,8 @@
         });
         clone.addEventListener('dragend', function () {
           clone.style.opacity = '1';
-          if (linkingApi && linkingApi.clearDragCenter) linkingApi.clearDragCenter(id);
+          if (linkingApi && linkingApi.endCardDrag) linkingApi.endCardDrag(id, clone);
+          else if (linkingApi && linkingApi.clearDragCenter) linkingApi.clearDragCenter(id);
         });
       }
     }
@@ -1829,6 +1942,7 @@
       zone.appendChild(clone);
       if (isSingleUse(cardUse)) setUsed(id, true);
       clearSelection();
+      if (linkingApi && linkingApi.markCardDropped) linkingApi.markCardDropped();
 
       // Malus à chaque dépôt incorrect (tous modes), y compris repositionnements
       if (!correctHere) {
@@ -2023,6 +2137,7 @@
         } catch (_) { /* ignore */ }
         img.style.opacity = '0.5';
         selectCard(id, img);
+        if (linkingApi && linkingApi.beginCardDrag) linkingApi.beginCardDrag(id);
       });
       img.addEventListener('drag', function (e) {
         if (!linkingApi || !linkingApi.setDragCenter) return;
@@ -2031,7 +2146,8 @@
       });
       img.addEventListener('dragend', function () {
         img.style.opacity = img.classList.contains('used') ? '0.3' : '1';
-        if (linkingApi && linkingApi.clearDragCenter) linkingApi.clearDragCenter(id);
+        if (linkingApi && linkingApi.endCardDrag) linkingApi.endCardDrag(id, img);
+        else if (linkingApi && linkingApi.clearDragCenter) linkingApi.clearDragCenter(id);
       });
       img.addEventListener('click', function (e) {
         if (isLinkModeOn()) return;

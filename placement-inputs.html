@@ -7646,8 +7646,8 @@
                             el.style.fontSize = '18px';
                         }
                         el.className = 'draggable';
-                        el.draggable = (gameConfig.gameType !== 'linking');
-                        if (gameConfig.enableLinking) el.classList.add('dnd-link-capable');
+                        el.draggable = true;
+                        if (gameConfig.enableLinking || gameConfig.gameType === 'linking') el.classList.add('dnd-link-capable');
                         el.dataset.id = drag.id;
                         el.title = drag.title || drag.tooltip || '';
                         el.setAttribute('data-tooltip', drag.title || drag.tooltip || '');
