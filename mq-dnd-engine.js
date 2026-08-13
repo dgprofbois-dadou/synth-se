@@ -461,13 +461,58 @@
     btn.style.bottom = 'auto';
     btn.style.width = box.size + 'px';
     btn.style.height = box.size + 'px';
-    var iconSize = Math.max(14, Math.round(box.size * 0.55));
+    btn.style.borderRadius = '23%';
+    var iconSize = box.size;
     var svg = btn.querySelector && btn.querySelector('svg.dnd-relier-icon, svg');
     if (svg) {
       svg.setAttribute('width', String(iconSize));
       svg.setAttribute('height', String(iconSize));
     }
     return box;
+  }
+
+  /** Logo « Relier deux zones » (assets/logo-relier-zones.svg) — ids suffixés pour multi-jeux. */
+  function relierLogoSvg(uid, size) {
+    uid = String(uid == null ? '0' : uid).replace(/[^a-zA-Z0-9_-]/g, '_');
+    size = Math.max(14, parseInt(size, 10) || 52);
+    var bg = 'mqRelBg_' + uid;
+    var shine = 'mqRelSh_' + uid;
+    var shadow = 'mqRelSd_' + uid;
+    var glow = 'mqRelGl_' + uid;
+    return '<svg class="dnd-relier-icon" width="' + size + '" height="' + size + '" viewBox="0 0 512 512" aria-hidden="true" focusable="false">'
+      + '<defs>'
+      + '<linearGradient id="' + bg + '" x1="70" y1="58" x2="448" y2="468" gradientUnits="userSpaceOnUse">'
+      + '<stop offset="0" stop-color="#0EA5E9"/><stop offset="0.52" stop-color="#2563EB"/><stop offset="1" stop-color="#6D28D9"/>'
+      + '</linearGradient>'
+      + '<linearGradient id="' + shine + '" x1="95" y1="70" x2="345" y2="390" gradientUnits="userSpaceOnUse">'
+      + '<stop stop-color="#FFFFFF" stop-opacity="0.20"/><stop offset="0.55" stop-color="#FFFFFF" stop-opacity="0"/>'
+      + '</linearGradient>'
+      + '<filter id="' + shadow + '" x="-20%" y="-20%" width="140%" height="150%" color-interpolation-filters="sRGB">'
+      + '<feDropShadow dx="0" dy="16" stdDeviation="18" flood-color="#172554" flood-opacity="0.24"/>'
+      + '</filter>'
+      + '<filter id="' + glow + '" x="-120%" y="-120%" width="340%" height="340%" color-interpolation-filters="sRGB">'
+      + '<feDropShadow dx="0" dy="0" stdDeviation="10" flood-color="#67E8F9" flood-opacity="0.85"/>'
+      + '</filter>'
+      + '</defs>'
+      + '<g filter="url(#' + shadow + ')">'
+      + '<rect x="40" y="40" width="432" height="432" rx="118" fill="url(#' + bg + ')"/>'
+      + '<rect x="52" y="52" width="408" height="408" rx="106" fill="none" stroke="#FFFFFF" stroke-opacity="0.12" stroke-width="3"/>'
+      + '<path d="M72 172C118 80 242 47 342 76C215 92 133 160 91 266C72 236 65 203 72 172Z" fill="url(#' + shine + ')"/>'
+      + '</g>'
+      + '<path d="M184 326C226 325 239 267 274 244C298 228 319 220 339 207" fill="none" stroke="#F8FAFC" stroke-width="22" stroke-linecap="round"/>'
+      + '<g transform="rotate(-7 151 330)">'
+      + '<rect x="96" y="275" width="110" height="110" rx="35" fill="#FFFFFF" fill-opacity="0.14" stroke="#F8FAFC" stroke-width="18"/>'
+      + '<circle cx="151" cy="330" r="13" fill="#F8FAFC"/>'
+      + '</g>'
+      + '<g transform="rotate(7 362 184)">'
+      + '<rect x="307" y="129" width="110" height="110" rx="35" fill="#FFFFFF" fill-opacity="0.14" stroke="#F8FAFC" stroke-width="18"/>'
+      + '<circle cx="362" cy="184" r="13" fill="#F8FAFC"/>'
+      + '</g>'
+      + '<g filter="url(#' + glow + ')">'
+      + '<circle cx="270" cy="248" r="24" fill="#67E8F9" stroke="#FFFFFF" stroke-width="8"/>'
+      + '<path d="M260 248L267 255L281 240" fill="none" stroke="#075985" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>'
+      + '</g>'
+      + '</svg>';
   }
 
   function applyInstructionsBoxToElement(el, game) {
@@ -986,23 +1031,19 @@
     }
     function hideTip() { tip.style.display = 'none'; }
 
-    // Icône Relier : deux nœuds reliés par une flèche (style moderne / outline)
-    var ARROW_BTN_SVG = '<svg class="dnd-relier-icon" width="28" height="28" viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false">'
-      + '<circle cx="6" cy="17" r="2.75" stroke="currentColor" stroke-width="2"/>'
-      + '<circle cx="18" cy="7" r="2.75" stroke="currentColor" stroke-width="2"/>'
-      + '<path d="M8.3 15.1 L13.8 10.2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>'
-      + '<path d="M12.6 7.4 L17.2 7.1 L15.2 11.4 Z" fill="currentColor"/>'
-      + '</svg>';
+    // Logo Relier (assets/logo-relier-zones.svg)
+    var relierSize = (normalizeRelierBtn(game.relierBtn, game).size);
+    var relierLogoHtml = relierLogoSvg(gameId, relierSize);
 
     var btn = gameContainer.querySelector('.dnd-relier-btn');
     if (!btn) {
       btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'dnd-relier-btn';
-      btn.style.cssText = 'position:absolute;z-index:12;pointer-events:auto;padding:0;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;border:2px solid rgba(255,255,255,0.85);border-radius:50%;background:linear-gradient(145deg,#1e88e5,#1565c0);color:#fff;box-shadow:0 4px 14px rgba(21,101,192,0.35),0 1px 2px rgba(0,0,0,0.12);';
+      btn.style.cssText = 'position:absolute;z-index:12;pointer-events:auto;padding:0;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;border:none;border-radius:23%;background:transparent;overflow:hidden;box-shadow:none;';
       gameContainer.appendChild(btn);
     }
-    btn.innerHTML = ARROW_BTN_SVG;
+    btn.innerHTML = relierLogoHtml;
     btn.title = BTN_TIP;
     btn.setAttribute('aria-label', BTN_TIP);
     btn.setAttribute('aria-pressed', 'false');
@@ -1013,9 +1054,6 @@
       gameContainer.classList.toggle('dnd-link-mode', linkModeActive);
       btn.classList.toggle('active', linkModeActive);
       btn.setAttribute('aria-pressed', linkModeActive ? 'true' : 'false');
-      btn.style.background = linkModeActive
-        ? 'linear-gradient(145deg,#ff9800,#ef6c00)'
-        : 'linear-gradient(145deg,#1e88e5,#1565c0)';
       btn.title = linkModeActive
         ? 'Mode Relier actif — clic droit maintenu pour tracer une flèche'
         : BTN_TIP;
@@ -2152,6 +2190,7 @@
     applyInstructionsBoxToElement: applyInstructionsBoxToElement,
     normalizeRelierBtn: normalizeRelierBtn,
     applyRelierBtnLayout: applyRelierBtnLayout,
+    relierLogoSvg: relierLogoSvg,
     normalizeLinkZone: normalizeLinkZone,
     normalizeLinkZones: normalizeLinkZones,
     linkZoneBBox: linkZoneBBox

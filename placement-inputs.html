@@ -1056,27 +1056,40 @@
             width: 52px;
             height: 52px;
             padding: 0 !important;
-            border-radius: 50% !important;
+            border-radius: 23% !important;
             display: inline-flex !important;
             align-items: center;
             justify-content: center;
-            color: #fff;
-            background: linear-gradient(145deg, #1e88e5 0%, #1565c0 100%) !important;
-            border: 2px solid rgba(255, 255, 255, 0.85) !important;
-            box-shadow: 0 4px 14px rgba(21, 101, 192, 0.35), 0 1px 2px rgba(0, 0, 0, 0.12) !important;
-            transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+            background: transparent !important;
+            border: none !important;
+            box-shadow: none !important;
+            overflow: hidden;
+            transition: transform 0.15s ease, outline 0.15s ease;
         }
         .dnd-relier-btn:hover {
             transform: scale(1.06);
-            box-shadow: 0 6px 18px rgba(21, 101, 192, 0.45), 0 1px 3px rgba(0, 0, 0, 0.15) !important;
         }
         .dnd-relier-btn .dnd-relier-icon {
             display: block;
             pointer-events: none;
+            width: 100%;
+            height: 100%;
         }
         .dnd-relier-btn.active {
-            background: linear-gradient(145deg, #ff9800 0%, #ef6c00 100%) !important;
-            box-shadow: 0 4px 14px rgba(239, 108, 0, 0.4), 0 1px 2px rgba(0, 0, 0, 0.12) !important;
+            outline: 3px solid #ef6c00 !important;
+            outline-offset: 3px;
+        }
+        .dnd-relier-preview {
+            border-radius: 23% !important;
+            background: transparent !important;
+            border: none !important;
+            box-shadow: none !important;
+            overflow: hidden;
+            padding: 0 !important;
+        }
+        .dnd-relier-preview .dnd-relier-icon {
+            width: 100%;
+            height: 100%;
         }
         .dnd-link-mode .draggable,
         .dnd-link-mode .dnd-link-node {
@@ -13121,17 +13134,14 @@
                             ? MqDndEngine.normalizeRelierBtn(g.relierBtn, g)
                             : Object.assign({ x: Math.round((g.width || 800) * 0.02), y: Math.max(0, Math.round((g.height || 400) * 0.9 - 52)), size: 52 }, g.relierBtn || {});
                         g.relierBtn = rb;
-                        const iconSz = Math.max(14, Math.round(rb.size * 0.55));
+                        const logoHtml = (window.MqDndEngine && MqDndEngine.relierLogoSvg)
+                            ? MqDndEngine.relierLogoSvg(gameId, rb.size)
+                            : '';
                         html += `
                             <div class="dnd-element dnd-relier-preview" data-game="${gameId}" data-type="relierBtn"
                                  title="Bouton Relier — glisser pour positionner, poignée pour la taille"
-                                 style="left:${rb.x}px;top:${rb.y}px;width:${rb.size}px;height:${rb.size}px;z-index:12;border-radius:50%;background:linear-gradient(145deg,#1e88e5,#1565c0);color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 14px rgba(21,101,192,0.35);box-sizing:border-box;border:2px solid rgba(255,255,255,0.9);">
-                                <svg class="dnd-relier-icon" width="${iconSz}" height="${iconSz}" viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false" style="pointer-events:none;">
-                                    <circle cx="6" cy="17" r="2.75" stroke="currentColor" stroke-width="2"/>
-                                    <circle cx="18" cy="7" r="2.75" stroke="currentColor" stroke-width="2"/>
-                                    <path d="M8.3 15.1 L13.8 10.2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                                    <path d="M12.6 7.4 L17.2 7.1 L15.2 11.4 Z" fill="currentColor"/>
-                                </svg>
+                                 style="left:${rb.x}px;top:${rb.y}px;width:${rb.size}px;height:${rb.size}px;z-index:12;display:flex;align-items:center;justify-content:center;box-sizing:border-box;">
+                                ${logoHtml}
                                 <div class="dnd-element-handle" data-game="${gameId}" data-type="relierBtn"></div>
                             </div>`;
                     }
@@ -13345,9 +13355,12 @@
                             el.style.height = size + 'px';
                             const svg = el.querySelector('svg.dnd-relier-icon');
                             if (svg) {
-                                const iconSz = Math.max(14, Math.round(size * 0.55));
-                                svg.setAttribute('width', String(iconSz));
-                                svg.setAttribute('height', String(iconSz));
+                                svg.setAttribute('width', String(size));
+                                svg.setAttribute('height', String(size));
+                            } else if (window.MqDndEngine && MqDndEngine.relierLogoSvg) {
+                                const oldHandle = el.querySelector('.dnd-element-handle');
+                                el.innerHTML = MqDndEngine.relierLogoSvg(gameId, size);
+                                if (oldHandle) el.appendChild(oldHandle);
                             }
                             return;
                         } else if (type === 'draggable') {
