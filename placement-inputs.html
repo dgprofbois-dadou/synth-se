@@ -9912,6 +9912,39 @@
                 if (list.length >= 2) return list;
                 return [];
             }
+            /** Position (x,y) + objet d'une zone DnD (pour drag groupé). */
+            function mqDndReadPos(sel) {
+                const z = mqDndZone(sel);
+                if (!z || !z.obj) return null;
+                return { x: z.obj.x || 0, y: z.obj.y || 0, obj: z.obj };
+            }
+            function mqDndWritePos(sel, x, y) {
+                const z = mqDndZone(sel);
+                if (!z || !z.obj) return;
+                z.obj.x = x;
+                z.obj.y = y;
+            }
+            /** Groupe de drag : toutes les zones multi-sélectionnées (même jeu/type), si le primaire en fait partie. */
+            function mqDndBuildDragGroup(primaryRaw) {
+                const primary = mqDndNormalizeSel(primaryRaw);
+                if (!primary) return null;
+                if (!['dropzone', 'draggable', 'decor', 'decorText'].includes(primary.type)) return null;
+                const multi = mqDndMultiForDistribute(primary);
+                if (multi.length < 2) return null;
+                if (!multi.some((s) => mqDndKey(s) === mqDndKey(primary))) return null;
+                const group = [];
+                multi.forEach((s) => {
+                    const pos = mqDndReadPos(s);
+                    if (!pos) return;
+                    group.push({
+                        sel: s,
+                        origX: pos.x,
+                        origY: pos.y,
+                        el: document.querySelector(mqDndSelector(s))
+                    });
+                });
+                return group.length >= 2 ? group : null;
+            }
             window.mqSetDndSel = function (sel, opts) {
                 mqDndSel = sel ? mqDndNormalizeSel(sel) : null;
                 if (!(opts && opts.keepMulti)) mqDndClearMulti();
@@ -13428,8 +13461,16 @@
                     renderDndGamesPreview();
                 }
                 if (hadGameGesture) renderDndGamesPreview();
+                // Clic simple → sélection unique ; drag groupé → conserver la multi-sélection
                 if (wasClick && movedEl && movedEl.type === 'dropzone' && typeof window.mqSelectDropzoneForEdit === 'function') {
                     window.mqSelectDropzoneForEdit(movedEl.gameId, parseInt(movedEl.index, 10));
+                } else if (movedEl && movedEl.group && movedEl.group.length >= 2) {
+                    mqDndSel = mqDndNormalizeSel({
+                        gameId: movedEl.gameId,
+                        type: movedEl.type,
+                        index: movedEl.index
+                    });
+                    mqRefreshDndSelectionHighlight();
                 } else if (movedEl && movedEl.type === 'dropzone' && window.mqSetDndSel) {
                     window.mqSetDndSel({ gameId: movedEl.gameId, type: 'dropzone', index: String(movedEl.index) });
                 } else if (wasClick && movedEl && window.mqSetDndSel) {
@@ -13445,8 +13486,25 @@
                         const { el, gameId, type, index } = mqDndUiDragEl;
                         if (!el || !el.isConnected) { mqFinishDndUiGesture(e); return; }
                         const sc = state.scale || 1;
-                        const newX = Math.max(0, Math.round(mqDndUiDragEl.origX + (e.clientX - mqDndUiDragEl.startX) / sc));
-                        const newY = Math.max(0, Math.round(mqDndUiDragEl.origY + (e.clientY - mqDndUiDragEl.startY) / sc));
+                        const dx = (e.clientX - mqDndUiDragEl.startX) / sc;
+                        const dy = (e.clientY - mqDndUiDragEl.startY) / sc;
+
+                        // Déplacement groupé (multi-sélection Maj+clic)
+                        if (mqDndUiDragEl.group && mqDndUiDragEl.group.length >= 2) {
+                            mqDndUiDragEl.group.forEach((item) => {
+                                const nx = Math.max(0, Math.round(item.origX + dx));
+                                const ny = Math.max(0, Math.round(item.origY + dy));
+                                mqDndWritePos(item.sel, nx, ny);
+                                if (item.el && item.el.isConnected) {
+                                    item.el.style.left = nx + 'px';
+                                    item.el.style.top = ny + 'px';
+                                }
+                            });
+                            return;
+                        }
+
+                        const newX = Math.max(0, Math.round(mqDndUiDragEl.origX + dx));
+                        const newY = Math.max(0, Math.round(mqDndUiDragEl.origY + dy));
                         const idx = parseInt(index, 10);
                         const g = state.dndGames[gameId];
                         if (!g) return;
@@ -13468,9 +13526,7 @@
                         } else if (type === 'linkZone') {
                             const z = (g.linkZones || [])[idx];
                             if (z && Array.isArray(mqDndUiDragEl.origPoints)) {
-                                const dx = newX - mqDndUiDragEl.origX;
-                                const dy = newY - mqDndUiDragEl.origY;
-                                z.points = mqDndUiDragEl.origPoints.map(function (p) { return [p[0] + dx, p[1] + dy]; });
+                                z.points = mqDndUiDragEl.origPoints.map(function (p) { return [p[0] + (newX - mqDndUiDragEl.origX), p[1] + (newY - mqDndUiDragEl.origY)]; });
                             }
                         } else if (type === 'draggable') { g.draggables[idx].x = newX; g.draggables[idx].y = newY; }
                         else if (type === 'dropzone') { g.dropzones[idx].x = newX; g.dropzones[idx].y = newY; }
@@ -13638,7 +13694,15 @@
                         else if (type === 'decor') { const a = (g0.decorImages || [])[idx0] || {}; ox = a.x || 0; oy = a.y || 0; }
                         else if (type === 'decorText') { const a = (g0.decorTexts || [])[idx0] || {}; ox = a.x || 0; oy = a.y || 0; }
 
-                        mqDndUiDragEl = { el, gameId, type, index, startX: e.clientX, startY: e.clientY, origX: ox, origY: oy };
+                        const primary = { gameId, type, index };
+                        const group = mqDndBuildDragGroup(primary);
+                        // Drag hors multi → annuler la multi-sélection
+                        if (!group && mqDndMultiSel && mqDndMultiSel.length) {
+                            mqDndClearMulti();
+                            mqRefreshDndSelectionHighlight();
+                        }
+
+                        mqDndUiDragEl = { el, gameId, type, index, startX: e.clientX, startY: e.clientY, origX: ox, origY: oy, group: group || null };
                         if (type === 'linkZone') {
                             const z0 = (g0.linkZones || [])[idx0];
                             mqDndUiDragEl.origPoints = (z0 && z0.points) ? z0.points.map(function (p) { return [p[0], p[1]]; }) : [];
