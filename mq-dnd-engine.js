@@ -959,11 +959,12 @@
     }
     function hideTip() { tip.style.display = 'none'; }
 
-    var ARROW_BTN_SVG = '<svg class="dnd-relier-icon" width="28" height="28" viewBox="0 0 24 24" aria-hidden="true" focusable="false">'
-      + '<circle cx="5" cy="12" r="2.4" fill="currentColor"/>'
-      + '<circle cx="19" cy="5" r="2.4" fill="currentColor"/>'
-      + '<path d="M7.2 11.2 L16.2 6.2" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>'
-      + '<path d="M13.2 4.2 L17.2 5.2 L15.4 8.8" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>'
+    // Icône Relier : deux nœuds reliés par une flèche (style moderne / outline)
+    var ARROW_BTN_SVG = '<svg class="dnd-relier-icon" width="28" height="28" viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false">'
+      + '<circle cx="6" cy="17" r="2.75" stroke="currentColor" stroke-width="2"/>'
+      + '<circle cx="18" cy="7" r="2.75" stroke="currentColor" stroke-width="2"/>'
+      + '<path d="M8.3 15.1 L13.8 10.2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>'
+      + '<path d="M12.6 7.4 L17.2 7.1 L15.2 11.4 Z" fill="currentColor"/>'
       + '</svg>';
 
     var btn = gameContainer.querySelector('.dnd-relier-btn');
@@ -971,7 +972,7 @@
       btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'dnd-relier-btn';
-      btn.style.cssText = 'position:absolute;z-index:12;pointer-events:auto;padding:0;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;border:none;border-radius:50%;background:#1565c0;color:#fff;box-shadow:0 2px 8px rgba(0,0,0,0.25);';
+      btn.style.cssText = 'position:absolute;z-index:12;pointer-events:auto;padding:0;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;border:2px solid rgba(255,255,255,0.85);border-radius:50%;background:linear-gradient(145deg,#1e88e5,#1565c0);color:#fff;box-shadow:0 4px 14px rgba(21,101,192,0.35),0 1px 2px rgba(0,0,0,0.12);';
       gameContainer.appendChild(btn);
     }
     btn.innerHTML = ARROW_BTN_SVG;
@@ -985,7 +986,9 @@
       gameContainer.classList.toggle('dnd-link-mode', linkModeActive);
       btn.classList.toggle('active', linkModeActive);
       btn.setAttribute('aria-pressed', linkModeActive ? 'true' : 'false');
-      btn.style.background = linkModeActive ? '#ef6c00' : '#1565c0';
+      btn.style.background = linkModeActive
+        ? 'linear-gradient(145deg,#ff9800,#ef6c00)'
+        : 'linear-gradient(145deg,#1e88e5,#1565c0)';
       btn.title = linkModeActive
         ? 'Mode Relier actif — clic droit maintenu pour tracer une flèche'
         : BTN_TIP;
