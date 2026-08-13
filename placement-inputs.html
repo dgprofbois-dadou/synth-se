@@ -1100,12 +1100,27 @@
             overflow: hidden;
             opacity: 0.95;
         }
-        .mq-dz-cards { display:flex; flex-wrap:wrap; gap:4px; margin-top:6px; }
+        .mq-dz-cards { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
         .mq-dz-card {
-            width:52px; text-align:center; font-size:9px; border:1px solid #ccc;
-            border-radius:4px; padding:2px; background:#fafafa; cursor:pointer;
+            width:72px; min-height:64px; text-align:center; font-size:10px; border:1px solid #ccc;
+            border-radius:6px; padding:4px 3px; background:#fafafa; cursor:pointer;
+            display:flex; flex-direction:column; align-items:center; gap:2px;
+            box-sizing:border-box;
         }
         .mq-dz-card img { width:40px; height:40px; object-fit:contain; display:block; margin:0 auto; }
+        .mq-dz-card .mq-dz-thumb-text {
+            width:100%; min-height:40px; max-height:48px; display:flex; align-items:center; justify-content:center;
+            padding:3px 2px; box-sizing:border-box; border-radius:4px; background:#ffe082;
+            font-size:11px; font-weight:700; line-height:1.15; color:#1a1a1a;
+            overflow:hidden; word-break:break-word; hyphens:auto;
+        }
+        .mq-dz-card .mq-dz-card-label {
+            display:block; width:100%; max-height:2.6em; overflow:hidden;
+            font-size:10px; font-weight:600; line-height:1.2; color:#1e293b;
+        }
+        .mq-dz-card .mq-dz-card-id {
+            display:block; font-size:8px; color:#94a3b8; line-height:1;
+        }
         .mq-dz-card.on { border-color:#1565c0; background:#e3f2fd; }
         </style>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -12066,6 +12081,24 @@
             }
 
             // Afficher la liste / inspecteur des dropzones
+            function mqEscapeHtmlLite(s) {
+                return String(s == null ? '' : s)
+                    .replace(/&/g, '&amp;')
+                    .replace(/"/g, '&quot;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;');
+            }
+            /** Libellé lisible d'une carte (texte réel pour les étiquettes, sinon titre / id). */
+            function mqDraggableCardLabel(c) {
+                if (!c) return '';
+                if (c.kind === 'text') {
+                    const t = String(c.text || '').trim();
+                    if (t) return t;
+                }
+                const title = String(c.title || c.label || '').trim();
+                if (title) return title;
+                return String(c.id != null ? c.id : '');
+            }
             function mqDropzoneDisplayName(dz, index) {
                 if (dz && dz.label && String(dz.label).trim()) return String(dz.label).trim();
                 return 'Zone ' + ((dz && dz.id != null) ? dz.id : (index + 1));
@@ -12088,7 +12121,7 @@
                 if (isNaN(selIdx) || selIdx < 0 || selIdx >= dropzones.length) selIdx = -1;
 
                 const chips = dropzones.map((dz, index) => {
-                    const name = mqDropzoneDisplayName(dz, index).replace(/</g, '&lt;');
+                    const name = mqEscapeHtmlLite(mqDropzoneDisplayName(dz, index));
                     return '<button type="button" class="mq-dz-chip' + (index === selIdx ? ' is-active' : '') + '" data-game="' + gameId + '" data-index="' + index + '" title="' + name + '">' + name + '</button>';
                 }).join('');
 
@@ -12109,14 +12142,22 @@
                 const accepted = Array.isArray(dz.acceptedIds) ? dz.acceptedIds.map(String) : [];
                 const cardsHtml = cards.map((c) => {
                     const on = accepted.indexOf(String(c.id)) >= 0;
-                    const thumb = c.src && String(c.src).indexOf('idb:') !== 0
-                        ? '<img src="' + c.src + '" alt="">'
-                        : '<div style="height:40px;line-height:40px;font-size:14px;">' + (c.label || c.id) + '</div>';
-                    const safeId = String(c.id).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
-                    return '<label class="mq-dz-card' + (on ? ' on' : '') + '" title="ID ' + safeId + '">'
+                    const safeId = mqEscapeHtmlLite(c.id);
+                    const label = mqDraggableCardLabel(c);
+                    const safeLabel = mqEscapeHtmlLite(label);
+                    let thumb;
+                    if (c.kind === 'text') {
+                        thumb = '<div class="mq-dz-thumb-text" title="' + safeLabel + '">' + safeLabel + '</div>';
+                    } else if (c.src && String(c.src).indexOf('idb:') !== 0) {
+                        thumb = '<img src="' + c.src + '" alt="' + safeLabel + '">';
+                    } else {
+                        thumb = '<div class="mq-dz-thumb-text" style="background:#e2e8f0;">' + safeLabel + '</div>';
+                    }
+                    return '<label class="mq-dz-card' + (on ? ' on' : '') + '" title="' + safeLabel + ' (ID ' + safeId + ')">'
                         + thumb
                         + '<input type="checkbox" class="mq-dz-accept" data-game="' + gameId + '" data-index="' + index + '" data-card="' + safeId + '" ' + (on ? 'checked' : '') + '>'
-                        + '<span>' + (c.title || c.id) + '</span></label>';
+                        + '<span class="mq-dz-card-label">' + safeLabel + '</span>'
+                        + '<span class="mq-dz-card-id">ID ' + safeId + '</span></label>';
                 }).join('');
 
                 body += ''
@@ -12322,6 +12363,9 @@
                 else if (property === 'fontSize') d[property] = parseInt(value) || 12;
                 else d[property] = value;
                 renderDndGamesPreview();
+                if (property === 'text' && typeof renderDropzonesList === 'function') {
+                    try { renderDropzonesList(gameId); } catch (e) { /* ignore */ }
+                }
                 saveLocal();
             };
 
