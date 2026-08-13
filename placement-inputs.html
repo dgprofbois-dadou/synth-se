@@ -7591,7 +7591,14 @@
                     });
 
                     // Zones SVG Relier (transparentes élève, hit-testables)
-                    const linkZones = gameConfig.linkZones || [];
+                    // Grandes zones d'abord → petites au-dessus (chevauchements)
+                    const linkZones = (gameConfig.linkZones || []).slice().sort(function (a, b) {
+                        const aa = (window.MqDndEngine && MqDndEngine.linkZoneBBox)
+                            ? MqDndEngine.linkZoneBBox(a.points) : { width: 0, height: 0 };
+                        const bb = (window.MqDndEngine && MqDndEngine.linkZoneBBox)
+                            ? MqDndEngine.linkZoneBBox(b.points) : { width: 0, height: 0 };
+                        return (bb.width * bb.height) - (aa.width * aa.height);
+                    });
                     if (linkZones.length && (gameConfig.enableLinking || gameConfig.gameType === 'linking')) {
                         const svgLz = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
                         svgLz.setAttribute('class', 'dnd-link-zones-layer');
@@ -13952,7 +13959,14 @@
                 out += (g.linkZones || []).length && (g.enableLinking || g.gameType === 'linking')
                     ? (function () {
                         let svg = '<svg class="dnd-link-zones-layer" viewBox="0 0 ' + G_W + ' ' + G_H + '" preserveAspectRatio="none" style="position:absolute;inset:0;width:100%;height:100%;z-index:5;overflow:visible;pointer-events:none;">';
-                        (g.linkZones || []).forEach(function (z) {
+                        const zonesSorted = (g.linkZones || []).slice().sort(function (a, b) {
+                            const aa = (window.MqDndEngine && MqDndEngine.linkZoneBBox)
+                                ? MqDndEngine.linkZoneBBox(a.points) : { width: 0, height: 0 };
+                            const bb = (window.MqDndEngine && MqDndEngine.linkZoneBBox)
+                                ? MqDndEngine.linkZoneBBox(b.points) : { width: 0, height: 0 };
+                            return (bb.width * bb.height) - (aa.width * aa.height);
+                        });
+                        zonesSorted.forEach(function (z) {
                             if (!z || !Array.isArray(z.points) || z.points.length < 3) return;
                             const zid = (z.id != null && String(z.id).trim() !== '') ? String(z.id).trim() : '';
                             if (!zid) return;

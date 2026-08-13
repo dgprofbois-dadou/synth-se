@@ -990,8 +990,95 @@
       return clientToLocal(er.left + er.width / 2, er.top + er.height / 2);
     }
     function nodeFromPoint(clientX, clientY) {
-      var el = document.elementFromPoint(clientX, clientY);
-      return resolveLinkEl(el);
+      return pickBestLinkAt(clientX, clientY);
+    }
+    function linkNodeArea(el) {
+      if (!el) return Infinity;
+      try {
+        var geo = el;
+        if (el.tagName === 'g') geo = el.querySelector('polygon, path, polyline') || el;
+        if (geo && typeof geo.getBBox === 'function' && (geo.ownerSVGElement || geo.tagName === 'svg')) {
+          var bb = geo.getBBox();
+          if (bb && isFinite(bb.width) && isFinite(bb.height)) {
+            return Math.max(1, bb.width) * Math.max(1, bb.height);
+          }
+        }
+      } catch (errA) { /* ignore */ }
+      try {
+        var r = el.getBoundingClientRect();
+        return Math.max(1, r.width) * Math.max(1, r.height);
+      } catch (errB) {
+        return Infinity;
+      }
+    }
+    /**
+     * Zones SVG superposées : privilégie la plus petite (plus précise).
+     * Cartes déposées / draggables restent prioritaires sur les zones.
+     */
+    function pickBestLinkAt(clientX, clientY) {
+      var stack = [];
+      try {
+        if (typeof document.elementsFromPoint === 'function') {
+          stack = document.elementsFromPoint(clientX, clientY) || [];
+        }
+      } catch (errStack) { stack = []; }
+      if (!stack.length) {
+        var one = document.elementFromPoint(clientX, clientY);
+        if (one) stack = [one];
+      }
+      var placed = null;
+      var drag = null;
+      var bestZone = null;
+      var bestArea = Infinity;
+      var seen = {};
+      for (var i = 0; i < stack.length; i++) {
+        var node = stack[i];
+        if (!node || !node.closest || !gameContainer.contains(node)) continue;
+        var p = node.closest('.dnd-placed[data-id]');
+        if (p && gameContainer.contains(p) && !seen['p:' + p.getAttribute('data-id')]) {
+          seen['p:' + p.getAttribute('data-id')] = 1;
+          if (!placed) placed = p;
+        }
+        var d = node.closest('.draggable[data-id]');
+        if (d && gameContainer.contains(d) && !d.classList.contains('used') && !seen['d:' + d.getAttribute('data-id')]) {
+          seen['d:' + d.getAttribute('data-id')] = 1;
+          if (!drag) drag = d;
+        }
+        var lz = node.closest('[data-link-node][data-id]');
+        if (lz && gameContainer.contains(lz)) {
+          var lid = String(lz.getAttribute('data-id') || '');
+          if (lid && !seen['z:' + lid]) {
+            seen['z:' + lid] = 1;
+            var area = linkNodeArea(lz);
+            if (area < bestArea) {
+              bestArea = area;
+              bestZone = lz;
+            }
+          }
+        }
+        var dz = node.closest('.dropzone');
+        if (dz && gameContainer.contains(dz) && !placed) {
+          var inner = dz.querySelector('.dnd-placed[data-id]');
+          if (inner) placed = inner;
+        }
+      }
+      if (placed) return placed;
+      if (drag) return drag;
+      if (bestZone) return bestZone;
+      // Fallback : dropzone vide (id de zone)
+      for (var j = 0; j < stack.length; j++) {
+        var n2 = stack[j];
+        if (!n2 || !n2.closest) continue;
+        var zone = n2.closest('.dropzone');
+        if (zone && gameContainer.contains(zone)) {
+          var zid = zone.getAttribute('data-zone-id') || zone.getAttribute('data-id');
+          if (zid) {
+            if (!zone.getAttribute('data-id')) zone.setAttribute('data-id', zid);
+            return zone;
+          }
+        }
+      }
+      return null;
     }
     /** Image source, carte déposée, zone SVG, ou dropzone (via la carte posée). */
     function resolveLinkEl(el) {
@@ -1411,7 +1498,8 @@
       // Clic droit uniquement — le clic gauche reste pour le pan
       if (e.button != null && e.button !== 2) return;
       if (e.target && e.target.closest && e.target.closest('.dnd-relier-btn, .dnd-verify-btn, .dnd-next-step-btn')) return;
-      var el = resolveLinkEl(e.target);
+      // elementsFromPoint : si 2 zones SVG se chevauchent, prend la plus petite
+      var el = pickBestLinkAt(e.clientX, e.clientY) || resolveLinkEl(e.target);
       if (!el) return;
       e.preventDefault();
       e.stopPropagation();
