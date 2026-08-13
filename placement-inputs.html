@@ -9920,6 +9920,33 @@
                     window.mqRefreshDropzoneInspector(mqDndSel.gameId, parseInt(mqDndSel.index, 10));
                 }
             };
+            /** Nombre de zones en multi-sélection (pour le menu clic droit / UI). */
+            window.mqDndMultiCount = function () {
+                return (mqDndMultiSel && mqDndMultiSel.length) ? mqDndMultiSel.length : 0;
+            };
+            /**
+             * Prépare la sélection avant d'ouvrir le menu contextuel DnD.
+             * Conserve la multi-sélection si la zone cliquée en fait déjà partie.
+             */
+            window.mqDndPrepareContextSel = function (rawClicked) {
+                const clicked = mqDndNormalizeSel(rawClicked);
+                if (!clicked) return;
+                const key = mqDndKey(clicked);
+                const inMulti = (mqDndMultiSel || []).some((s) => mqDndKey(s) === key);
+                if (inMulti && mqDndMultiSel.length >= 2) {
+                    mqDndSel = clicked;
+                    mqRefreshDndSelectionHighlight();
+                    if (clicked.type === 'dropzone' && typeof window.mqRefreshDropzoneInspector === 'function') {
+                        window.mqRefreshDropzoneInspector(clicked.gameId, parseInt(clicked.index, 10));
+                    }
+                    return;
+                }
+                if (clicked.type === 'dropzone' && typeof window.mqSelectDropzoneForEdit === 'function') {
+                    window.mqSelectDropzoneForEdit(clicked.gameId, parseInt(clicked.index, 10));
+                } else {
+                    window.mqSetDndSel(clicked);
+                }
+            };
             window.mqSelectDropzoneForEdit = function (gameId, index) {
                 const g = state.dndGames && state.dndGames[gameId];
                 if (!g || !g.dropzones || !g.dropzones[index]) return;
@@ -17189,13 +17216,14 @@
                     mqAddMenuSep();
                     mqAddMenuItem('🗑️ Supprimer le hotspot', () => mqProxyClick('btnDel'), { danger: true, kbd: '⌫' });
                 } else if (type === 'dnd') {
-                    const multiN = (mqDndMultiSel && mqDndMultiSel.length >= 2) ? mqDndMultiSel.length : 0;
-                    title.textContent = multiN
+                    const multiN = (typeof window.mqDndMultiCount === 'function') ? window.mqDndMultiCount() : 0;
+                    const multiOk = multiN >= 2;
+                    title.textContent = multiOk
                         ? ('Zones DnD · ' + multiN + ' sélectionnées')
                         : 'Zone DnD';
                     ctxMenu.appendChild(title);
                     mqAddMenuItem('🎯 Aligner sur une référence', () => window.mqStartDndAlign && window.mqStartDndAlign());
-                    if (multiN >= 2) {
+                    if (multiOk) {
                         mqAddMenuItem('↔️ Répartir la sélection (auto)', () => window.mqDndDistribute && window.mqDndDistribute());
                         mqAddMenuItem('↔️ Répartir sélection en rangée', () => window.mqDndDistribute && window.mqDndDistribute('h'));
                         mqAddMenuItem('↕️ Répartir sélection en colonne', () => window.mqDndDistribute && window.mqDndDistribute('v'));
@@ -17248,14 +17276,8 @@
                             type: dndEl.dataset.type,
                             index: dndEl.dataset.index != null ? String(dndEl.dataset.index) : ''
                         };
-                        const inMulti = (mqDndMultiSel || []).some((s) => mqDndKey(s) === mqDndKey(clicked));
-                        if (inMulti && mqDndMultiSel.length >= 2) {
-                            // Conserver la multi-sélection ; la zone cliquée devient la référence
-                            mqDndSel = mqDndNormalizeSel(clicked);
-                            mqRefreshDndSelectionHighlight();
-                            if (clicked.type === 'dropzone' && typeof window.mqRefreshDropzoneInspector === 'function') {
-                                window.mqRefreshDropzoneInspector(clicked.gameId, parseInt(clicked.index, 10));
-                            }
+                        if (typeof window.mqDndPrepareContextSel === 'function') {
+                            window.mqDndPrepareContextSel(clicked);
                         } else if (clicked.type === 'dropzone' && typeof window.mqSelectDropzoneForEdit === 'function') {
                             window.mqSelectDropzoneForEdit(clicked.gameId, parseInt(clicked.index, 10));
                         } else if (window.mqSetDndSel) {
