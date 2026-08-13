@@ -1044,6 +1044,45 @@
             outline: 4px solid #f59e0b !important;
             outline-offset: 3px;
         }
+        /* Zones SVG Relier — fill liquide transparent au survol */
+        .dnd-link-zone .lz-fill {
+            fill: #38bdf8;
+            fill-opacity: 0;
+            mix-blend-mode: multiply;
+            transition: fill-opacity 0.28s ease, stroke-opacity 0.28s ease, stroke-width 0.28s ease;
+            pointer-events: all;
+        }
+        .dnd-link-zone .lz-stroke {
+            fill: none;
+            stroke: #0ea5e9;
+            stroke-width: 0;
+            stroke-opacity: 0;
+            stroke-linejoin: round;
+            pointer-events: none;
+            transition: stroke-opacity 0.28s ease, stroke-width 0.28s ease;
+        }
+        .dnd-link-zone:hover .lz-fill,
+        .dnd-link-zone.dnd-link-from .lz-fill,
+        .dnd-link-zone.dnd-link-node.dnd-link-from .lz-fill,
+        g.dnd-link-zone.dnd-link-from .lz-fill {
+            fill-opacity: 0.34;
+            animation: lzLiquidPulse 1.5s ease-in-out infinite;
+        }
+        .dnd-link-zone:hover .lz-stroke,
+        .dnd-link-zone.dnd-link-from .lz-stroke,
+        g.dnd-link-zone.dnd-link-from .lz-stroke {
+            stroke-width: 3;
+            stroke-opacity: 0.75;
+        }
+        @keyframes lzLiquidPulse {
+            0%, 100% { fill-opacity: 0.28; }
+            50% { fill-opacity: 0.42; }
+        }
+        /* SVG : pas d'outline HTML fiable — le fill suffit */
+        g.dnd-link-zone.dnd-link-from,
+        g.dnd-link-zone.dnd-link-node.dnd-link-from {
+            outline: none !important;
+        }
         .dnd-links-layer {
             position: absolute;
             inset: 0;
@@ -7614,11 +7653,15 @@
                             gEl.style.pointerEvents = 'auto';
                             gEl.style.cursor = 'crosshair';
                             const poly = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+                            poly.setAttribute('class', 'lz-fill');
                             poly.setAttribute('points', mqPointsToSvgAttr(z.points));
-                            poly.setAttribute('fill', 'transparent');
-                            poly.setAttribute('stroke', 'none');
                             poly.setAttribute('pointer-events', 'all');
+                            const stroke = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+                            stroke.setAttribute('class', 'lz-stroke');
+                            stroke.setAttribute('points', mqPointsToSvgAttr(z.points));
+                            stroke.setAttribute('pointer-events', 'none');
                             gEl.appendChild(poly);
+                            gEl.appendChild(stroke);
                             svgLz.appendChild(gEl);
                         });
                         gameEl.appendChild(svgLz);
@@ -13972,7 +14015,8 @@
                             if (!zid) return;
                             const pts = z.points.map(function (p) { return p[0] + ',' + p[1]; }).join(' ');
                             svg += '<g data-id="' + zid.replace(/"/g, '&quot;') + '" data-link-node="1" class="dnd-link-zone" style="pointer-events:auto;cursor:crosshair;">'
-                                + '<polygon points="' + pts + '" fill="transparent" stroke="none" pointer-events="all"></polygon></g>';
+                                + '<polygon class="lz-fill" points="' + pts + '" pointer-events="all"></polygon>'
+                                + '<polygon class="lz-stroke" points="' + pts + '" pointer-events="none"></polygon></g>';
                         });
                         svg += '</svg>';
                         return svg;

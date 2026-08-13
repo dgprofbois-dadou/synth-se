@@ -130,6 +130,42 @@ function rebuild() {
   outline: 4px solid #f59e0b !important;
   outline-offset: 3px;
 }
+.dnd-link-zone .lz-fill {
+  fill: #38bdf8;
+  fill-opacity: 0;
+  mix-blend-mode: multiply;
+  transition: fill-opacity 0.28s ease, stroke-opacity 0.28s ease, stroke-width 0.28s ease;
+  pointer-events: all;
+}
+.dnd-link-zone .lz-stroke {
+  fill: none;
+  stroke: #0ea5e9;
+  stroke-width: 0;
+  stroke-opacity: 0;
+  stroke-linejoin: round;
+  pointer-events: none;
+  transition: stroke-opacity 0.28s ease, stroke-width 0.28s ease;
+}
+.dnd-link-zone:hover .lz-fill,
+.dnd-link-zone.dnd-link-from .lz-fill,
+g.dnd-link-zone.dnd-link-from .lz-fill {
+  fill-opacity: 0.34;
+  animation: lzLiquidPulse 1.5s ease-in-out infinite;
+}
+.dnd-link-zone:hover .lz-stroke,
+.dnd-link-zone.dnd-link-from .lz-stroke,
+g.dnd-link-zone.dnd-link-from .lz-stroke {
+  stroke-width: 3;
+  stroke-opacity: 0.75;
+}
+@keyframes lzLiquidPulse {
+  0%, 100% { fill-opacity: 0.28; }
+  50% { fill-opacity: 0.42; }
+}
+g.dnd-link-zone.dnd-link-from,
+g.dnd-link-zone.dnd-link-node.dnd-link-from {
+  outline: none !important;
+}
 .dnd-links-layer {
   position: absolute;
   inset: 0;
@@ -201,6 +237,39 @@ function rebuild() {
   outline: 4px solid #f59e0b !important;
   outline-offset: 3px;
 }
+.dnd-link-zone .lz-fill {
+  fill: #38bdf8;
+  fill-opacity: 0;
+  mix-blend-mode: multiply;
+  transition: fill-opacity 0.28s ease;
+  pointer-events: all;
+}
+.dnd-link-zone .lz-stroke {
+  fill: none;
+  stroke: #0ea5e9;
+  stroke-width: 0;
+  stroke-opacity: 0;
+  stroke-linejoin: round;
+  pointer-events: none;
+  transition: stroke-opacity 0.28s ease, stroke-width 0.28s ease;
+}
+.dnd-link-zone:hover .lz-fill,
+.dnd-link-zone.dnd-link-from .lz-fill,
+g.dnd-link-zone.dnd-link-from .lz-fill {
+  fill-opacity: 0.34;
+  animation: lzLiquidPulse 1.5s ease-in-out infinite;
+}
+.dnd-link-zone:hover .lz-stroke,
+.dnd-link-zone.dnd-link-from .lz-stroke,
+g.dnd-link-zone.dnd-link-from .lz-stroke {
+  stroke-width: 3;
+  stroke-opacity: 0.75;
+}
+@keyframes lzLiquidPulse {
+  0%, 100% { fill-opacity: 0.28; }
+  50% { fill-opacity: 0.42; }
+}
+g.dnd-link-zone.dnd-link-from { outline: none !important; }
 .dnd-links-layer {
   position: absolute;
   inset: 0;
@@ -254,6 +323,43 @@ function rebuild() {
   color: #fff;
 }
 .dnd-relier-btn .dnd-relier-icon { display: block; pointer-events: none; }
+`;
+  }
+  if (styleCss.indexOf('.lz-fill') < 0) {
+    styleCss += `
+.dnd-link-zone .lz-fill {
+  fill: #38bdf8;
+  fill-opacity: 0;
+  mix-blend-mode: multiply;
+  transition: fill-opacity 0.28s ease;
+  pointer-events: all;
+}
+.dnd-link-zone .lz-stroke {
+  fill: none;
+  stroke: #0ea5e9;
+  stroke-width: 0;
+  stroke-opacity: 0;
+  stroke-linejoin: round;
+  pointer-events: none;
+  transition: stroke-opacity 0.28s ease, stroke-width 0.28s ease;
+}
+.dnd-link-zone:hover .lz-fill,
+.dnd-link-zone.dnd-link-from .lz-fill,
+g.dnd-link-zone.dnd-link-from .lz-fill {
+  fill-opacity: 0.34;
+  animation: lzLiquidPulse 1.5s ease-in-out infinite;
+}
+.dnd-link-zone:hover .lz-stroke,
+.dnd-link-zone.dnd-link-from .lz-stroke,
+g.dnd-link-zone.dnd-link-from .lz-stroke {
+  stroke-width: 3;
+  stroke-opacity: 0.75;
+}
+@keyframes lzLiquidPulse {
+  0%, 100% { fill-opacity: 0.28; }
+  50% { fill-opacity: 0.42; }
+}
+g.dnd-link-zone.dnd-link-from { outline: none !important; }
 `;
   }
 
