@@ -8234,6 +8234,7 @@
             let mqBoxBrushStyle = null;  // pinceau champ : style à peindre
             let mqBoxPipetteTarget = null;// pipette champ : id du champ qui RECEVRA le style prélevé
             let mqDndSel = null;          // zone DnD actuellement sélectionnée (clic droit)
+            let mqDndMultiSel = [];       // multi-sélection DnD (Maj+clic) : [{gameId,type,index},…]
             let mqDndAlignTarget = null;  // alignement DnD : zone à aligner sur la référence cliquée
             let mqDndSizeBrush = null;    // pinceau de taille DnD : {width,height} à appliquer
             let mqDndSizePipetteTarget = null; // pipette de taille DnD : zone qui RECEVRA la taille
@@ -9845,13 +9846,78 @@
                 return '.dnd-element[data-game="' + sel.gameId + '"][data-type="' + sel.type + '"]' +
                     (sel.index != null && sel.index !== '' ? '[data-index="' + sel.index + '"]' : '');
             }
-            window.mqSetDndSel = function (sel) {
-                mqDndSel = sel;
+            function mqDndKey(sel) {
+                if (!sel) return '';
+                return String(sel.gameId) + '|' + String(sel.type) + '|' + String(sel.index != null ? sel.index : '');
+            }
+            function mqDndNormalizeSel(sel) {
+                if (!sel) return null;
+                return {
+                    gameId: String(sel.gameId),
+                    type: String(sel.type),
+                    index: sel.index != null && sel.index !== '' ? String(sel.index) : ''
+                };
+            }
+            function mqRefreshDndSelectionHighlight() {
                 document.querySelectorAll('.dnd-element.mq-dnd-selected').forEach(el => el.classList.remove('mq-dnd-selected'));
-                const el = document.querySelector(mqDndSelector(sel));
-                if (el) el.classList.add('mq-dnd-selected');
-                if (sel && sel.type === 'dropzone' && typeof window.mqRefreshDropzoneInspector === 'function') {
+                const keys = new Set();
+                (mqDndMultiSel || []).forEach((s) => keys.add(mqDndKey(s)));
+                if (mqDndSel) keys.add(mqDndKey(mqDndSel));
+                keys.forEach((k) => {
+                    const parts = k.split('|');
+                    if (parts.length < 3) return;
+                    const el = document.querySelector(mqDndSelector({ gameId: parts[0], type: parts[1], index: parts[2] }));
+                    if (el) el.classList.add('mq-dnd-selected');
+                });
+            }
+            function mqDndClearMulti() {
+                mqDndMultiSel = [];
+            }
+            function mqDndToggleMulti(rawSel) {
+                const sel = mqDndNormalizeSel(rawSel);
+                if (!sel || !sel.type) return;
+                // Seed : si une seule zone était déjà sélectionnée (même jeu / type), l'inclure
+                if (!mqDndMultiSel.length && mqDndSel) {
+                    const prev = mqDndNormalizeSel(mqDndSel);
+                    if (prev && prev.gameId === sel.gameId && prev.type === sel.type && mqDndKey(prev) !== mqDndKey(sel)) {
+                        mqDndMultiSel.push(prev);
+                    }
+                }
+                mqDndMultiSel = (mqDndMultiSel || [])
+                    .map(mqDndNormalizeSel)
+                    .filter((s) => s && s.gameId === sel.gameId && s.type === sel.type);
+                const key = mqDndKey(sel);
+                const idx = mqDndMultiSel.findIndex((s) => mqDndKey(s) === key);
+                if (idx >= 0) mqDndMultiSel.splice(idx, 1);
+                else mqDndMultiSel.push(sel);
+                mqDndSel = sel;
+                mqRefreshDndSelectionHighlight();
+                if (sel.type === 'dropzone' && typeof window.mqRefreshDropzoneInspector === 'function') {
                     window.mqRefreshDropzoneInspector(sel.gameId, parseInt(sel.index, 10));
+                }
+                if (window.mqToast) {
+                    const n = Math.max(mqDndMultiSel.length, mqDndSel ? 1 : 0);
+                    if (mqDndMultiSel.length >= 2) {
+                        window.mqToast(mqDndMultiSel.length + ' zones sélectionnées (Maj+clic)');
+                    } else if (n === 1) {
+                        window.mqToast('1 zone sélectionnée');
+                    }
+                }
+            }
+            function mqDndMultiForDistribute(sel) {
+                if (!sel) return [];
+                const list = (mqDndMultiSel || [])
+                    .map(mqDndNormalizeSel)
+                    .filter((s) => s && s.gameId === sel.gameId && s.type === sel.type);
+                if (list.length >= 2) return list;
+                return [];
+            }
+            window.mqSetDndSel = function (sel, opts) {
+                mqDndSel = sel ? mqDndNormalizeSel(sel) : null;
+                if (!(opts && opts.keepMulti)) mqDndClearMulti();
+                mqRefreshDndSelectionHighlight();
+                if (mqDndSel && mqDndSel.type === 'dropzone' && typeof window.mqRefreshDropzoneInspector === 'function') {
+                    window.mqRefreshDropzoneInspector(mqDndSel.gameId, parseInt(mqDndSel.index, 10));
                 }
             };
             window.mqSelectDropzoneForEdit = function (gameId, index) {
@@ -9906,32 +9972,40 @@
             // ----- Répartir régulièrement une rangée/colonne de zones (distribution) -----
             window.mqDndDistribute = function (forceDir) {
                 const sel = mqDndSel;
-                if (!sel) { alert('Faites d\'abord un clic droit sur une zone.'); return; }
+                if (!sel) { alert('Sélectionnez des zones avec Maj+clic, puis clic droit → Répartir.'); return; }
                 const g = state.dndGames[sel.gameId];
-                let arr = null;
-                if (sel.type === 'dropzone') arr = g.dropzones;
-                else if (sel.type === 'draggable') arr = g.draggables;
-                else if (sel.type === 'decor') arr = g.decorImages;
-                else if (sel.type === 'decorText') arr = g.decorTexts;
-                if (!arr || arr.length < 3) { alert('Il faut au moins 3 éléments du même type pour les répartir.'); return; }
+                if (!g) return;
+                const multi = mqDndMultiForDistribute(sel);
+                if (multi.length < 3) {
+                    alert('Sélectionnez au moins 3 zones du même type avec Maj+clic, puis Répartir.\n(Actuellement : ' + Math.max(multi.length, 1) + ')');
+                    return;
+                }
+                const items = multi.map((s) => {
+                    const z = mqDndZone(s);
+                    return z ? z.obj : null;
+                }).filter(Boolean);
+                if (items.length < 3) {
+                    alert('Sélectionnez au moins 3 zones du même type avec Maj+clic, puis Répartir.');
+                    return;
+                }
                 const ref = mqDndZone(sel).obj;
-                const xs = arr.map(z => z.x || 0), ys = arr.map(z => z.y || 0);
+                const xs = items.map(z => z.x || 0), ys = items.map(z => z.y || 0);
                 const spreadX = Math.max(...xs) - Math.min(...xs);
                 const spreadY = Math.max(...ys) - Math.min(...ys);
                 const horizontal = forceDir ? (forceDir === 'h') : (spreadX >= spreadY);
-                const items = arr.slice().sort((a, b) => horizontal ? ((a.x || 0) - (b.x || 0)) : ((a.y || 0) - (b.y || 0)));
-                const n = items.length;
+                const sorted = items.slice().sort((a, b) => horizontal ? ((a.x || 0) - (b.x || 0)) : ((a.y || 0) - (b.y || 0)));
+                const n = sorted.length;
                 if (horizontal) {
-                    const first = items[0].x || 0, last = items[n - 1].x || 0;
-                    items.forEach((z, i) => { z.x = Math.round(first + i * (last - first) / (n - 1)); z.y = ref.y || 0; });
+                    const first = sorted[0].x || 0, last = sorted[n - 1].x || 0;
+                    sorted.forEach((z, i) => { z.x = Math.round(first + i * (last - first) / (n - 1)); z.y = ref.y || 0; });
                 } else {
-                    const first = items[0].y || 0, last = items[n - 1].y || 0;
-                    items.forEach((z, i) => { z.y = Math.round(first + i * (last - first) / (n - 1)); z.x = ref.x || 0; });
+                    const first = sorted[0].y || 0, last = sorted[n - 1].y || 0;
+                    sorted.forEach((z, i) => { z.y = Math.round(first + i * (last - first) / (n - 1)); z.x = ref.x || 0; });
                 }
                 renderDndGamesPreview();
                 mqRefreshDndLists();
                 scheduleSaveLocal();
-                mqHsBanner('✅ Réparti régulièrement ' + (horizontal ? '(rangée)' : '(colonne)'));
+                mqHsBanner('✅ Réparti ' + n + ' zone(s) ' + (horizontal ? '(rangée)' : '(colonne)'));
                 setTimeout(() => mqHsBanner(''), 1400);
             };
 
@@ -10963,6 +11037,10 @@
                         state.selectedHotspotId = null;
                         state.selectedId = null;
                         state.selectedVertex = null;
+                        if (mqDndMultiSel && mqDndMultiSel.length) {
+                            mqDndClearMulti();
+                            mqRefreshDndSelectionHighlight();
+                        }
                         render();
                     }
                     return;
@@ -13213,8 +13291,10 @@
                 // Attacher les tooltips personnalisés
                 attachDndTooltips();
 
-                // Restaurer la sélection (contour + panneau gauche)
-                if (mqDndSel && mqDndSel.gameId) {
+                // Restaurer la sélection (contour + panneau gauche) — multi-sélection Maj+clic incluse
+                if (mqDndMultiSel && mqDndMultiSel.length) {
+                    mqRefreshDndSelectionHighlight();
+                } else if (mqDndSel && mqDndSel.gameId) {
                     const still = document.querySelector(mqDndSelector(mqDndSel));
                     if (still && window.mqSetDndSel) window.mqSetDndSel(mqDndSel);
                 }
@@ -13325,6 +13405,8 @@
                     window.mqSelectDropzoneForEdit(movedEl.gameId, parseInt(movedEl.index, 10));
                 } else if (movedEl && movedEl.type === 'dropzone' && window.mqSetDndSel) {
                     window.mqSetDndSel({ gameId: movedEl.gameId, type: 'dropzone', index: String(movedEl.index) });
+                } else if (wasClick && movedEl && window.mqSetDndSel) {
+                    window.mqSetDndSel({ gameId: movedEl.gameId, type: movedEl.type, index: String(movedEl.index != null ? movedEl.index : '') });
                 }
             }
 
@@ -13502,6 +13584,13 @@
                         const gameId = el.dataset.game;
                         const type = el.dataset.type;
                         const index = el.dataset.index;
+
+                        // Maj+clic : multi-sélection (dépôt, images, décor…) sans démarrer le drag
+                        if (e.shiftKey && ['dropzone', 'draggable', 'decor', 'decorText'].includes(type)) {
+                            mqDndToggleMulti({ gameId, type, index });
+                            return;
+                        }
+
                         const idx0 = parseInt(index, 10);
                         const g0 = state.dndGames[gameId];
                         if (!g0) return;
@@ -17100,12 +17189,21 @@
                     mqAddMenuSep();
                     mqAddMenuItem('🗑️ Supprimer le hotspot', () => mqProxyClick('btnDel'), { danger: true, kbd: '⌫' });
                 } else if (type === 'dnd') {
-                    title.textContent = 'Zone DnD';
+                    const multiN = (mqDndMultiSel && mqDndMultiSel.length >= 2) ? mqDndMultiSel.length : 0;
+                    title.textContent = multiN
+                        ? ('Zones DnD · ' + multiN + ' sélectionnées')
+                        : 'Zone DnD';
                     ctxMenu.appendChild(title);
                     mqAddMenuItem('🎯 Aligner sur une référence', () => window.mqStartDndAlign && window.mqStartDndAlign());
-                    mqAddMenuItem('↔️ Répartir régulièrement (auto)', () => window.mqDndDistribute && window.mqDndDistribute());
-                    mqAddMenuItem('↔️ Répartir en rangée (horizontal)', () => window.mqDndDistribute && window.mqDndDistribute('h'));
-                    mqAddMenuItem('↕️ Répartir en colonne (vertical)', () => window.mqDndDistribute && window.mqDndDistribute('v'));
+                    if (multiN >= 2) {
+                        mqAddMenuItem('↔️ Répartir la sélection (auto)', () => window.mqDndDistribute && window.mqDndDistribute());
+                        mqAddMenuItem('↔️ Répartir sélection en rangée', () => window.mqDndDistribute && window.mqDndDistribute('h'));
+                        mqAddMenuItem('↕️ Répartir sélection en colonne', () => window.mqDndDistribute && window.mqDndDistribute('v'));
+                    } else {
+                        mqAddMenuItem('↔️ Répartir (sélectionnez ≥3 avec Maj+clic)', () => window.mqDndDistribute && window.mqDndDistribute());
+                        mqAddMenuItem('↔️ Répartir en rangée (Maj+clic d’abord)', () => window.mqDndDistribute && window.mqDndDistribute('h'));
+                        mqAddMenuItem('↕️ Répartir en colonne (Maj+clic d’abord)', () => window.mqDndDistribute && window.mqDndDistribute('v'));
+                    }
                     mqAddMenuSep();
                     mqAddMenuItem('📐 Taille…', () => window.mqDndEditSize && window.mqDndEditSize());
                     mqAddMenuItem('🖌️ Pinceau de taille', () => window.mqStartDndSizeBrush && window.mqStartDndSizeBrush());
@@ -17145,10 +17243,23 @@
                     e.preventDefault();
                     e.stopPropagation();
                     if (dndEl) {
-                        if (dndEl.dataset.type === 'dropzone' && typeof window.mqSelectDropzoneForEdit === 'function') {
-                            window.mqSelectDropzoneForEdit(dndEl.dataset.game, parseInt(dndEl.dataset.index, 10));
+                        const clicked = {
+                            gameId: dndEl.dataset.game,
+                            type: dndEl.dataset.type,
+                            index: dndEl.dataset.index != null ? String(dndEl.dataset.index) : ''
+                        };
+                        const inMulti = (mqDndMultiSel || []).some((s) => mqDndKey(s) === mqDndKey(clicked));
+                        if (inMulti && mqDndMultiSel.length >= 2) {
+                            // Conserver la multi-sélection ; la zone cliquée devient la référence
+                            mqDndSel = mqDndNormalizeSel(clicked);
+                            mqRefreshDndSelectionHighlight();
+                            if (clicked.type === 'dropzone' && typeof window.mqRefreshDropzoneInspector === 'function') {
+                                window.mqRefreshDropzoneInspector(clicked.gameId, parseInt(clicked.index, 10));
+                            }
+                        } else if (clicked.type === 'dropzone' && typeof window.mqSelectDropzoneForEdit === 'function') {
+                            window.mqSelectDropzoneForEdit(clicked.gameId, parseInt(clicked.index, 10));
                         } else if (window.mqSetDndSel) {
-                            window.mqSetDndSel({ gameId: dndEl.dataset.game, type: dndEl.dataset.type, index: dndEl.dataset.index });
+                            window.mqSetDndSel(clicked);
                         }
                         mqShowContextMenu(e.clientX, e.clientY, 'dnd');
                     } else if (boxEl) {
