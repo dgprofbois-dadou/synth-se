@@ -1398,7 +1398,7 @@
 
     function cancelDrag() {
       if (dragState && dragState.hoverEl && dragState.hoverEl !== (dragState && dragState.fromEl)) {
-        try { dragState.hoverEl.classList.remove('dnd-link-from'); } catch (err) {}
+        try { dragState.hoverEl.classList.remove('dnd-link-hover'); } catch (err) {}
       }
       if (dragState && dragState.line && dragState.line.parentNode) {
         dragState.line.parentNode.removeChild(dragState.line);
@@ -1440,24 +1440,21 @@
 
     function moveDrag(clientX, clientY) {
       if (!dragState || !dragState.line) return;
-      var target = nodeFromPoint(clientX, clientY);
-      var pt;
-      // Accrocher l’aperçu au centre de la cible (comme le trait final)
+      var pt = localPoint(clientX, clientY);
+      // Survol visuel uniquement — pas d'accrochage magnétique au centre de la zone
+      var target = pickBestLinkAt(clientX, clientY);
       if (target && target !== dragState.fromEl) {
-        pt = nodeCenter(target);
-        target.classList.add('dnd-link-from');
         if (dragState.hoverEl && dragState.hoverEl !== target && dragState.hoverEl !== dragState.fromEl) {
-          dragState.hoverEl.classList.remove('dnd-link-from');
+          dragState.hoverEl.classList.remove('dnd-link-hover');
         }
         dragState.hoverEl = target;
+        target.classList.add('dnd-link-hover');
       } else {
-        pt = localPoint(clientX, clientY);
         if (dragState.hoverEl && dragState.hoverEl !== dragState.fromEl) {
-          dragState.hoverEl.classList.remove('dnd-link-from');
+          dragState.hoverEl.classList.remove('dnd-link-hover');
         }
         dragState.hoverEl = null;
       }
-      // Recaler aussi le départ (au cas où le layout a bougé)
       var c0 = nodeCenter(dragState.fromEl);
       dragState.line.setAttribute('x1', String(c0.x));
       dragState.line.setAttribute('y1', String(c0.y));
