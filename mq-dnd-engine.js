@@ -847,6 +847,8 @@
     var linkModeActive = false;
     var dragState = null;
     var completeFired = false;
+    /** Centres temporaires pendant un drag HTML5 (id → {x,y} en coords layout). */
+    var dragCenterOverrides = Object.create(null);
     var DEFAULT_LINK_TIP = 'Clic droit maintenu sur une image, puis tirez la flèche jusqu’à l’arrivée.';
     var BTN_TIP = 'Mode Relier — clic droit maintenu pour tracer une flèche entre deux images';
 
@@ -865,11 +867,19 @@
       return String(id).replace(/"/g, '\\"');
     }
     function findNode(id) {
-      return gameContainer.querySelector('.draggable[data-id="' + cssEscape(id) + '"], [data-link-node][data-id="' + cssEscape(id) + '"]');
+      var sid = cssEscape(id);
+      // 1) Carte déjà déposée (position jouée) — prioritaire sur le bac
+      var placed = gameContainer.querySelector('.dropzone .dnd-placed[data-id="' + sid + '"]');
+      if (placed) return placed;
+      // 2) Zone SVG Relier / nœud dédié
+      var linkNode = gameContainer.querySelector('[data-link-node][data-id="' + sid + '"]');
+      if (linkNode) return linkNode;
+      // 3) Image source dans le bac
+      return gameContainer.querySelector('.draggable[data-id="' + sid + '"]');
     }
     function allNodes() {
       return Array.prototype.slice.call(
-        gameContainer.querySelectorAll('.draggable[data-id], [data-link-node][data-id]')
+        gameContainer.querySelectorAll('.draggable[data-id], .dnd-placed[data-id], [data-link-node][data-id]')
       );
     }
     function clientToLocal(clientX, clientY) {
@@ -890,6 +900,10 @@
     /** Centre d’un nœud en coords layout (même repère que left/top des images). */
     function nodeCenter(el) {
       if (!el) return { x: 0, y: 0 };
+      var nid = el.getAttribute && el.getAttribute('data-id');
+      if (nid && dragCenterOverrides[nid]) {
+        return { x: dragCenterOverrides[nid].x, y: dragCenterOverrides[nid].y };
+      }
       // Zones SVG Relier (<g> / <polygon>)
       try {
         var geo = el;
@@ -933,9 +947,22 @@
     function nodeFromPoint(clientX, clientY) {
       var el = document.elementFromPoint(clientX, clientY);
       if (!el || !el.closest) return null;
-      var node = el.closest('.draggable[data-id], [data-link-node][data-id]');
+      var node = el.closest('.draggable[data-id], .dnd-placed[data-id], [data-link-node][data-id]');
       if (node && gameContainer.contains(node)) return node;
       return null;
+    }
+
+    function setDragCenter(id, clientX, clientY) {
+      if (!id) return;
+      // clientX/Y à 0,0 = quirk dragend dans certains navigateurs
+      if (!clientX && !clientY) return;
+      dragCenterOverrides[String(id)] = clientToLocal(clientX, clientY);
+      drawLinks(evaluateLinks(game, links));
+    }
+    function clearDragCenter(id) {
+      if (id) delete dragCenterOverrides[String(id)];
+      else dragCenterOverrides = Object.create(null);
+      drawLinks(evaluateLinks(game, links));
     }
     function tipText() {
       return game.linkTooltip || DEFAULT_LINK_TIP;
@@ -1364,7 +1391,9 @@
       getErrors: function () { return linkErrors; },
       setVerified: function (v) { verifiedOnce = !!v; },
       isLinkModeActive: function () { return linkModeActive; },
-      setLinkMode: setLinkMode
+      setLinkMode: setLinkMode,
+      setDragCenter: setDragCenter,
+      clearDragCenter: clearDragCenter
     };
   }
 
@@ -1680,8 +1709,14 @@
           selectCard(id, clone);
           clone.style.opacity = '0.6';
         });
+        clone.addEventListener('drag', function (e) {
+          if (!linkingApi || !linkingApi.setDragCenter) return;
+          if (!e.clientX && !e.clientY) return;
+          linkingApi.setDragCenter(id, e.clientX, e.clientY);
+        });
         clone.addEventListener('dragend', function () {
           clone.style.opacity = '1';
+          if (linkingApi && linkingApi.clearDragCenter) linkingApi.clearDragCenter(id);
         });
       }
     }
@@ -1951,8 +1986,14 @@
         img.style.opacity = '0.5';
         selectCard(id, img);
       });
+      img.addEventListener('drag', function (e) {
+        if (!linkingApi || !linkingApi.setDragCenter) return;
+        if (!e.clientX && !e.clientY) return;
+        linkingApi.setDragCenter(id, e.clientX, e.clientY);
+      });
       img.addEventListener('dragend', function () {
         img.style.opacity = img.classList.contains('used') ? '0.3' : '1';
+        if (linkingApi && linkingApi.clearDragCenter) linkingApi.clearDragCenter(id);
       });
       img.addEventListener('click', function (e) {
         if (isLinkModeOn()) return;
