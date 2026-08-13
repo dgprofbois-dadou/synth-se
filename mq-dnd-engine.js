@@ -924,7 +924,7 @@
     }
     function allNodes() {
       return Array.prototype.slice.call(
-        gameContainer.querySelectorAll('.draggable[data-id], .dnd-placed[data-id], [data-link-node][data-id]')
+        gameContainer.querySelectorAll('.draggable[data-id], .dnd-placed[data-id], [data-link-node][data-id], .dropzone[data-zone-id]')
       );
     }
     function clientToLocal(clientX, clientY) {
@@ -991,9 +991,27 @@
     }
     function nodeFromPoint(clientX, clientY) {
       var el = document.elementFromPoint(clientX, clientY);
+      return resolveLinkEl(el);
+    }
+    /** Image source, carte déposée, zone SVG, ou dropzone (via la carte posée). */
+    function resolveLinkEl(el) {
       if (!el || !el.closest) return null;
-      var node = el.closest('.draggable[data-id], .dnd-placed[data-id], [data-link-node][data-id]');
-      if (node && gameContainer.contains(node)) return node;
+      var placed = el.closest('.dnd-placed[data-id]');
+      if (placed && gameContainer.contains(placed)) return placed;
+      var drag = el.closest('.draggable[data-id]');
+      if (drag && gameContainer.contains(drag) && !drag.classList.contains('used')) return drag;
+      var linkNode = el.closest('[data-link-node][data-id]');
+      if (linkNode && gameContainer.contains(linkNode)) return linkNode;
+      var zone = el.closest('.dropzone');
+      if (zone && gameContainer.contains(zone)) {
+        var inner = zone.querySelector('.dnd-placed[data-id]');
+        if (inner) return inner;
+        var zid = zone.getAttribute('data-zone-id') || zone.getAttribute('data-id');
+        if (zid) {
+          if (!zone.getAttribute('data-id')) zone.setAttribute('data-id', zid);
+          return zone;
+        }
+      }
       return null;
     }
 
@@ -1392,10 +1410,12 @@
       if (!linkModeActive) return;
       // Clic droit uniquement — le clic gauche reste pour le pan
       if (e.button != null && e.button !== 2) return;
-      var el = e.currentTarget;
+      if (e.target && e.target.closest && e.target.closest('.dnd-relier-btn, .dnd-verify-btn, .dnd-next-step-btn')) return;
+      var el = resolveLinkEl(e.target);
+      if (!el) return;
       e.preventDefault();
       e.stopPropagation();
-      try { el.setPointerCapture(e.pointerId); } catch (err) {}
+      try { gameContainer.setPointerCapture(e.pointerId); } catch (err) {}
       startDrag(el, e.clientX, e.clientY);
     }
     function onPointerMove(e) {
@@ -1406,8 +1426,14 @@
     function onPointerUp(e) {
       if (!dragState) return;
       e.preventDefault();
+      try { gameContainer.releasePointerCapture(e.pointerId); } catch (err) {}
       endDrag(e.clientX, e.clientY);
     }
+
+    gameContainer.addEventListener('pointerdown', onPointerDown, true);
+    gameContainer.addEventListener('pointermove', onPointerMove);
+    gameContainer.addEventListener('pointerup', onPointerUp);
+    gameContainer.addEventListener('pointercancel', function () { cancelDrag(); });
 
     allNodes().forEach(function (el) {
       if (!hybrid) {
@@ -1416,10 +1442,10 @@
         el.style.pointerEvents = 'auto';
         el.style.cursor = 'pointer';
       }
-      el.addEventListener('pointerdown', onPointerDown);
-      el.addEventListener('pointermove', onPointerMove);
-      el.addEventListener('pointerup', onPointerUp);
-      el.addEventListener('pointercancel', function () { cancelDrag(); });
+    });
+    Array.prototype.forEach.call(gameContainer.querySelectorAll('.dropzone'), function (z) {
+      z.classList.add('dnd-link-capable');
+      z.style.pointerEvents = 'auto';
     });
 
     // Déplacement libre des images hors mode Relier → la flèche suit (x1/y1)
@@ -1910,6 +1936,7 @@
       var clone = orig.cloneNode(true);
       clone.classList.remove('draggable', 'used', 'dnd-selected', 'dnd-retry-movable');
       clone.classList.add('dnd-placed');
+      clone.classList.add('dnd-link-node');
       clone.removeAttribute('draggable');
       // Retry + erreur : carte repositionnable ; sinon figée jusqu'au retrait
       var movable = (cardUse === 'retry' && !correctHere);
