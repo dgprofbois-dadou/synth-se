@@ -1185,6 +1185,15 @@
             display:block; font-size:8px; color:#94a3b8; line-height:1;
         }
         .mq-dz-card.on { border-color:#1565c0; background:#e3f2fd; }
+        .mq-dz-card.is-dup { border-color:#dc2626; background:#fef2f2; box-shadow:0 0 0 1px #fecaca; }
+        .mq-dz-card.is-dup .mq-dz-card-id { color:#b91c1c; font-weight:700; }
+        .mq-dz-dup-banner {
+            margin:6px 0; padding:8px 10px; border-radius:8px; background:#fef2f2; border:1px solid #fecaca;
+            color:#991b1b; font-size:11px; line-height:1.35; display:flex; flex-wrap:wrap; gap:8px; align-items:center;
+        }
+        .mq-dz-dup-banner button {
+            font-size:11px; padding:4px 8px; border-radius:6px; border:1px solid #dc2626; background:#dc2626; color:#fff; cursor:pointer;
+        }
         </style>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -12424,6 +12433,109 @@
                 if (title) return title;
                 return String(c.id != null ? c.id : '');
             }
+            /** Compte les occurrences de chaque ID de carte (image / étiquette). */
+            function mqDraggableIdCounts(gameId) {
+                const map = new Map();
+                const arr = (state.dndGames[gameId] && state.dndGames[gameId].draggables) || [];
+                arr.forEach((d) => {
+                    const id = String(d && d.id != null ? d.id : '').trim();
+                    if (!id) return;
+                    map.set(id, (map.get(id) || 0) + 1);
+                });
+                return map;
+            }
+            function mqDraggableDuplicateIds(gameId) {
+                return Array.from(mqDraggableIdCounts(gameId).entries())
+                    .filter(([, n]) => n > 1)
+                    .map(([id]) => id);
+            }
+            function mqIsDraggableIdTaken(gameId, id, exceptIndex) {
+                const want = String(id == null ? '' : id).trim();
+                if (!want) return false;
+                const arr = (state.dndGames[gameId] && state.dndGames[gameId].draggables) || [];
+                return arr.some((d, i) => i !== exceptIndex && String(d.id) === want);
+            }
+            /** Prochain ID numérique libre parmi les cartes du jeu. */
+            function mqNextUniqueDraggableId(gameId) {
+                const arr = (state.dndGames[gameId] && state.dndGames[gameId].draggables) || [];
+                const taken = new Set(arr.map((d) => String(d && d.id != null ? d.id : '').trim()).filter(Boolean));
+                let max = 0;
+                taken.forEach((id) => {
+                    const n = parseInt(id, 10);
+                    if (!isNaN(n) && n > max) max = n;
+                });
+                let candidate = max + 1;
+                while (taken.has(String(candidate))) candidate += 1;
+                return String(candidate);
+            }
+            /** Met à jour acceptedIds des zones quand on renomme une carte (si l'ancien ID n'est plus utilisé). */
+            function mqRemapAcceptedCardId(gameId, oldId, newId) {
+                const from = String(oldId == null ? '' : oldId).trim();
+                const to = String(newId == null ? '' : newId).trim();
+                if (!from || !to || from === to) return;
+                const g = state.dndGames[gameId];
+                if (!g) return;
+                const stillUsed = (g.draggables || []).some((d) => String(d.id) === from);
+                (g.dropzones || []).forEach((dz) => {
+                    if (!Array.isArray(dz.acceptedIds)) return;
+                    const set = new Set(dz.acceptedIds.map(String));
+                    if (!set.has(from)) return;
+                    if (!stillUsed) set.delete(from);
+                    set.add(to);
+                    dz.acceptedIds = Array.from(set);
+                });
+            }
+            /**
+             * Corrige les IDs en double : la 1re carte garde l'ID, les suivantes reçoivent un ID libre.
+             * Si l'ancien ID était accepté dans une zone, les nouveaux IDs le sont aussi.
+             */
+            function mqFixDuplicateDraggableIds(gameId) {
+                const g = state.dndGames[gameId];
+                if (!g || !Array.isArray(g.draggables)) return 0;
+                const seen = new Set();
+                const remaps = [];
+                let fixed = 0;
+                g.draggables.forEach((d) => {
+                    let id = String(d && d.id != null ? d.id : '').trim();
+                    if (!id) {
+                        id = mqNextUniqueDraggableId(gameId);
+                        d.id = id;
+                        seen.add(id);
+                        fixed += 1;
+                        return;
+                    }
+                    if (seen.has(id)) {
+                        const newId = mqNextUniqueDraggableId(gameId);
+                        remaps.push({ from: id, to: newId });
+                        d.id = newId;
+                        seen.add(newId);
+                        fixed += 1;
+                    } else {
+                        seen.add(id);
+                    }
+                });
+                remaps.forEach(({ from, to }) => {
+                    (g.dropzones || []).forEach((dz) => {
+                        if (!Array.isArray(dz.acceptedIds)) return;
+                        const set = new Set(dz.acceptedIds.map(String));
+                        if (set.has(String(from))) {
+                            set.add(String(to));
+                            dz.acceptedIds = Array.from(set);
+                        }
+                    });
+                });
+                return fixed;
+            }
+            window.mqFixDuplicateDraggableIds = function (gameId) {
+                const n = mqFixDuplicateDraggableIds(gameId);
+                if (typeof updateDraggablesUI === 'function') updateDraggablesUI(gameId);
+                renderDropzonesList(gameId);
+                renderDndGamesPreview();
+                saveLocal();
+                if (window.mqToast) {
+                    window.mqToast(n ? (n + ' ID(s) en double corrigé(s).') : 'Aucun doublon.');
+                }
+            };
             function mqDropzoneDisplayName(dz, index) {
                 if (dz && dz.label && String(dz.label).trim()) return String(dz.label).trim();
                 return 'Zone ' + ((dz && dz.id != null) ? dz.id : (index + 1));
@@ -12465,8 +12577,20 @@
                 const dz = dropzones[selIdx];
                 const index = selIdx;
                 const accepted = Array.isArray(dz.acceptedIds) ? dz.acceptedIds.map(String) : [];
+                const idCounts = mqDraggableIdCounts(gameId);
+                const dupIds = mqDraggableDuplicateIds(gameId);
+                let dupBanner = '';
+                if (dupIds.length) {
+                    dupBanner = '<div class="mq-dz-dup-banner">'
+                        + '<span>⚠️ IDs en double (' + dupIds.map(mqEscapeHtmlLite).join(', ')
+                        + ') : une case coche toutes les cartes qui partagent le même ID.</span>'
+                        + '<button type="button" data-fix-dups="' + gameId + '">Corriger automatiquement</button>'
+                        + '</div>';
+                }
                 const cardsHtml = cards.map((c) => {
-                    const on = accepted.indexOf(String(c.id)) >= 0;
+                    const cid = String(c.id != null ? c.id : '');
+                    const on = accepted.indexOf(cid) >= 0;
+                    const isDup = (idCounts.get(cid) || 0) > 1;
                     const safeId = mqEscapeHtmlLite(c.id);
                     const label = mqDraggableCardLabel(c);
                     const safeLabel = mqEscapeHtmlLite(label);
@@ -12478,11 +12602,12 @@
                     } else {
                         thumb = '<div class="mq-dz-thumb-text" style="background:#e2e8f0;">' + safeLabel + '</div>';
                     }
-                    return '<label class="mq-dz-card' + (on ? ' on' : '') + '" title="' + safeLabel + ' (ID ' + safeId + ')">'
+                    return '<label class="mq-dz-card' + (on ? ' on' : '') + (isDup ? ' is-dup' : '') + '" title="'
+                        + safeLabel + ' (ID ' + safeId + ')' + (isDup ? ' — ID en double !' : '') + '">'
                         + thumb
                         + '<input type="checkbox" class="mq-dz-accept" data-game="' + gameId + '" data-index="' + index + '" data-card="' + safeId + '" ' + (on ? 'checked' : '') + '>'
                         + '<span class="mq-dz-card-label">' + safeLabel + '</span>'
-                        + '<span class="mq-dz-card-id">ID ' + safeId + '</span></label>';
+                        + '<span class="mq-dz-card-id">ID ' + safeId + (isDup ? ' ⚠' : '') + '</span></label>';
                 }).join('');
 
                 body += ''
@@ -12502,6 +12627,7 @@
                     + '<label style="grid-column:1/-1;"><input type="checkbox" data-field="required" ' + (dz.required === false ? '' : 'checked') + '> Zone obligatoire</label>'
                     + '</div>'
                     + '<div style="margin-top:6px;"><div style="font-size:11px;font-weight:bold;">Réponses acceptées</div>'
+                    + dupBanner
                     + '<div class="mq-dz-cards">' + (cardsHtml || '<span style="font-size:10px;color:#999;">Aucune carte</span>') + '</div></div>'
                     + '<div class="row" style="margin-top:4px;"><label style="font-size:10px;">Msg réussite</label>'
                     + '<input type="text" data-field="successMessage" value="' + String(dz.successMessage || '').replace(/"/g, '&quot;') + '" style="font-size:11px;"></div>'
@@ -12516,6 +12642,11 @@
                 list.querySelectorAll('.mq-dz-chip').forEach((btn) => {
                     btn.addEventListener('click', () => {
                         window.mqSelectDropzoneForEdit(btn.dataset.game, parseInt(btn.dataset.index, 10));
+                    });
+                });
+                list.querySelectorAll('[data-fix-dups]').forEach((btn) => {
+                    btn.addEventListener('click', () => {
+                        window.mqFixDuplicateDraggableIds(btn.getAttribute('data-fix-dups'));
                     });
                 });
                 list.querySelectorAll('.mq-dz-accept').forEach((inp) => {
@@ -12599,8 +12730,15 @@
                     if (!file) return;
 
                     // MAINTENANT on demande l'ID et la description (après la sélection)
-                    const id = prompt('ID de l\'image (ex: 1, 2, 3...):', String(state.dndGames[gameId].draggables.length + 1));
+                    const suggested = mqNextUniqueDraggableId(gameId);
+                    let id = prompt('ID de l\'image (doit être unique) :', suggested);
                     if (!id) return;
+                    id = String(id).trim();
+                    if (!id) return;
+                    if (mqIsDraggableIdTaken(gameId, id)) {
+                        alert('L\'ID « ' + id + ' » est déjà utilisé. Suggestion : ' + suggested);
+                        id = suggested;
+                    }
 
                     const title = prompt('Titre/Description (optionnel):') || '';
 
@@ -12668,8 +12806,15 @@
             // ===== Étiquettes texte draggables =====
             window.addTextDraggable = function (gameId) {
                 const arr = state.dndGames[gameId].draggables;
-                const id = prompt('ID de l\'étiquette (ex: 1, 2, 3…) :', String(arr.length + 1));
+                const suggested = mqNextUniqueDraggableId(gameId);
+                let id = prompt('ID de l\'étiquette (doit être unique) :', suggested);
                 if (!id) return;
+                id = String(id).trim();
+                if (!id) return;
+                if (mqIsDraggableIdTaken(gameId, id)) {
+                    alert('L\'ID « ' + id + ' » est déjà utilisé. Suggestion : ' + suggested);
+                    id = suggested;
+                }
                 arr.push({
                     id, kind: 'text', text: 'Étiquette', title: '',
                     x: 10 + arr.length * 70, y: 120, width: 240, height: 80,
@@ -15667,10 +15812,8 @@
 
                     console.log('📷 Fichier:', file.name, file.size, 'bytes');
 
-                    // Génération ID unique (Max + 1)
-                    const existingIds = state.dndGames[gameId].draggables.map(d => parseInt(d.id) || 0);
-                    const maxId = existingIds.length > 0 ? Math.max(...existingIds) : 0;
-                    const id = String(maxId + 1);
+                    // Génération ID unique (Max + 1, sans collision)
+                    const id = mqNextUniqueDraggableId(gameId);
 
                     console.log('🔢 ID automatique:', id);
 
@@ -15799,11 +15942,28 @@
                     const inputId = document.createElement('input');
                     inputId.type = 'text';
                     inputId.value = d.id;
-                    inputId.style.cssText = 'width:40px; padding:1px; font-size:11px; border:1px solid #ddd; text-align:center;';
+                    const isDupId = mqIsDraggableIdTaken(gameId, d.id, index);
+                    inputId.style.cssText = 'width:48px; padding:1px; font-size:11px; text-align:center; border:1px solid '
+                        + (isDupId ? '#dc2626' : '#ddd') + '; background:' + (isDupId ? '#fef2f2' : '#fff') + ';';
+                    if (isDupId) inputId.title = 'ID en double — changez-le pour que les cases des zones soient indépendantes';
                     inputId.onchange = (e) => {
-                        d.id = e.target.value;
+                        const newId = String(e.target.value || '').trim();
+                        if (!newId) {
+                            e.target.value = d.id;
+                            return;
+                        }
+                        if (mqIsDraggableIdTaken(gameId, newId, index)) {
+                            alert('ID « ' + newId + ' » déjà utilisé par une autre carte. Choisissez un ID unique.');
+                            e.target.value = d.id;
+                            return;
+                        }
+                        const oldId = String(d.id);
+                        d.id = newId;
+                        mqRemapAcceptedCardId(gameId, oldId, newId);
                         saveLocal();
                         renderDndGamesPreview();
+                        updateDraggablesUI(gameId);
+                        if (typeof renderDropzonesList === 'function') renderDropzonesList(gameId);
                     };
                     idGroup.appendChild(inputId);
                     row1.appendChild(idGroup);
