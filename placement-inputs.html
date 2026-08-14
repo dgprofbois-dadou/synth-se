@@ -8238,6 +8238,7 @@
             let mqDndAlignTarget = null;  // alignement DnD : zone à aligner sur la référence cliquée
             let mqDndSizeBrush = null;    // pinceau de taille DnD : {width,height} à appliquer
             let mqDndSizePipetteTarget = null; // pipette de taille DnD : zone qui RECEVRA la taille
+            let mqDndTextPipetteTarget = null; // pipette style texte : étiquette/texte fixe qui RECEVRA le style
 
             const MQ_BOX_STYLE_KEYS = ['font', 'fontSize', 'weight', 'pad', 'bgColor', 'bgAlpha', 'borderColor', 'borderW', 'radius', 'phColor', 'phOpacity', 'phSize', 'phFont', 'phWeight', 'phStyle', 'fillTyping', 'fillWrong', 'fillOk', 'hintRender', 'hintFontSize', 'hintFont', 'hintPad', 'hintMs'];
             function extractBoxStyle(b) { const o = {}; MQ_BOX_STYLE_KEYS.forEach(k => o[k] = b[k]); return o; }
@@ -9815,15 +9816,18 @@
                 mqDndAlignTarget = null;
                 mqDndSizeBrush = null;
                 mqDndSizePipetteTarget = null;
+                mqDndTextPipetteTarget = null;
                 mqHsBanner('');
                 document.body.style.cursor = '';
             }
             function mqToolsActive() {
                 return !!(mqHsBrushStyle || mqHsTipBrush || mqHsAnswerTipBrush || mqHsLinkGroup || mqHsPipetteTarget
-                    || mqBoxBrushStyle || mqBoxPipetteTarget || mqDndAlignTarget || mqDndSizeBrush || mqDndSizePipetteTarget);
+                    || mqBoxBrushStyle || mqBoxPipetteTarget || mqDndAlignTarget || mqDndSizeBrush || mqDndSizePipetteTarget
+                    || mqDndTextPipetteTarget);
             }
             window.mqCancelTools = mqCancelTools;
             window.mqToolsActive = mqToolsActive;
+            window.mqDndTextLabel = mqDndTextLabel;
             const mqCancelHsTools = mqCancelTools; // alias
 
             // ----- Outil d'alignement des zones DnD -----
@@ -9841,6 +9845,28 @@
                 else if (sel.type === 'decorText') obj = (g.decorTexts || [])[parseInt(sel.index)];
                 if (!obj) return null;
                 return { obj, g };
+            }
+            /** Style copié par la pipette : typo + fond d’étiquette (textes fixes et étiquettes draggables). */
+            const MQ_DND_TEXT_STYLE_KEYS = ['font', 'fontSize', 'color', 'bold', 'italic', 'bg', 'bgOn'];
+            function mqDndTextLabel(sel) {
+                if (!sel) return null;
+                const z = mqDndZone(sel);
+                if (!z || !z.obj) return null;
+                if (sel.type === 'decorText') return z.obj;
+                if (sel.type === 'draggable' && z.obj.kind === 'text') return z.obj;
+                return null;
+            }
+            function extractDndTextStyle(obj) {
+                if (!obj) return null;
+                const o = {};
+                MQ_DND_TEXT_STYLE_KEYS.forEach((k) => { o[k] = obj[k]; });
+                return o;
+            }
+            function applyDndTextStyle(obj, s) {
+                if (!obj || !s) return;
+                MQ_DND_TEXT_STYLE_KEYS.forEach((k) => {
+                    if (s[k] !== undefined) obj[k] = s[k];
+                });
             }
             function mqDndSelector(sel) {
                 return '.dnd-element[data-game="' + sel.gameId + '"][data-type="' + sel.type + '"]' +
@@ -10100,6 +10126,18 @@
                 mqDndSel = keep;
                 mqDndSizePipetteTarget = keep;
                 mqHsBanner('🧪 Pipette de taille : cliquez la zone dont COPIER la taille — Échap / clic droit pour annuler');
+                document.body.style.cursor = 'crosshair';
+            };
+
+            // Pipette texte : CE texte/étiquette prendra le style (typo + fond) de celui qu'on clique
+            window.mqStartDndTextPipette = function () {
+                const obj = mqDndTextLabel(mqDndSel);
+                if (!obj) { alert('Faites d\'abord un clic droit sur un texte fixe ou une étiquette.'); return; }
+                const keep = mqDndSel;
+                mqCancelTools();
+                mqDndSel = keep;
+                mqDndTextPipetteTarget = keep;
+                mqHsBanner('🧪 Pipette : cliquez le texte dont COPIER le style (typo + fond) — Échap / clic droit pour annuler');
                 document.body.style.cursor = 'crosshair';
             };
 
@@ -10482,7 +10520,7 @@
                     if (mqToolsActive()) mqCancelTools();
                     return;
                 }
-                if (!mqHsBrushStyle && !mqHsTipBrush && !mqHsAnswerTipBrush && !mqHsLinkGroup && !mqHsPipetteTarget && !mqBoxBrushStyle && !mqBoxPipetteTarget && !mqDndAlignTarget && !mqDndSizeBrush && !mqDndSizePipetteTarget) return;
+                if (!mqHsBrushStyle && !mqHsTipBrush && !mqHsAnswerTipBrush && !mqHsLinkGroup && !mqHsPipetteTarget && !mqBoxBrushStyle && !mqBoxPipetteTarget && !mqDndAlignTarget && !mqDndSizeBrush && !mqDndSizePipetteTarget && !mqDndTextPipetteTarget) return;
 
                 // --- Pinceau de taille DnD : appliquer la taille capturée aux zones cliquées ---
                 if (mqDndSizeBrush) {
@@ -10515,6 +10553,36 @@
                         }
                         mqHsBanner('✅ Taille copiée');
                         setTimeout(() => { if (!mqDndSizePipetteTarget) mqHsBanner(''); }, 1200);
+                    }
+                    return;
+                }
+
+                // --- Pipette style texte : la cible prend typo + fond du texte cliqué ---
+                if (mqDndTextPipetteTarget) {
+                    const el = e.target.closest && e.target.closest('.dnd-element');
+                    if (el) {
+                        e.preventDefault(); e.stopPropagation();
+                        const srcSel = { gameId: el.dataset.game, type: el.dataset.type, index: el.dataset.index };
+                        const src = mqDndTextLabel(srcSel);
+                        const tgt = mqDndTextLabel(mqDndTextPipetteTarget);
+                        if (!src) {
+                            if (window.mqToast) window.mqToast('Cliquez un texte fixe ou une étiquette.', { warn: true });
+                            return;
+                        }
+                        if (mqDndKey(srcSel) === mqDndKey(mqDndTextPipetteTarget)) {
+                            if (window.mqToast) window.mqToast('Cliquez un autre texte pour prélever le style.', { warn: true });
+                            return;
+                        }
+                        if (tgt) {
+                            applyDndTextStyle(tgt, extractDndTextStyle(src));
+                            renderDndGamesPreview(); mqRefreshDndLists(); scheduleSaveLocal();
+                            const t = document.querySelector(mqDndSelector(mqDndTextPipetteTarget));
+                            if (t) mqFlashEl(t);
+                        }
+                        mqDndTextPipetteTarget = null;
+                        document.body.style.cursor = '';
+                        mqHsBanner('✅ Style (typo + fond) copié');
+                        setTimeout(() => { if (!mqDndTextPipetteTarget) mqHsBanner(''); }, 1200);
                     }
                     return;
                 }
@@ -10806,7 +10874,7 @@
             }, true);
 
             document.addEventListener('keydown', function (e) {
-                if (e.key === 'Escape' && (mqHsBrushStyle || mqHsTipBrush || mqHsAnswerTipBrush || mqHsLinkGroup || mqHsPipetteTarget || mqBoxBrushStyle || mqBoxPipetteTarget || mqDndAlignTarget || mqDndSizeBrush || mqDndSizePipetteTarget)) mqCancelTools();
+                if (e.key === 'Escape' && (mqHsBrushStyle || mqHsTipBrush || mqHsAnswerTipBrush || mqHsLinkGroup || mqHsPipetteTarget || mqBoxBrushStyle || mqBoxPipetteTarget || mqDndAlignTarget || mqDndSizeBrush || mqDndSizePipetteTarget || mqDndTextPipetteTarget)) mqCancelTools();
             }, true);
 
             // 4) Épaisseur rapide du contour
@@ -17300,6 +17368,15 @@
                     mqAddMenuItem('📐 Taille…', () => window.mqDndEditSize && window.mqDndEditSize());
                     mqAddMenuItem('🖌️ Pinceau de taille', () => window.mqStartDndSizeBrush && window.mqStartDndSizeBrush());
                     mqAddMenuItem('🧪 Pipette de taille', () => window.mqStartDndSizePipette && window.mqStartDndSizePipette());
+                } else if (type === 'dndText') {
+                    const selEl = document.querySelector('.dnd-element.mq-dnd-selected');
+                    const isFixed = selEl && selEl.dataset.type === 'decorText';
+                    title.textContent = isFixed ? 'Texte fixe' : 'Étiquette texte';
+                    ctxMenu.appendChild(title);
+                    mqAddMenuItem('🧪 Pipette (style + fond)', () => window.mqStartDndTextPipette && window.mqStartDndTextPipette());
+                    mqAddMenuSep();
+                    mqAddMenuItem('🎯 Aligner sur une référence', () => window.mqStartDndAlign && window.mqStartDndAlign());
+                    mqAddMenuItem('📐 Taille…', () => window.mqDndEditSize && window.mqDndEditSize());
                 } else {
                     title.textContent = 'Canvas';
                     ctxMenu.appendChild(title);
@@ -17347,7 +17424,9 @@
                         } else if (window.mqSetDndSel) {
                             window.mqSetDndSel(clicked);
                         }
-                        mqShowContextMenu(e.clientX, e.clientY, 'dnd');
+                        const isTextLabel = clicked.type === 'decorText'
+                            || (clicked.type === 'draggable' && dndEl.querySelector('.dnd-label'));
+                        mqShowContextMenu(e.clientX, e.clientY, isTextLabel ? 'dndText' : 'dnd');
                     } else if (boxEl) {
                         mqSelectBoxEl(boxEl);
                         mqShowContextMenu(e.clientX, e.clientY, 'box');
