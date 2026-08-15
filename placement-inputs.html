@@ -10140,6 +10140,81 @@
                 document.body.style.cursor = 'crosshair';
             };
 
+            /** Prochain ID libre pour décor image / texte fixe. */
+            function mqNextUniqueDecorId(gameId, arrKey, prefix) {
+                const arr = (state.dndGames[gameId] && state.dndGames[gameId][arrKey]) || [];
+                const taken = new Set(arr.map((d) => String(d && d.id != null ? d.id : '').trim()).filter(Boolean));
+                let n = arr.length + 1;
+                let id = String(prefix) + n;
+                while (taken.has(id)) { n += 1; id = String(prefix) + n; }
+                return id;
+            }
+
+            /** Duplique le texte / l'image DnD actuellement sélectionné (mqDndSel). */
+            window.mqDndDuplicate = function () {
+                if (state.mode !== 'admin') return;
+                const sel = mqDndSel;
+                if (!sel || !sel.gameId) {
+                    alert('Faites d\'abord un clic droit sur un texte ou une image.');
+                    return false;
+                }
+                const g = state.dndGames && state.dndGames[sel.gameId];
+                if (!g) return false;
+                const idx = parseInt(sel.index, 10);
+                if (isNaN(idx) || idx < 0) return false;
+                let arr = null;
+                let copy = null;
+                let newIndex = -1;
+
+                if (sel.type === 'decorText') {
+                    if (!Array.isArray(g.decorTexts) || !g.decorTexts[idx]) return false;
+                    arr = g.decorTexts;
+                    copy = JSON.parse(JSON.stringify(arr[idx]));
+                    copy.id = mqNextUniqueDecorId(sel.gameId, 'decorTexts', 'dtext-');
+                    copy.x = (copy.x || 0) + 20;
+                    copy.y = (copy.y || 0) + 20;
+                    arr.push(copy);
+                    newIndex = arr.length - 1;
+                    if (typeof renderDecorTextList === 'function') renderDecorTextList(sel.gameId);
+                } else if (sel.type === 'decor') {
+                    if (!Array.isArray(g.decorImages) || !g.decorImages[idx]) return false;
+                    arr = g.decorImages;
+                    copy = JSON.parse(JSON.stringify(arr[idx]));
+                    copy.id = mqNextUniqueDecorId(sel.gameId, 'decorImages', 'decor-');
+                    copy.x = (copy.x || 0) + 20;
+                    copy.y = (copy.y || 0) + 20;
+                    arr.push(copy);
+                    newIndex = arr.length - 1;
+                    if (typeof renderDecorList === 'function') renderDecorList(sel.gameId);
+                } else if (sel.type === 'draggable') {
+                    if (!Array.isArray(g.draggables) || !g.draggables[idx]) return false;
+                    arr = g.draggables;
+                    copy = JSON.parse(JSON.stringify(arr[idx]));
+                    copy.id = mqNextUniqueDraggableId(sel.gameId);
+                    copy.x = (copy.x || 0) + 20;
+                    copy.y = (copy.y || 0) + 20;
+                    arr.push(copy);
+                    newIndex = arr.length - 1;
+                    if (typeof updateDraggablesUI === 'function') updateDraggablesUI(sel.gameId);
+                } else {
+                    alert('La duplication concerne les textes et les images (pas les zones de dépôt).');
+                    return false;
+                }
+
+                renderDndGamesPreview();
+                scheduleSaveLocal();
+                if (window.mqSetDndSel) {
+                    window.mqSetDndSel({ gameId: sel.gameId, type: sel.type, index: String(newIndex) });
+                }
+                if (window.mqToast) window.mqToast('Dupliqué');
+                return true;
+            };
+            window.mqDndCanDuplicate = function () {
+                const sel = mqDndSel;
+                if (!sel) return false;
+                return sel.type === 'decorText' || sel.type === 'decor' || sel.type === 'draggable';
+            };
+
             // Pinceau texte : capture CE style (typo + fond), puis peindre les textes cliqués
             window.mqStartDndTextBrush = function () {
                 const obj = mqDndTextLabel(mqDndSel);
@@ -11159,8 +11234,12 @@
                 // Ctrl/Cmd+D : dupliquer la sélection (empêche le marque-page du navigateur)
                 if ((e.ctrlKey || e.metaKey) && (e.key === 'd' || e.key === 'D')) {
                     e.preventDefault();
-                    if (state.mode === 'admin' && (state.selectedId || state.selectedHotspotId)) {
-                        duplicateSelection();
+                    if (state.mode === 'admin') {
+                        if (typeof window.mqDndCanDuplicate === 'function' && window.mqDndCanDuplicate()) {
+                            window.mqDndDuplicate();
+                        } else if (state.selectedId || state.selectedHotspotId) {
+                            duplicateSelection();
+                        }
                     }
                     return;
                 }
@@ -17543,10 +17622,15 @@
                 } else if (type === 'dnd') {
                     const multiN = (typeof window.mqDndMultiCount === 'function') ? window.mqDndMultiCount() : 0;
                     const multiOk = multiN >= 2;
+                    const canDup = typeof window.mqDndCanDuplicate === 'function' && window.mqDndCanDuplicate();
                     title.textContent = multiOk
                         ? ('Zones DnD · ' + multiN + ' sélectionnées')
-                        : 'Zone DnD';
+                        : (canDup ? 'Image DnD' : 'Zone DnD');
                     ctxMenu.appendChild(title);
+                    if (canDup) {
+                        mqAddMenuItem('📋 Dupliquer', () => window.mqDndDuplicate && window.mqDndDuplicate(), { kbd: '⌘D' });
+                        mqAddMenuSep();
+                    }
                     mqAddMenuItem('🎯 Aligner sur une référence', () => window.mqStartDndAlign && window.mqStartDndAlign());
                     if (multiOk) {
                         mqAddMenuItem('↔️ Répartir la sélection (auto)', () => window.mqDndDistribute && window.mqDndDistribute());
@@ -17566,6 +17650,8 @@
                     const isFixed = selEl && selEl.dataset.type === 'decorText';
                     title.textContent = isFixed ? 'Texte fixe' : 'Étiquette texte';
                     ctxMenu.appendChild(title);
+                    mqAddMenuItem('📋 Dupliquer', () => window.mqDndDuplicate && window.mqDndDuplicate(), { kbd: '⌘D' });
+                    mqAddMenuSep();
                     mqAddMenuItem('🖌️ Pinceau (style + fond)', () => window.mqStartDndTextBrush && window.mqStartDndTextBrush());
                     mqAddMenuItem('🧪 Pipette (style + fond)', () => window.mqStartDndTextPipette && window.mqStartDndTextPipette());
                     mqAddMenuSep();
