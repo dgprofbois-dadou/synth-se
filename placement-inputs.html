@@ -3375,7 +3375,11 @@
                     </div>
                 </div>
                 <div class="row" style="margin-top:4px; padding-top:4px; border-top:1px dashed #eee;">
-                    <label style="font-size:11px; width:100%;">Tooltips (Police/Durée/Fond/Txt)</label>
+                    <label style="font-size:11px; width:100%;">Tooltips images</label>
+                    <label style="font-size:11px; width:100%; display:flex; align-items:center; gap:6px; margin:2px 0 4px 0;">
+                        <input type="checkbox" id="dndGame1TooltipEnabled" checked style="width:auto; margin:0;">
+                        Afficher le tooltip au survol
+                    </label>
                     <div style="display:flex; flex-wrap:wrap; gap:4px; align-items:center;">
                         <select id="dndGame1TooltipFont" style="width:75px; font-size:10px; height:20px;">
                             <option value="Arial, sans-serif">Arial</option>
@@ -3479,7 +3483,11 @@
                     </div>
                 </div>
                 <div class="row" style="margin-top:4px; padding-top:4px; border-top:1px dashed #eee;">
-                    <label style="font-size:11px; width:100%;">Tooltips (Police/Durée/Fond/Txt)</label>
+                    <label style="font-size:11px; width:100%;">Tooltips images</label>
+                    <label style="font-size:11px; width:100%; display:flex; align-items:center; gap:6px; margin:2px 0 4px 0;">
+                        <input type="checkbox" id="dndGame2TooltipEnabled" checked style="width:auto; margin:0;">
+                        Afficher le tooltip au survol
+                    </label>
                     <div style="display:flex; flex-wrap:wrap; gap:4px; align-items:center;">
                         <select id="dndGame2TooltipFont" style="width:75px; font-size:10px; height:20px;">
                             <option value="Arial, sans-serif">Arial</option>
@@ -3863,6 +3871,7 @@
                             { id: 5, x: 370, y: 250, width: 250, height: 250 }
                         ],
                         // Paramètres des tooltips des images
+                        tooltipEnabled: true,
                         tooltipFont: "'OpenDyslexic', sans-serif",
                         tooltipDuration: 3000,
                         tooltipBgColor: '#333333',
@@ -3897,6 +3906,7 @@
                             { id: 3, x: 190, y: 220, width: 80, height: 80 },
                             { id: 4, x: 280, y: 220, width: 80, height: 80 }
                         ],
+                        tooltipEnabled: true,
                         tooltipFont: "'OpenDyslexic', sans-serif",
                         tooltipDuration: 3000,
                         tooltipBgColor: '#333333',
@@ -7763,8 +7773,12 @@
                         el.draggable = true;
                         if (gameConfig.enableLinking || gameConfig.gameType === 'linking') el.classList.add('dnd-link-capable');
                         el.dataset.id = drag.id;
-                        el.title = drag.title || drag.tooltip || '';
-                        el.setAttribute('data-tooltip', drag.title || drag.tooltip || '');
+                        const tipOn = gameConfig.tooltipEnabled !== false
+                            && !(gameConfig.tooltip && gameConfig.tooltip.enabled === false);
+                        const tipText = tipOn ? (drag.title || drag.tooltip || '') : '';
+                        el.title = tipText;
+                        if (tipText) el.setAttribute('data-tooltip', tipText);
+                        else el.removeAttribute('data-tooltip');
                         el.setAttribute('tabindex', '0');
                         el.setAttribute('role', 'button');
                         el.setAttribute('aria-label', drag.kind === 'text'
@@ -11574,7 +11588,8 @@
                             { id: 4, x: 280, y: 250, width: 250, height: 250 },
                             { id: 5, x: 370, y: 250, width: 250, height: 250 }
                         ],
-                        tooltip: { font: "'OpenDyslexic', sans-serif", duration: 3000, bgColor: '#333333', color: '#ffffff' },
+                        tooltip: { enabled: true, font: "'OpenDyslexic', sans-serif", duration: 3000, bgColor: '#333333', color: '#ffffff' },
+                        tooltipEnabled: true,
                         tooltipFont: "'OpenDyslexic', sans-serif",
                         tooltipDuration: 3000,
                         tooltipBgColor: '#333333',
@@ -11598,7 +11613,8 @@
                             { id: 3, x: 190, y: 220, width: 80, height: 80 },
                             { id: 4, x: 280, y: 220, width: 80, height: 80 }
                         ],
-                        tooltip: { font: "'OpenDyslexic', sans-serif", duration: 3000, bgColor: '#333333', color: '#ffffff' },
+                        tooltip: { enabled: true, font: "'OpenDyslexic', sans-serif", duration: 3000, bgColor: '#333333', color: '#ffffff' },
+                        tooltipEnabled: true,
                         tooltipFont: "'OpenDyslexic', sans-serif",
                         tooltipDuration: 3000,
                         tooltipBgColor: '#333333',
@@ -11635,7 +11651,8 @@
                             { id: 3, x: 190, y: 250, width: 250, height: 250 },
                             { id: 4, x: 280, y: 250, width: 250, height: 250 }
                         ],
-                        tooltip: { font: "'OpenDyslexic', sans-serif", duration: 3000, bgColor: '#333333', color: '#ffffff' },
+                        tooltip: { enabled: true, font: "'OpenDyslexic', sans-serif", duration: 3000, bgColor: '#333333', color: '#ffffff' },
+                        tooltipEnabled: true,
                         tooltipFont: "'OpenDyslexic', sans-serif",
                         tooltipDuration: 3000,
                         tooltipBgColor: '#333333',
@@ -11747,12 +11764,20 @@
                 g.header = Object.assign({}, defaults.header || {}, (saved && saved.header) || {});
                 const ttDef = defaults.tooltip || {};
                 const ttSaved = (saved && saved.tooltip) || {};
+                const ttEnabled = (typeof ttSaved.enabled === 'boolean')
+                    ? ttSaved.enabled
+                    : (typeof (saved && saved.tooltipEnabled) === 'boolean'
+                        ? saved.tooltipEnabled
+                        : (typeof ttDef.enabled === 'boolean' ? ttDef.enabled
+                            : (typeof defaults.tooltipEnabled === 'boolean' ? defaults.tooltipEnabled : true)));
                 g.tooltip = {
+                    enabled: ttEnabled,
                     font: ttSaved.font || saved?.tooltipFont || ttDef.font || defaults.tooltipFont,
                     duration: ttSaved.duration ?? saved?.tooltipDuration ?? ttDef.duration ?? defaults.tooltipDuration ?? 3000,
                     bgColor: ttSaved.bgColor || saved?.tooltipBgColor || ttDef.bgColor || defaults.tooltipBgColor || '#333333',
                     color: ttSaved.color || saved?.tooltipTextColor || ttDef.color || defaults.tooltipTextColor || '#ffffff'
                 };
+                g.tooltipEnabled = ttEnabled;
                 g.tooltipFont = saved?.tooltipFont || g.tooltip.font;
                 g.tooltipDuration = g.tooltip.duration;
                 g.tooltipBgColor = g.tooltip.bgColor;
@@ -11896,12 +11921,15 @@
                     if (!g.titleBox) g.titleBox = { x: 10, y: 10, width: 600, height: 80 };
                     g.titleBox.width = g.header.width;
                     g.titleBox.height = g.header.height;
-                    const ttFont = el('TooltipFont'), ttDur = el('TooltipDuration'), ttBg = el('TooltipBgColor'), ttTxt = el('TooltipTextColor');
+                    const ttEn = el('TooltipEnabled'), ttFont = el('TooltipFont'), ttDur = el('TooltipDuration'), ttBg = el('TooltipBgColor'), ttTxt = el('TooltipTextColor');
+                    if (ttEn) g.tooltipEnabled = !!ttEn.checked;
+                    else if (typeof g.tooltipEnabled !== 'boolean') g.tooltipEnabled = true;
                     if (ttFont) g.tooltipFont = ttFont.value;
                     if (ttDur) g.tooltipDuration = parseInt(ttDur.value, 10) || 3000;
                     if (ttBg) g.tooltipBgColor = ttBg.value;
                     if (ttTxt) g.tooltipTextColor = ttTxt.value;
                     g.tooltip = {
+                        enabled: g.tooltipEnabled !== false,
                         font: ttFont ? ttFont.value : 'arial',
                         duration: parseInt(ttDur?.value, 10) || 3000,
                         bgColor: ttBg ? ttBg.value : '#333',
@@ -13603,11 +13631,14 @@
                         const h = d.height || 250;
                         const idLabel = String(d.id != null ? d.id : (idx + 1));
                         const safeId = idLabel.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+                        const tipOn = g.tooltipEnabled !== false && !(g.tooltip && g.tooltip.enabled === false);
+                        const tipAttr = tipOn
+                            ? ' data-tooltip="' + (d.title || '').replace(/"/g, '&quot;') + '"'
+                            : '';
                         html += `
                             <div class="dnd-element dnd-image png-wrap" data-game="${gameId}" data-type="draggable" data-index="${idx}"
                                  style="left: ${x}px; top: ${y}px; width: ${w}px; height: ${h}px; z-index: 100;"
-                                 title="ID ${safeId}"
-                                 data-tooltip="${(d.title || '').replace(/"/g, '&quot;')}"
+                                 title="ID ${safeId}"${tipAttr}
                                  data-hint-font="${g.tooltipFont || "'OpenDyslexic', sans-serif"}"
                                  data-duration="${g.tooltipDuration || 3000}">
                                 ${mqDndItemInner(d)}
@@ -13764,10 +13795,11 @@
                     img.addEventListener('mouseenter', (e) => {
                         const text = img.dataset.tooltip;
                         if (!text) return;
-
-                        const font = img.dataset.hintFont || "'OpenDyslexic', sans-serif";
                         const gameId = img.dataset.game;
                         const game = state.dndGames[gameId];
+                        if (game && (game.tooltipEnabled === false || (game.tooltip && game.tooltip.enabled === false))) return;
+
+                        const font = img.dataset.hintFont || "'OpenDyslexic', sans-serif";
                         const bgColor = game?.tooltipBgColor || '#333333';
                         const textColor = game?.tooltipTextColor || '#ffffff';
                         const duration = parseInt(img.dataset.duration) || 3000;
@@ -14228,6 +14260,9 @@
                 if (el('ZoneHeight')) el('ZoneHeight').value = g.zoneHeight ?? 250;
                 if (el('ZoneGap')) el('ZoneGap').value = g.zoneGap ?? 10;
                 const tt = g.tooltip || {};
+                if (el('TooltipEnabled')) el('TooltipEnabled').checked = (typeof tt.enabled === 'boolean')
+                    ? tt.enabled
+                    : (g.tooltipEnabled !== false);
                 if (el('TooltipFont')) el('TooltipFont').value = tt.font || g.tooltipFont || "'OpenDyslexic', sans-serif";
                 if (el('TooltipDuration')) el('TooltipDuration').value = tt.duration ?? g.tooltipDuration ?? 3000;
                 if (el('TooltipBgColor')) el('TooltipBgColor').value = tt.bgColor || g.tooltipBgColor || '#333333';
@@ -14395,10 +14430,11 @@
                 const sfx = (n === 1) ? '' : String(n);
                 const goodIds = g.goodIds || '';
                 const targetCount = parseInt(g.targetCount, 10) || 0;
-                const ttFont = (g.tooltip && g.tooltip.font) ? g.tooltip.font : "'OpenDyslexic', sans-serif";
-                const ttDur = (g.tooltip && g.tooltip.duration) ? g.tooltip.duration : 3000;
-                const ttBg = (g.tooltip && g.tooltip.bgColor) ? g.tooltip.bgColor : '#333333';
-                const ttCol = (g.tooltip && g.tooltip.color) ? g.tooltip.color : '#ffffff';
+                const ttFont = (g.tooltip && g.tooltip.font) ? g.tooltip.font : (g.tooltipFont || "'OpenDyslexic', sans-serif");
+                const ttDur = (g.tooltip && g.tooltip.duration) ? g.tooltip.duration : (g.tooltipDuration || 3000);
+                const ttBg = (g.tooltip && g.tooltip.bgColor) ? g.tooltip.bgColor : (g.tooltipBgColor || '#333333');
+                const ttCol = (g.tooltip && g.tooltip.color) ? g.tooltip.color : (g.tooltipTextColor || '#ffffff');
+                const ttEnabled = g.tooltipEnabled !== false && !(g.tooltip && g.tooltip.enabled === false);
                 const G_W = g.width || 800;
                 const G_H = g.height || 400;
                 const localGx = (g.x || 0) - pageCtx.stageX;
@@ -14448,6 +14484,7 @@
                         return { from: String(l.from), to: String(l.to) };
                     }),
                     hideBordersOnComplete: g.hideBordersOnComplete !== false,
+                    tooltipEnabled: ttEnabled,
                     goodIds: g.goodIds || '',
                     targetCount: targetCount,
                     titleBox: {
@@ -14485,7 +14522,8 @@
                 out += ' data-tt-font="' + String(ttFont).replace(/"/g, '&quot;') + '"';
                 out += ' data-tt-dur="' + ttDur + '"';
                 out += ' data-tt-bg="' + ttBg + '"';
-                out += ' data-tt-col="' + ttCol + '">';
+                out += ' data-tt-col="' + ttCol + '"';
+                out += ' data-tt-enabled="' + (ttEnabled ? '1' : '0') + '">';
                 out += '\n                        <script type="application/json" id="dnd-config-' + gameId + '" data-dnd-config="1">' + cfgJson + '<\/script>';
                 out += '\n                        <div class="carre_marron" style="position:absolute; left:' + tbX + '%; top:' + tbY + '%; width:' + tbW + '%; height:' + tbH + '%; display:flex; justify-content:center; align-items:center; box-sizing:border-box; z-index:2;">';
                 out += '<h2 style="font-family:' + (hBox.font || 'Verdana, sans-serif') + '; font-size:' + (hBox.fontSize || 60) + 'px; margin:0; width:100%; text-align:' + (hBox.align || 'center') + '; font-weight:' + (hBox.bold ? 'bold' : 'normal') + '; font-style:' + (hBox.italic ? 'italic' : 'normal') + ';">' + (g.title || ('Jeu ' + n)) + '</h2></div>';
@@ -14527,10 +14565,13 @@
                     const dH = ((d.height || 250) / G_H) * 100;
                     const dX = ((d.x || 0) / G_W) * 100;
                     const dY = ((d.y || 0) / G_H) * 100;
+                    const tipText = ttEnabled ? String(d.title || '').replace(/"/g, '&quot;') : '';
                     return '<div class="draggable-wrapper" style="position:absolute; left:' + dX + '%; top:' + dY + '%; width:' + dW + '%; height:' + dH + '%; box-sizing:border-box;">'
                         + '<span class="png-wrap draggable" draggable="true" tabindex="0" role="button" aria-label="Carte ' + d.id + '"'
                         + ' style="display:block; width:100%; height:100%; pointer-events:auto;"'
-                        + ' data-id="' + d.id + '" data-tooltip="' + String(d.title || '').replace(/"/g, '&quot;') + '">'
+                        + ' data-id="' + d.id + '"'
+                        + (tipText ? ' data-tooltip="' + tipText + '"' : '')
+                        + '>'
                         + mqDndItemInner(d) + '</span></div>';
                 }).join('');
                 out += '</div>';
@@ -15555,6 +15596,11 @@
                 imgs.forEach(img => {
                     const title = img.getAttribute('title');
                     if (!title) return;
+                    const game = state.dndGames[gameId];
+                    if (game && (game.tooltipEnabled === false || (game.tooltip && game.tooltip.enabled === false))) {
+                        img.removeAttribute('title');
+                        return;
+                    }
 
                     img.dataset.tooltipText = title;
                     img.removeAttribute('title');
@@ -16506,7 +16552,9 @@
                     + '<span style="font-size:10px; color:#999;">|</span>'
                     + '<input id="dndGame' + n + 'ZoneGap" type="number" value="10" style="width:35px; font-size:11px; padding:2px;" placeholder="Gap" title="Espacement"></div></div>'
                     + '<div class="row" style="margin-top:4px; padding-top:4px; border-top:1px dashed #eee;">'
-                    + '<label style="font-size:11px; width:100%;">Tooltips (Police/Durée/Fond/Txt)</label>'
+                    + '<label style="font-size:11px; width:100%;">Tooltips images</label>'
+                    + '<label style="font-size:11px; width:100%; display:flex; align-items:center; gap:6px; margin:2px 0 4px 0;">'
+                    + '<input type="checkbox" id="dndGame' + n + 'TooltipEnabled" checked style="width:auto; margin:0;"> Afficher le tooltip au survol</label>'
                     + '<div style="display:flex; flex-wrap:wrap; gap:4px; align-items:center;">'
                     + '<select id="dndGame' + n + 'TooltipFont" style="width:75px; font-size:10px; height:20px;">'
                     + '<option value="Arial, sans-serif">Arial</option>'

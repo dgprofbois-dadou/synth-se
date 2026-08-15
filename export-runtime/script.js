@@ -565,10 +565,18 @@
 
     // C. GESTION DES DRAGGABLES (Images DnD)
     document.querySelectorAll('.draggable').forEach(d => {
+      const gameRoot = d.closest('.drag-game, [data-dnd-gameid], [data-tt-enabled]');
+      const tipEnabled = !(gameRoot && gameRoot.getAttribute('data-tt-enabled') === '0');
+
       // Migration title -> data-tooltip si nécessaire (rétro-compatibilité)
-      if (d.title && !d.getAttribute('data-tooltip')) {
+      if (tipEnabled && d.title && !d.getAttribute('data-tooltip')) {
         d.setAttribute('data-tooltip', d.title);
         d.removeAttribute('title');
+      }
+      if (!tipEnabled) {
+        d.removeAttribute('data-tooltip');
+        d.removeAttribute('title');
+        return;
       }
 
       d.addEventListener('pointerenter', (e) => {
