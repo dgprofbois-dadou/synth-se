@@ -407,6 +407,16 @@
             box-shadow: none !important;
         }
 
+        /* Pendant le tracé d'une zone Relier : laisser passer les clics (zones superposées) */
+        body.mq-drawing-linkzone .dnd-element,
+        body.mq-drawing-linkzone .dnd-element-handle,
+        body.mq-drawing-linkzone .dnd-resize-handle {
+            pointer-events: none !important;
+        }
+        body.mq-drawing-linkzone .dnd-link-zone-wrap {
+            opacity: 0.55;
+        }
+
         #hotspots {
             position: absolute;
             left: 0;
@@ -7030,41 +7040,84 @@
                 document.body.style.cursor = linkZoneDrawMode === 'freehand' ? 'crosshair' : 'crosshair';
                 if (typeof mqHsBanner === 'function') {
                     mqHsBanner(linkZoneDrawMode === 'freehand'
-                        ? '✏️ Zone Relier : clic au départ · suivez le contour · revenez au point vert pour fermer · Échap = annuler'
-                        : '📍 Zone Relier : clic = point · double-clic = terminer (≥3 pts) · Échap = annuler');
+                        ? '✏️ Zone Relier : clic au départ · superposez librement · revenez au point vert · Échap = terminer'
+                        : '📍 Zone Relier : clic = point · double-clic = terminer (≥3 pts) · superposez librement · Échap = terminer');
                 }
                 if (typeof renderDndGamesPreview === 'function') renderDndGamesPreview();
+            }
+            function mqSuggestLinkZoneId(gameId) {
+                const arr = (state.dndGames[gameId] && state.dndGames[gameId].linkZones) || [];
+                const taken = new Set(arr.map((z) => String(z && z.id != null ? z.id : '').trim()).filter(Boolean));
+                let n = arr.length + 1;
+                let id = 'zone-' + n;
+                while (taken.has(id)) {
+                    n += 1;
+                    id = 'zone-' + n;
+                }
+                return id;
             }
             function mqFinishLinkZoneDraw() {
                 const draft = linkZoneDraft;
                 const gameId = linkZoneDraftGameId;
+                const mode = linkZoneDrawMode;
                 if (!draft || draft.length < 3 || !gameId || !state.dndGames[gameId]) {
                     mqCancelLinkZoneDraw();
                     return;
                 }
                 let pts = draft.slice();
-                if (linkZoneDrawMode === 'freehand') {
+                if (mode === 'freehand') {
                     pts = mqSimplifyPolyline(pts, 3);
                     if (pts.length < 3) pts = draft.slice();
                 }
                 if (!state.dndGames[gameId].linkZones) state.dndGames[gameId].linkZones = [];
                 const arr = state.dndGames[gameId].linkZones;
-                const defId = 'zone-' + (arr.length + 1);
+                const defId = mqSuggestLinkZoneId(gameId);
                 const id = prompt('ID de la zone SVG (utilisable dans Relier : id>id) :', defId);
                 if (!id || !String(id).trim()) {
-                    mqCancelLinkZoneDraw();
+                    // Annulation du prompt : garder le mode dessin pour retenter / tracer ailleurs
+                    linkZoneDraft = [];
+                    linkZoneFreehandTracing = false;
+                    if (typeof mqHsBanner === 'function') {
+                        mqHsBanner(mode === 'freehand'
+                            ? '✏️ Zone Relier : clic au départ · superposez librement · revenez au point vert · Échap = terminer'
+                            : '📍 Zone Relier : clic = point · double-clic = terminer · superposez librement · Échap = terminer');
+                    }
+                    if (typeof renderDndGamesPreview === 'function') renderDndGamesPreview();
                     return;
                 }
+                let finalId = String(id).trim();
+                if (arr.some((z) => String(z.id) === finalId)) {
+                    const alt = mqSuggestLinkZoneId(gameId);
+                    if (!confirm('L\'ID « ' + finalId + ' » existe déjà. Utiliser « ' + alt + ' » ?')) {
+                        linkZoneDraft = [];
+                        linkZoneFreehandTracing = false;
+                        if (typeof renderDndGamesPreview === 'function') renderDndGamesPreview();
+                        return;
+                    }
+                    finalId = alt;
+                }
                 arr.push({
-                    id: String(id).trim(),
+                    id: finalId,
                     points: pts,
                     label: ''
                 });
-                mqCancelLinkZoneDraw();
+                // Rester en mode dessin pour enchaîner des zones superposées
+                linkZoneDraft = [];
+                linkZoneFreehandTracing = false;
+                drawingLinkZone = true;
+                linkZoneDrawMode = mode;
+                linkZoneDraftGameId = gameId;
+                document.body.classList.add('mq-drawing-linkzone');
+                document.body.style.cursor = 'crosshair';
                 if (typeof renderLinkZoneList === 'function') renderLinkZoneList(gameId);
                 if (typeof renderDndGamesPreview === 'function') renderDndGamesPreview();
                 saveLocal();
-                if (window.mqToast) window.mqToast('Zone SVG « ' + String(id).trim() + ' » ajoutée');
+                if (window.mqToast) window.mqToast('Zone SVG « ' + finalId + ' » ajoutée — tracez la suivante (Échap = fin)');
+                if (typeof mqHsBanner === 'function') {
+                    mqHsBanner(mode === 'freehand'
+                        ? '✏️ Zone suivante : clic au départ · superposez librement · point vert pour fermer · Échap = terminer'
+                        : '📍 Zone suivante : clic = point · double-clic = terminer · superposez librement · Échap = terminer');
+                }
             }
             function mqLinkZoneFreehandTrack(lx, ly) {
                 if (!drawingLinkZone || linkZoneDrawMode !== 'freehand' || !linkZoneFreehandTracing) return;
@@ -13603,12 +13656,19 @@
                             </div>`;
                     });
 
-                    // Zones SVG Relier (visibles admin)
+                    // Zones SVG Relier (visibles admin) — grandes d'abord, petites au-dessus (superposition)
                     {
-                        const zones = g.linkZones || [];
+                        const zones = (g.linkZones || []).map(function (z, idx) { return { z: z, idx: idx }; })
+                            .filter(function (row) { return row.z && Array.isArray(row.z.points) && row.z.points.length >= 3; })
+                            .sort(function (a, b) {
+                                const aa = mqLinkZoneBBox(a.z.points);
+                                const bb = mqLinkZoneBBox(b.z.points);
+                                return (bb.width * bb.height) - (aa.width * aa.height);
+                            });
                         let zoneSvg = '';
-                        zones.forEach((z, idx) => {
-                            if (!z || !Array.isArray(z.points) || z.points.length < 3) return;
+                        zones.forEach(function (row, drawOrder) {
+                            const z = row.z;
+                            const idx = row.idx;
                             const idLabel = String(z.id != null && String(z.id).trim() !== '' ? z.id : ('zone-' + (idx + 1)));
                             const safeId = idLabel.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
                             const bb = mqLinkZoneBBox(z.points);
@@ -13616,11 +13676,12 @@
                             const by = Math.max(0, bb.y);
                             const bw = Math.max(24, bb.width);
                             const bh = Math.max(24, bb.height);
-                            zoneSvg += '<polygon points="' + mqPointsToSvgAttr(z.points) + '" fill="rgba(21,101,192,0.18)" stroke="#1565c0" stroke-width="2" stroke-dasharray="6 4" pointer-events="none"></polygon>';
+                            const fillA = 0.12 + Math.min(0.2, drawOrder * 0.04);
+                            zoneSvg += '<polygon points="' + mqPointsToSvgAttr(z.points) + '" fill="rgba(21,101,192,' + fillA.toFixed(2) + ')" stroke="#1565c0" stroke-width="2" stroke-dasharray="6 4" pointer-events="none"></polygon>';
                             html += `
                             <div class="dnd-element dnd-link-zone-wrap" data-game="${gameId}" data-type="linkZone" data-index="${idx}"
-                                 title="Zone SVG Relier — ID ${safeId} (glisser pour déplacer)"
-                                 style="left:${bx}px;top:${by}px;width:${bw}px;height:${bh}px;z-index:8;background:transparent;border:none;box-sizing:border-box;">
+                                 title="Zone SVG Relier — ID ${safeId} (glisser pour déplacer · superposable)"
+                                 style="left:${bx}px;top:${by}px;width:${bw}px;height:${bh}px;z-index:${8 + drawOrder};background:transparent;border:none;box-sizing:border-box;">
                                 <span class="dnd-id-badge">ID ${safeId}</span>
                             </div>`;
                         });
@@ -13983,7 +14044,9 @@
                 document.querySelectorAll('.dnd-element').forEach(el => {
                     el.addEventListener('mousedown', (e) => {
                         if (e.target.classList.contains('dnd-element-handle')) return;
-                        if (mqDndAlignTarget || mqDndSizeBrush || mqDndSizePipetteTarget) return;
+                        if (typeof drawingLinkZone !== 'undefined' && drawingLinkZone) return;
+                        if (mqDndAlignTarget || mqDndSizeBrush || mqDndSizePipetteTarget
+                            || mqDndTextPipetteTarget || mqDndTextBrushStyle) return;
                         if (e.button !== 0) return;
 
                         e.stopPropagation();
@@ -14038,7 +14101,9 @@
 
                 document.querySelectorAll('.dnd-element-handle').forEach(handle => {
                     handle.addEventListener('mousedown', (e) => {
-                        if (mqDndAlignTarget || mqDndSizeBrush || mqDndSizePipetteTarget) return;
+                        if (typeof drawingLinkZone !== 'undefined' && drawingLinkZone) return;
+                        if (mqDndAlignTarget || mqDndSizeBrush || mqDndSizePipetteTarget
+                            || mqDndTextPipetteTarget || mqDndTextBrushStyle) return;
                         if (e.button !== 0) return;
                         e.stopImmediatePropagation();
                         e.stopPropagation();
@@ -16345,7 +16410,7 @@
                     + '<p style="margin:0;font-size:10px;color:#64748b;">Sans « Jeu par étapes » : ces paires valident tout le jeu. Avec étapes, utilisez les flèches dans chaque étape (ci-dessous).</p>'
                     + '</div>'
                     + '<label style="width:auto;font-size:12px;font-weight:bold;margin-top:4px;">Zones SVG Relier (transparentes élève)</label>'
-                    + '<p style="margin:0;font-size:10px;color:#64748b;">Dessinez comme un hotspot (points ou crayon). Visible en admin, invisible pour l’élève, ID utilisable dans les paires.</p>'
+                    + '<p style="margin:0;font-size:10px;color:#64748b;">Dessinez comme un hotspot (points ou crayon). Les zones peuvent se superposer : pendant le tracé, les clics passent au-dessus des zones existantes ; en élève, la plus petite zone sous le curseur est prioritaire. Échap pour quitter le mode dessin.</p>'
                     + '<div id="dndGame' + n + 'LinkZoneList" style="max-height:120px;overflow-y:auto;background:#fff;padding:5px;border-radius:4px;border:1px solid #ddd;margin:4px 0;"></div>'
                     + '<div style="display:flex;gap:6px;flex-wrap:wrap;">'
                     + '<button type="button" id="btnLinkZonePtsGame' + n + '" style="flex:1;font-size:11px;font-weight:bold;">📍 Zone SVG (points)</button>'
