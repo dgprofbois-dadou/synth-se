@@ -2490,6 +2490,36 @@
             padding: 2px !important;
         }
 
+        #left .mq-dnd-card .mq-dnd-tip-toggle {
+            display: flex !important;
+            align-items: center;
+            gap: 8px;
+            width: 100%;
+            margin: 0 0 8px 0;
+            padding: 8px 10px;
+            border-radius: 8px;
+            background: #eef2ff;
+            border: 1px solid #c7d2fe;
+            font-size: 12px !important;
+            font-weight: 600 !important;
+            color: #312e81;
+            cursor: pointer;
+            box-sizing: border-box;
+        }
+
+        #left .mq-dnd-card--2 .mq-dnd-tip-toggle {
+            background: #ecfdf5;
+            border-color: #a7f3d0;
+            color: #065f46;
+        }
+
+        #left .mq-dnd-card .mq-dnd-tip-toggle input[type="checkbox"] {
+            width: 18px !important;
+            height: 18px !important;
+            margin: 0 !important;
+            flex: 0 0 auto;
+        }
+
         /* Menu contextuel canvas */
         #mqContextMenu {
             position: fixed;
@@ -16732,23 +16762,40 @@
                 const anchor = $(fontInputId);
                 if (!anchor) return;
                 const row = anchor.closest('.row');
-                if (!row || row.dataset.mqToolbarLayout) return;
-                row.dataset.mqToolbarLayout = '1';
+                if (!row) return;
+                const tipId = String(fontInputId || '').replace(/TooltipFont$/, 'TooltipEnabled');
+                const tipEn = (tipId !== fontInputId) ? $(tipId) : null;
+                // v2 : case tooltip avec libellé lisible (v1 perdait le texte)
+                if (row.dataset.mqToolbarLayout === '2') return;
+                row.dataset.mqToolbarLayout = '2';
                 if (!row.classList.contains('mq-dnd-sub')) row.classList.add('mq-dnd-sub');
                 let subLab = row.querySelector('.mq-dnd-sub-label');
                 if (!subLab) {
                     subLab = document.createElement('span');
                     subLab.className = 'mq-dnd-sub-label';
                     subLab.textContent = subTitle;
+                } else {
+                    subLab.textContent = subTitle;
                 }
-                const controls = Array.from(row.querySelectorAll('select, input'));
+                const controls = Array.from(row.querySelectorAll('select, input')).filter((inp) => inp !== tipEn);
                 const toolbar = document.createElement('div');
                 toolbar.className = 'mq-dnd-toolbar';
                 controls.forEach((inp) => {
                     inp.removeAttribute('style');
                     toolbar.appendChild(inp);
                 });
-                row.replaceChildren(subLab, toolbar);
+                const kids = [subLab];
+                if (tipEn) {
+                    const tipLab = document.createElement('label');
+                    tipLab.className = 'mq-dnd-tip-toggle';
+                    tipLab.setAttribute('for', tipEn.id);
+                    tipEn.removeAttribute('style');
+                    tipLab.appendChild(tipEn);
+                    tipLab.appendChild(document.createTextNode(' Afficher le tooltip au survol des images'));
+                    kids.push(tipLab);
+                }
+                kids.push(toolbar);
+                row.replaceChildren.apply(row, kids);
             }
 
             function mqEnhanceDndPanels() {
