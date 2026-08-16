@@ -11893,6 +11893,11 @@
                     if (el('EnableSteps')) g.enableSteps = el('EnableSteps').checked;
                     if (g.enableSteps) {
                         g.steps = mqReadStepsFromUI(n);
+                        if ((g.steps || []).some((st) => st.activity === 'linking' || st.activity === 'both' || (st.linkPairs && st.linkPairs.length))) {
+                            g.enableLinking = true;
+                            const enL = el('EnableLinking');
+                            if (enL) enL.checked = true;
+                        }
                     }
                     if (!g.instructionsBox) g.instructionsBox = {};
                     if (el('InstrX')) g.instructionsBox.x = parseInt(val('InstrX'), 10) || 0;
@@ -13281,6 +13286,9 @@
                 return Array.from(list.querySelectorAll('[data-step-idx]')).map((card, i) => {
                     const title = (card.querySelector('[data-field="title"]') || {}).value || ('Étape ' + (i + 1));
                     const instructions = (card.querySelector('[data-field="instructions"]') || {}).value || '';
+                    const activityEl = card.querySelector('[data-field="activity"]');
+                    const activity = (activityEl && activityEl.value) || 'dnd';
+                    const requireNextButton = !!(card.querySelector('[data-field="requireNextButton"]') || {}).checked;
                     const zoneIdsRaw = (card.querySelector('[data-field="zoneIds"]') || {}).value || '';
                     const goodIds = (card.querySelector('[data-field="goodIds"]') || {}).value || '';
                     const linksRaw = (card.querySelector('[data-field="linkPairs"]') || {}).value || '';
@@ -13288,7 +13296,16 @@
                     const linkPairs = (window.MqDndEngine && MqDndEngine.normalizeAllowedLinks)
                         ? MqDndEngine.normalizeAllowedLinks(linksRaw)
                         : [];
-                    return { id: String(i + 1), title, instructions, zoneIds, goodIds, linkPairs };
+                    return {
+                        id: String(i + 1),
+                        title,
+                        instructions,
+                        activity,
+                        requireNextButton,
+                        zoneIds,
+                        goodIds,
+                        linkPairs
+                    };
                 });
             }
             window.addDndStep = function (gameId) {
@@ -13300,6 +13317,8 @@
                     id: String(g.steps.length + 1),
                     title: 'Étape ' + (g.steps.length + 1),
                     instructions: '',
+                    activity: 'dnd',
+                    requireNextButton: false,
                     zoneIds: [],
                     goodIds: '',
                     linkPairs: []
@@ -13347,8 +13366,19 @@
                 };
                 list.innerHTML = g.steps.map((s, index) => {
                     const zoneStr = Array.isArray(s.zoneIds) ? s.zoneIds.join(',') : String(s.zoneIds || '');
+                    const activity = (s.activity === 'linking' || s.activity === 'both' || s.activity === 'dnd')
+                        ? s.activity
+                        : ((s.linkPairs && s.linkPairs.length && !(s.zoneIds && s.zoneIds.length) && !String(s.goodIds || '').trim())
+                            ? 'linking'
+                            : ((s.linkPairs && s.linkPairs.length) ? 'both' : 'dnd'));
+                    const actDnd = activity === 'dnd' ? ' selected' : '';
+                    const actLink = activity === 'linking' ? ' selected' : '';
+                    const actBoth = activity === 'both' ? ' selected' : '';
+                    const reqNext = s.requireNextButton ? ' checked' : '';
+                    const showDnd = activity !== 'linking';
+                    const showLink = activity !== 'dnd';
                     return ''
-                        + '<div data-step-idx="' + index + '" style="border:1px solid #cfd6df;border-radius:8px;padding:8px;margin-bottom:8px;background:#f8fafc;">'
+                        + '<div data-step-idx="' + index + '" class="mq-dnd-step-card" style="border:1px solid #cfd6df;border-radius:8px;padding:8px;margin-bottom:8px;background:#f8fafc;">'
                         + '<div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;">'
                         + '<strong style="font-size:12px;">#' + (index + 1) + '</strong>'
                         + '<input data-field="title" type="text" value="' + String(s.title || '').replace(/"/g, '&quot;') + '" placeholder="Titre de l’étape" style="flex:1;font-size:12px;padding:4px;">'
@@ -13356,32 +13386,59 @@
                         + '<button type="button" title="Descendre" onclick="window.moveDndStep(\'' + gameId + '\',' + index + ',1)" style="font-size:11px;">↓</button>'
                         + '<button type="button" onclick="window.removeDndStep(\'' + gameId + '\',' + index + ')" style="font-size:11px;color:#fff;background:#ff4444;border:none;border-radius:4px;padding:2px 6px;">✕</button>'
                         + '</div>'
-                        + '<label style="font-size:11px;font-weight:bold;display:block;">Consigne (s’allume à cette étape)</label>'
+                        + '<label style="font-size:11px;font-weight:bold;display:block;">Consigne (affichée pendant cette étape)</label>'
                         + '<textarea data-field="instructions" rows="2" placeholder="Texte affiché pendant cette étape…" style="width:100%;font-size:12px;padding:6px;box-sizing:border-box;resize:vertical;">' + String(s.instructions || '').replace(/</g, '&lt;') + '</textarea>'
-                        + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px;font-size:11px;">'
+                        + '<div style="margin-top:8px;padding:8px;background:#eef2ff;border:1px solid #c7d2fe;border-radius:8px;">'
+                        + '<label style="font-size:11px;font-weight:bold;display:block;margin-bottom:4px;">Type d’activité</label>'
+                        + '<select data-field="activity" style="width:100%;font-size:12px;padding:6px;box-sizing:border-box;">'
+                        + '<option value="dnd"' + actDnd + '>📦 Déposer (DnD) — Relier masqué</option>'
+                        + '<option value="linking"' + actLink + '>🔗 Relier (flèches) — dépôt verrouillé</option>'
+                        + '<option value="both"' + actBoth + '>📦🔗 Les deux (déposer + Relier)</option>'
+                        + '</select>'
+                        + '<p style="margin:6px 0 0;font-size:10px;color:#4338ca;">Le bouton Relier n’apparaît que si l’étape active est « Relier » ou « Les deux ».</p>'
+                        + '</div>'
+                        + '<div style="margin-top:8px;padding:8px;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:8px;">'
+                        + '<label style="font-size:11px;font-weight:bold;display:block;margin-bottom:4px;">Fin d’étape → passage à la suivante</label>'
+                        + '<label style="font-size:11px;display:flex;align-items:flex-start;gap:6px;cursor:pointer;">'
+                        + '<input data-field="requireNextButton" type="checkbox"' + reqNext + ' style="width:auto;margin-top:2px;">'
+                        + '<span>Exiger le bouton « Étape suivante » (même si les critères sont remplis)</span></label>'
+                        + '<p style="margin:6px 0 0;font-size:10px;color:#065f46;">Sinon : passage automatique dès que les critères ci-dessous sont OK. Sans critère : bouton obligatoire.</p>'
+                        + '</div>'
+                        + '<div data-step-dnd-fields style="display:' + (showDnd ? 'grid' : 'none') + ';grid-template-columns:1fr 1fr;gap:6px;margin-top:8px;font-size:11px;">'
                         + '<label>Zones à valider (IDs)<input data-field="zoneIds" type="text" value="' + zoneStr.replace(/"/g, '&quot;') + '" placeholder="Ex: 1,2,3" style="width:100%;font-size:11px;padding:4px;box-sizing:border-box;"></label>'
                         + '<label>Cartes à placer (IDs)<input data-field="goodIds" type="text" value="' + String(s.goodIds || '').replace(/"/g, '&quot;') + '" placeholder="Ex: 4,5" style="width:100%;font-size:11px;padding:4px;box-sizing:border-box;"></label>'
                         + '</div>'
-                        + '<label style="font-size:11px;display:block;margin-top:6px;">Flèches à valider (id&gt;id)'
+                        + '<label data-step-link-fields style="font-size:11px;display:' + (showLink ? 'block' : 'none') + ';margin-top:8px;">Flèches à valider (id&gt;id) — fin d’étape Relier'
                         + '<textarea data-field="linkPairs" rows="2" placeholder="Ex: 1&gt;3" style="width:100%;font-size:11px;padding:4px;box-sizing:border-box;font-family:monospace;">' + linksToText(s.linkPairs).replace(/</g, '&lt;') + '</textarea></label>'
                         + '</div>';
                 }).join('');
-                list.querySelectorAll('input,textarea').forEach((inp) => {
+                list.querySelectorAll('input,textarea,select').forEach((inp) => {
                     const sync = () => {
                         try {
                             const g2 = state.dndGames[gameId];
                             if (!g2) return;
                             g2.steps = mqReadStepsFromUI(n);
                             g2.enableSteps = true;
+                            const needsRelier = (g2.steps || []).some((st) => st.activity === 'linking' || st.activity === 'both' || (st.linkPairs && st.linkPairs.length));
+                            if (needsRelier) {
+                                g2.enableLinking = true;
+                                const en = document.getElementById('dndGame' + n + 'EnableLinking');
+                                if (en) en.checked = true;
+                            }
                             if (window.MqDndEngine && MqDndEngine.effectiveAllowedLinks) {
                                 g2.allowedLinks = MqDndEngine.effectiveAllowedLinks(g2);
                             }
                             scheduleSaveLocal();
+                            // Rafraîchir l’affichage des champs selon le type d’activité
+                            if (inp.getAttribute('data-field') === 'activity') {
+                                renderStepsList(gameId);
+                                return;
+                            }
                             renderDndGamesPreview();
                         } catch (e) {}
                     };
                     inp.addEventListener('change', sync);
-                    inp.addEventListener('input', sync);
+                    if (inp.tagName !== 'SELECT') inp.addEventListener('input', sync);
                 });
             }
 
@@ -14496,13 +14553,20 @@
                             id: ns.id,
                             title: ns.title || '',
                             instructions: ns.instructions || '',
+                            activity: ns.activity || 'dnd',
+                            requireNextButton: !!ns.requireNextButton,
                             zoneIds: ns.zoneIds || [],
                             goodIds: ns.goodIds || '',
                             linkPairs: ns.linkPairs || []
                         };
                     }) : [],
                     linkMode: g.linkMode || 'one-to-one',
-                    enableLinking: !!(g.enableLinking || g.gameType === 'linking'),
+                    enableLinking: !!(g.enableLinking || g.gameType === 'linking' || (
+                        g.enableSteps && Array.isArray(g.steps) && g.steps.some(function (s) {
+                            const a = s && s.activity;
+                            return a === 'linking' || a === 'both' || (s.linkPairs && s.linkPairs.length);
+                        })
+                    )),
                     linkTooltip: g.linkTooltip || '',
                     relierBtn: (window.MqDndEngine && MqDndEngine.normalizeRelierBtn)
                         ? MqDndEngine.normalizeRelierBtn(g.relierBtn, g)
@@ -16534,7 +16598,7 @@
                     + '</div>'
                     + '<div class="row mq-dnd-steps-only" style="display:none;flex-direction:column;align-items:stretch;gap:6px;">'
                     + '<label style="width:auto;font-size:12px;font-weight:bold;">Étapes & consignes</label>'
-                    + '<p style="margin:0;font-size:10px;color:#64748b;">Chaque étape a sa consigne. Elle s’allume quand l’étape devient active (après réussite de la précédente). Critères : zones et/ou cartes et/ou flèches. Sans critère → bouton « Étape suivante ».</p>'
+                    + '<p style="margin:0;font-size:10px;color:#64748b;">Chaque étape a : une consigne, un <strong>type d’activité</strong> (Déposer / Relier / Les deux) et des critères de <strong>fin d’étape</strong>. Le bouton Relier n’apparaît que sur les étapes Relier. Ex. : étape 1 = Déposer (zones) → étape 2 = Relier (flèches) → étape 3 = Déposer…</p>'
                     + '<div id="dndGame' + n + 'StepsList"></div>'
                     + '<button type="button" id="btnAddStepGame' + n + '" style="width:100%;font-weight:bold;">+ Ajouter une étape</button>'
                     + '</div>'

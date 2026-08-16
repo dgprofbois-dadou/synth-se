@@ -39,10 +39,16 @@ node rebuild-mq-export-runtime.js --extract
 
 Dans l’admin : cocher **Jeu par étapes**, puis ajouter des étapes. Chaque étape a :
 
-- une **consigne** qui s’allume (animation) quand l’étape devient active ;
-- des **critères de passage** (optionnels) : IDs de zones à valider, IDs de cartes à placer, et/ou flèches `id>id`.
+- une **consigne** affichée quand l’étape devient active ;
+- un **type d’activité** :
+  - `dnd` — Déposer (Relier **masqué**) ;
+  - `linking` — Relier (dépôt **verrouillé**, bouton Relier visible) ;
+  - `both` — Déposer + Relier ;
+- une **fin d’étape** : critères (zones / cartes / flèches) → passage **automatique**, ou case **Exiger le bouton « Étape suivante »**.
 
-La consigne de l’étape N s’affiche dès que l’étape N−1 est réussie. Sans critère → bouton **Étape suivante**. Le jeu est réussi quand **toutes** les étapes sont terminées.
+Exemple typique : étape 1 = Déposer (zones 1,2) → étape 2 = Relier (`1>3`) → étape 3 = Déposer… Le bouton Relier n’apparaît qu’à l’étape 2.
+
+Sans critère et sans bouton forcé → bouton **Étape suivante** obligatoire. Le jeu est réussi quand **toutes** les étapes sont terminées.
 
 Dans le panneau admin Relier : si **Jeu par étapes** est coché, le champ global **Paires correctes (flèches)** est masqué — configurez les flèches dans chaque étape (`Flèches à valider`).
 

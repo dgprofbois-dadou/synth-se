@@ -540,17 +540,45 @@
     el.style.boxSizing = 'border-box';
   }
 
+  var STEP_ACTIVITIES = ['dnd', 'linking', 'both'];
+
+  function normalizeStepActivity(raw, stepHint) {
+    var a = raw != null ? String(raw).trim().toLowerCase() : '';
+    if (STEP_ACTIVITIES.indexOf(a) >= 0) return a;
+    // Inférence rétro-compat : selon les critères déjà saisis
+    var hasLink = !!(stepHint && Array.isArray(stepHint.linkPairs) && stepHint.linkPairs.length);
+    var hasDnd = !!(stepHint && (
+      (Array.isArray(stepHint.zoneIds) && stepHint.zoneIds.length) ||
+      String(stepHint.goodIds || '').trim()
+    ));
+    if (hasLink && hasDnd) return 'both';
+    if (hasLink) return 'linking';
+    return 'dnd';
+  }
+
+  function stepNeedsRelier(step) {
+    var s = normalizeStep(step, 0);
+    return s.activity === 'linking' || s.activity === 'both';
+  }
+
   function normalizeStep(raw, index) {
     var s = raw && typeof raw === 'object' ? raw : {};
+    var linkPairs = normalizeAllowedLinks(s.linkPairs || s.allowedLinks || s.links || []);
+    var zoneIds = parseIdList(s.zoneIds != null ? s.zoneIds : (s.zones || ''));
+    var goodIds = typeof s.goodIds === 'string'
+      ? s.goodIds
+      : (Array.isArray(s.goodIds) ? s.goodIds.join(',') : (s.goodIds != null ? String(s.goodIds) : ''));
+    var draft = { zoneIds: zoneIds, goodIds: goodIds, linkPairs: linkPairs };
+    var activity = normalizeStepActivity(s.activity != null ? s.activity : s.mode, draft);
     return {
       id: s.id != null ? String(s.id) : String(index + 1),
       title: s.title != null ? String(s.title) : ('Étape ' + (index + 1)),
       instructions: s.instructions != null ? String(s.instructions) : '',
-      zoneIds: parseIdList(s.zoneIds != null ? s.zoneIds : (s.zones || '')),
-      goodIds: typeof s.goodIds === 'string'
-        ? s.goodIds
-        : (Array.isArray(s.goodIds) ? s.goodIds.join(',') : (s.goodIds != null ? String(s.goodIds) : '')),
-      linkPairs: normalizeAllowedLinks(s.linkPairs || s.allowedLinks || s.links || [])
+      activity: activity,
+      requireNextButton: !!s.requireNextButton,
+      zoneIds: zoneIds,
+      goodIds: goodIds,
+      linkPairs: linkPairs
     };
   }
 
@@ -562,9 +590,10 @@
   function evaluateStep(game, step, placements) {
     placements = placements || {};
     step = normalizeStep(step, 0);
-    var zoneIds = step.zoneIds || [];
-    var goodIds = parseIdList(step.goodIds);
-    var linkPairs = step.linkPairs || [];
+    var activity = step.activity || 'dnd';
+    var zoneIds = (activity === 'linking') ? [] : (step.zoneIds || []);
+    var goodIds = (activity === 'linking') ? [] : parseIdList(step.goodIds);
+    var linkPairs = (activity === 'dnd') ? [] : (step.linkPairs || []);
     var hasCriteria = zoneIds.length > 0 || goodIds.length > 0 || linkPairs.length > 0;
     var okZones = true;
     var okGoods = true;
@@ -593,17 +622,24 @@
     }
 
     if (linkPairs.length) {
+      // Évaluer uniquement les paires de CETTE étape (pas l'union globale)
       var lev = evaluateLinks({ allowedLinks: linkPairs }, placements.links || []);
       okLinks = lev.isComplete;
     }
+
+    var autoComplete = hasCriteria ? (okZones && okGoods && okLinks) : false;
+    // Bouton forcé, ou aucune critère → passage manuel
+    var needsManualNext = !!step.requireNextButton || !hasCriteria;
 
     return {
       stepId: step.id,
       title: step.title,
       instructions: step.instructions,
+      activity: activity,
       hasCriteria: hasCriteria,
-      needsManualNext: !hasCriteria,
-      isComplete: hasCriteria ? (okZones && okGoods && okLinks) : false,
+      needsManualNext: needsManualNext,
+      isComplete: needsManualNext ? false : autoComplete,
+      criteriaMet: autoComplete,
       okZones: okZones,
       okGoods: okGoods,
       okLinks: okLinks
@@ -1841,20 +1877,90 @@
           stepNextBtn.addEventListener('click', function (e) {
             e.preventDefault();
             e.stopPropagation();
+            if (stepNextBtn.disabled) return;
             var stNow = getStepsState(game, collectPlacements(gameContainer, game));
             if (linkingApi) {
               var p = collectPlacements(gameContainer, game);
               p.links = linkingApi.getLinks();
               stNow = getStepsState(game, p);
             }
+            // Re-appliquer le flag manuel déjà posé
+            stNow.statuses.forEach(function (s, i) {
+              var sid0 = String((stNow.steps[i] && stNow.steps[i].id) || i);
+              if (manualStepDone[sid0]) {
+                s.isComplete = true;
+                s.needsManualNext = false;
+              }
+            });
+            if (stNow.activeStatus && stNow.activeStatus.hasCriteria && !stNow.activeStatus.criteriaMet) {
+              return;
+            }
             if (stNow.active) manualStepDone[String(stNow.active.id)] = true;
             refreshUI();
           });
         }
+        var canClick = !(st.activeStatus && st.activeStatus.hasCriteria && !st.activeStatus.criteriaMet);
+        stepNextBtn.disabled = !canClick;
+        stepNextBtn.style.opacity = canClick ? '1' : '0.45';
+        stepNextBtn.style.cursor = canClick ? 'pointer' : 'not-allowed';
+        stepNextBtn.title = canClick
+          ? 'Passer à l’étape suivante'
+          : 'Terminez d’abord les critères de cette étape';
         stepNextBtn.style.display = '';
       } else if (stepNextBtn) {
         stepNextBtn.style.display = 'none';
       }
+    }
+
+    /** Affiche Relier seulement si l’étape active est linking/both (masqué sinon). */
+    function syncRelierForStep(st) {
+      var btn = gameContainer.querySelector('.dnd-relier-btn');
+      if (!btn && !linkingApi) return;
+      var show = false;
+      if (linkingApi) {
+        if (!stepsEnabled) {
+          show = !!game.enableLinking;
+        } else if (st && st.enabled && !st.allComplete && st.active) {
+          show = stepNeedsRelier(st.active);
+        } else {
+          show = false;
+        }
+      }
+      if (btn) {
+        btn.style.display = show ? '' : 'none';
+        btn.hidden = !show;
+        btn.setAttribute('aria-hidden', show ? 'false' : 'true');
+      }
+      if (!show && linkingApi && linkingApi.setLinkMode) {
+        try { linkingApi.setLinkMode(false); } catch (e) {}
+      }
+      gameContainer.classList.toggle('dnd-step-relier-on', !!show);
+    }
+
+    /** Pendant une étape Relier pure : zones de dépôt non interactives. */
+    function syncZonesForStep(st) {
+      var linkingOnly = false;
+      if (stepsEnabled && st && st.active && !st.allComplete) {
+        linkingOnly = normalizeStep(st.active, 0).activity === 'linking';
+      }
+      Array.prototype.forEach.call(gameContainer.querySelectorAll('.dropzone'), function (z) {
+        z.classList.toggle('dnd-step-locked', linkingOnly);
+        z.style.pointerEvents = linkingOnly ? 'none' : '';
+        if (linkingOnly) z.style.opacity = '0.5';
+        else if (z.style.opacity === '0.5') z.style.opacity = '';
+      });
+      Array.prototype.forEach.call(gameContainer.querySelectorAll('.draggable'), function (el) {
+        var id = String(el.getAttribute('data-id') || '');
+        if (linkingOnly) {
+          el.draggable = false;
+          el.classList.add('dnd-step-link-phase');
+        } else {
+          el.classList.remove('dnd-step-link-phase');
+          if (!(cardUse !== 'reusable' && used.has(id))) {
+            if (!el.classList.contains('used')) el.draggable = true;
+          }
+        }
+      });
     }
 
     function sourceRoot() {
@@ -1989,6 +2095,29 @@
       var zcfg = findZoneConfig(zid);
       if (!zcfg) return false;
       if (isSingleUse(cardUse) && used.has(id) && !opts.allowMove) return false;
+
+      // Étapes : bloquer le dépôt hors zones de l’étape active (ou pendant Relier pur)
+      if (stepsEnabled) {
+        var stPlace = getStepsState(game, collectPlacements(gameContainer, game));
+        // appliquer manuels
+        stPlace.statuses.forEach(function (s, i) {
+          var sid = String((stPlace.steps[i] && stPlace.steps[i].id) || i);
+          if (manualStepDone[sid]) { s.isComplete = true; s.needsManualNext = false; }
+        });
+        stPlace.allComplete = stPlace.statuses.every(function (s) { return s.isComplete; });
+        if (!stPlace.allComplete) {
+          stPlace.currentIndex = stPlace.statuses.findIndex(function (s) { return !s.isComplete; });
+          if (stPlace.currentIndex < 0) stPlace.currentIndex = 0;
+          stPlace.active = stPlace.steps[stPlace.currentIndex] || null;
+        }
+        var act = stPlace.active ? normalizeStep(stPlace.active, 0) : null;
+        if (act) {
+          if (act.activity === 'linking') return false;
+          if ((act.activity === 'dnd' || act.activity === 'both') && act.zoneIds && act.zoneIds.length) {
+            if (act.zoneIds.map(String).indexOf(String(zid)) < 0) return false;
+          }
+        }
+      }
 
       var orig = findOrig(id);
       if (!orig) return false;
@@ -2130,10 +2259,14 @@
           highlightStepZones(st.active);
         }
         syncStepNextBtn(st);
+        syncRelierForStep(st);
+        syncZonesForStep(st);
         ev.stepsState = st;
         ev.isComplete = st.allComplete;
       } else {
         stepsComplete = !!ev.isComplete;
+        syncRelierForStep(null);
+        syncZonesForStep(null);
       }
 
       // Groupes
@@ -2336,7 +2469,11 @@
     }
 
     // Affichage score initial ; onScore utilisateur seulement après interaction
-    if (game.enableLinking) {
+    var anyStepNeedsRelier = stepsEnabled && (game.steps || []).some(function (s) {
+      return stepNeedsRelier(s) || (normalizeStep(s, 0).linkPairs || []).length > 0;
+    });
+    if (game.enableLinking || anyStepNeedsRelier) {
+      if (!game.enableLinking && anyStepNeedsRelier) game.enableLinking = true;
       linkingApi = attachLinkingFeature(gameContainer, game, hooks, {
         hybrid: true,
         gameId: gameId,
@@ -2344,6 +2481,12 @@
         getVerifiedOnce: function () { return verifiedOnce; },
         addErrors: function (n) { nbErreurs += (n || 1); }
       });
+      // Masquer Relier tant que l’étape active ne le demande pas
+      var btn0 = gameContainer.querySelector('.dnd-relier-btn');
+      if (btn0 && stepsEnabled) {
+        btn0.style.display = 'none';
+        btn0.hidden = true;
+      }
     }
 
     var scoreHook = hooks.onScore;
@@ -2412,6 +2555,8 @@
     computeDndBaseMaxScore: computeDndBaseMaxScore,
     normalizeStep: normalizeStep,
     normalizeSteps: normalizeSteps,
+    normalizeStepActivity: normalizeStepActivity,
+    stepNeedsRelier: stepNeedsRelier,
     evaluateStep: evaluateStep,
     getStepsState: getStepsState,
     normalizeInstructionsBox: normalizeInstructionsBox,

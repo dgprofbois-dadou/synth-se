@@ -325,6 +325,51 @@ test('étape sans critère → needsManualNext', () => {
   assert.strictEqual(ev.isComplete, false);
 });
 
+test('activité linking / dnd + Relier gating helpers', () => {
+  const dnd = Engine.normalizeStep({ title: 'A', zoneIds: ['1'], activity: 'dnd' }, 0);
+  assert.strictEqual(dnd.activity, 'dnd');
+  assert.strictEqual(Engine.stepNeedsRelier(dnd), false);
+  const link = Engine.normalizeStep({ title: 'B', linkPairs: [{ from: '1', to: '2' }], activity: 'linking' }, 1);
+  assert.strictEqual(link.activity, 'linking');
+  assert.strictEqual(Engine.stepNeedsRelier(link), true);
+  const inferred = Engine.normalizeStep({ title: 'C', linkPairs: [{ from: 'a', to: 'b' }] }, 2);
+  assert.strictEqual(inferred.activity, 'linking');
+});
+
+test('DnD puis Relier : étapes successives', () => {
+  const g = Engine.applyGameDefaults({
+    gameType: 'exact',
+    enableSteps: true,
+    enableLinking: true,
+    dropzones: [{ id: '1', acceptedIds: ['a'], capacity: 1, required: true }],
+    steps: [
+      { title: 'Déposer', instructions: 'Placez A', activity: 'dnd', zoneIds: ['1'] },
+      { title: 'Relier', instructions: 'Reliez', activity: 'linking', linkPairs: [{ from: '1', to: '2' }] }
+    ]
+  });
+  const st0 = Engine.getStepsState(g, {});
+  assert.strictEqual(st0.currentIndex, 0);
+  assert.strictEqual(Engine.stepNeedsRelier(st0.active), false);
+  const st1 = Engine.getStepsState(g, { '1': ['a'] });
+  assert.strictEqual(st1.currentIndex, 1);
+  assert.strictEqual(Engine.stepNeedsRelier(st1.active), true);
+  const stDone = Engine.getStepsState(g, { '1': ['a'], links: [{ from: '1', to: '2' }] });
+  assert.strictEqual(stDone.allComplete, true);
+});
+
+test('requireNextButton bloque le passage auto', () => {
+  const g = Engine.applyGameDefaults({
+    gameType: 'exact',
+    enableSteps: true,
+    dropzones: [{ id: '1', acceptedIds: ['a'], capacity: 1, required: true }],
+    steps: [{ title: 'A', activity: 'dnd', zoneIds: ['1'], requireNextButton: true }]
+  });
+  const ev = Engine.evaluateStep(g, g.steps[0], { '1': ['a'] });
+  assert.strictEqual(ev.criteriaMet, true);
+  assert.strictEqual(ev.needsManualNext, true);
+  assert.strictEqual(ev.isComplete, false);
+});
+
 test('enableSteps seed depuis instructions', () => {
   const g = Engine.applyGameDefaults({
     enableSteps: true,
