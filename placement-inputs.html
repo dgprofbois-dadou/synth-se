@@ -12783,7 +12783,10 @@
 
                 let body = '<div class="mq-dz-chip-row">' + chips + '</div>';
                 if (selIdx < 0) {
-                    body += '<div class="mq-dz-inspector-empty">Cliquez une zone sur le canvas<br><span style="font-size:11px;">(ou un pastille ci-dessus) pour éditer ses paramètres.</span></div>';
+                    const stepsHint = (g && g.enableSteps)
+                        ? '<span style="font-size:11px;">Position / taille ici. Les associations carte → zone se règlent dans chaque <strong>étape</strong> (encadré orange).</span>'
+                        : '<span style="font-size:11px;">(ou un pastille ci-dessus) pour éditer position et cartes acceptées.</span>';
+                    body += '<div class="mq-dz-inspector-empty">Cliquez une zone sur le canvas<br>' + stepsHint + '</div>';
                     list.innerHTML = body;
                     list.querySelectorAll('.mq-dz-chip').forEach((btn) => {
                         btn.addEventListener('click', () => {
@@ -12795,39 +12798,69 @@
 
                 const dz = dropzones[selIdx];
                 const index = selIdx;
+                const zid = mqDropzoneId(dz, index);
+                const stepsOn = !!(g && g.enableSteps);
                 const accepted = Array.isArray(dz.acceptedIds) ? dz.acceptedIds.map(String) : [];
                 const idCounts = mqDraggableIdCounts(gameId);
                 const dupIds = mqDraggableDuplicateIds(gameId);
                 let dupBanner = '';
-                if (dupIds.length) {
+                if (!stepsOn && dupIds.length) {
                     dupBanner = '<div class="mq-dz-dup-banner">'
                         + '<span>⚠️ IDs en double (' + dupIds.map(mqEscapeHtmlLite).join(', ')
                         + ') : une case coche toutes les cartes qui partagent le même ID.</span>'
                         + '<button type="button" data-fix-dups="' + gameId + '">Corriger automatiquement</button>'
                         + '</div>';
                 }
-                const cardsHtml = cards.map((c) => {
-                    const cid = String(c.id != null ? c.id : '');
-                    const on = accepted.indexOf(cid) >= 0;
-                    const isDup = (idCounts.get(cid) || 0) > 1;
-                    const safeId = mqEscapeHtmlLite(c.id);
-                    const label = mqDraggableCardLabel(c);
-                    const safeLabel = mqEscapeHtmlLite(label);
-                    let thumb;
-                    if (c.kind === 'text') {
-                        thumb = '<div class="mq-dz-thumb-text" title="' + safeLabel + '">' + safeLabel + '</div>';
-                    } else if (c.src && String(c.src).indexOf('idb:') !== 0) {
-                        thumb = '<img src="' + c.src + '" alt="' + safeLabel + '">';
+                let acceptedSection = '';
+                if (stepsOn) {
+                    const assoc = mqZoneStepAssociationLines(gameId, zid);
+                    let assocHtml;
+                    if (assoc.length) {
+                        assocHtml = assoc.map((a) => {
+                            return '<li>Étape ' + a.stepNum + ' (« ' + mqEscapeHtmlLite(a.title) + ' ») → carte <strong>ID ' + mqEscapeHtmlLite(a.card) + '</strong></li>';
+                        }).join('');
+                        assocHtml = '<ul style="margin:4px 0 0;padding-left:18px;font-size:11px;color:#334155;">' + assocHtml + '</ul>';
                     } else {
-                        thumb = '<div class="mq-dz-thumb-text" style="background:#e2e8f0;">' + safeLabel + '</div>';
+                        assocHtml = '<p style="margin:4px 0 0;font-size:11px;color:#9a3412;">Aucune association — configurez le menu déroulant dans l’<strong>étape</strong> qui utilise cette zone (encadré orange ci-dessus).</p>';
                     }
-                    return '<label class="mq-dz-card' + (on ? ' on' : '') + (isDup ? ' is-dup' : '') + '" title="'
-                        + safeLabel + ' (ID ' + safeId + ')' + (isDup ? ' — ID en double !' : '') + '">'
-                        + thumb
-                        + '<input type="checkbox" class="mq-dz-accept" data-game="' + gameId + '" data-index="' + index + '" data-card="' + safeId + '" ' + (on ? 'checked' : '') + '>'
-                        + '<span class="mq-dz-card-label">' + safeLabel + '</span>'
-                        + '<span class="mq-dz-card-id">ID ' + safeId + (isDup ? ' ⚠' : '') + '</span></label>';
-                }).join('');
+                    acceptedSection = ''
+                        + '<div style="margin-top:6px;padding:8px;background:#eef2ff;border:1px solid #c7d2fe;border-radius:8px;">'
+                        + '<div style="font-size:11px;font-weight:bold;color:#3730a3;">Association carte (lecture seule)</div>'
+                        + '<p style="margin:2px 0 4px;font-size:10px;color:#4338ca;">Jeu par étapes : modifiez uniquement dans la section <strong>Configuration DnD de cette étape</strong>, pas ici.</p>'
+                        + assocHtml
+                        + '</div>';
+                } else {
+                    const cardsHtml = cards.map((c) => {
+                        const cid = String(c.id != null ? c.id : '');
+                        const on = accepted.indexOf(cid) >= 0;
+                        const isDup = (idCounts.get(cid) || 0) > 1;
+                        const safeId = mqEscapeHtmlLite(c.id);
+                        const label = mqDraggableCardLabel(c);
+                        const safeLabel = mqEscapeHtmlLite(label);
+                        let thumb;
+                        if (c.kind === 'text') {
+                            thumb = '<div class="mq-dz-thumb-text" title="' + safeLabel + '">' + safeLabel + '</div>';
+                        } else if (c.src && String(c.src).indexOf('idb:') !== 0) {
+                            thumb = '<img src="' + c.src + '" alt="' + safeLabel + '">';
+                        } else {
+                            thumb = '<div class="mq-dz-thumb-text" style="background:#e2e8f0;">' + safeLabel + '</div>';
+                        }
+                        return '<label class="mq-dz-card' + (on ? ' on' : '') + (isDup ? ' is-dup' : '') + '" title="'
+                            + safeLabel + ' (ID ' + safeId + ')' + (isDup ? ' — ID en double !' : '') + '">'
+                            + thumb
+                            + '<input type="checkbox" class="mq-dz-accept" data-game="' + gameId + '" data-index="' + index + '" data-card="' + safeId + '" ' + (on ? 'checked' : '') + '>'
+                            + '<span class="mq-dz-card-label">' + safeLabel + '</span>'
+                            + '<span class="mq-dz-card-id">ID ' + safeId + (isDup ? ' ⚠' : '') + '</span></label>';
+                    }).join('');
+                    acceptedSection = ''
+                        + '<div style="margin-top:6px;"><div style="font-size:11px;font-weight:bold;">Réponses acceptées</div>'
+                        + '<p style="margin:2px 0 6px;font-size:10px;color:#9a3412;">Cochez la carte qui valide <b>cette</b> zone (vert en mode élève).</p>'
+                        + dupBanner
+                        + '<div class="mq-dz-cards">' + (cardsHtml || '<span style="font-size:10px;color:#999;">Aucune carte</span>') + '</div></div>'
+                        + '<details style="margin-top:4px;"><summary style="font-size:10px;color:#666;cursor:pointer;">Avancé (IDs)</summary>'
+                        + '<input type="text" data-field="acceptedIdsRaw" value="' + accepted.join(',') + '" placeholder="id1,id2" style="width:100%;font-size:10px;">'
+                        + '</details>';
+                }
 
                 body += ''
                     + '<div class="mq-dz-block" data-game="' + gameId + '" data-index="' + index + '" style="padding:8px; background:#fff7ed; border:2px solid #e8521f; border-radius:8px;">'
@@ -12845,17 +12878,11 @@
                     + '<label>Groupe/ligne <input type="text" data-field="groupId" value="' + String(dz.groupId || '').replace(/"/g, '&quot;') + '" style="width:100%;"></label>'
                     + '<label style="grid-column:1/-1;"><input type="checkbox" data-field="required" ' + (dz.required === false ? '' : 'checked') + '> Zone obligatoire</label>'
                     + '</div>'
-                    + '<div style="margin-top:6px;"><div style="font-size:11px;font-weight:bold;">Réponses acceptées</div>'
-                    + '<p style="margin:2px 0 6px;font-size:10px;color:#9a3412;">Cochez la carte qui valide <b>cette</b> zone (vert en mode élève). Avec « Jeu par étapes », préférez le menu déroulant dans l’étape — les deux restent synchronisés.</p>'
-                    + dupBanner
-                    + '<div class="mq-dz-cards">' + (cardsHtml || '<span style="font-size:10px;color:#999;">Aucune carte</span>') + '</div></div>'
+                    + acceptedSection
                     + '<div class="row" style="margin-top:4px;"><label style="font-size:10px;">Msg réussite</label>'
                     + '<input type="text" data-field="successMessage" value="' + String(dz.successMessage || '').replace(/"/g, '&quot;') + '" style="font-size:11px;"></div>'
                     + '<div class="row"><label style="font-size:10px;">Msg erreur</label>'
                     + '<input type="text" data-field="errorMessage" value="' + String(dz.errorMessage || '').replace(/"/g, '&quot;') + '" style="font-size:11px;"></div>'
-                    + '<details style="margin-top:4px;"><summary style="font-size:10px;color:#666;cursor:pointer;">Avancé (IDs)</summary>'
-                    + '<input type="text" data-field="acceptedIdsRaw" value="' + accepted.join(',') + '" placeholder="id1,id2" style="width:100%;font-size:10px;">'
-                    + '</details>'
                     + '</div>';
 
                 list.innerHTML = body;
@@ -13322,6 +13349,36 @@
                     if (row) row.style.display = on ? 'none' : '';
                 }
                 mqUpdateLinkingPairsVisibility(n);
+                mqGameIds().forEach((gid) => {
+                    if (mqGameNum(gid) === n && typeof renderDropzonesList === 'function') {
+                        renderDropzonesList(gid);
+                    }
+                });
+                document.querySelectorAll('.mq-dnd-dropzones-host[data-game-num="' + n + '"]').forEach((host) => {
+                    const sub = host.querySelector('.mq-dz-steps-sub');
+                    const h0 = host.querySelector('.mq-dz-help-no-steps');
+                    const h1 = host.querySelector('.mq-dz-help-steps');
+                    if (sub) sub.style.display = on ? '' : 'none';
+                    if (h0) h0.style.display = on ? 'none' : '';
+                    if (h1) h1.style.display = on ? '' : 'none';
+                });
+            }
+            function mqZoneStepAssociationLines(gameId, zid) {
+                const g = state.dndGames[gameId];
+                const lines = [];
+                if (!g || !g.enableSteps || !Array.isArray(g.steps)) return lines;
+                g.steps.forEach((step, i) => {
+                    const map = mqInferStepZoneMap(gameId, step);
+                    const card = map[String(zid)];
+                    if (card) {
+                        lines.push({
+                            stepNum: i + 1,
+                            title: step.title || ('Étape ' + (i + 1)),
+                            card: String(card)
+                        });
+                    }
+                });
+                return lines;
             }
             /** Cartes draggables proposées dans une étape (filtrées par goodIds si renseigné). */
             function mqStepDraggableOptions(gameId, step) {
@@ -13595,8 +13652,6 @@
                     if (inp.tagName !== 'SELECT') inp.addEventListener('input', sync);
                 });
             }
-
-            // ---------------------------------------------------------
             // GESTION IMPORT / EXPORT COMPLET DU PROJET
             // ---------------------------------------------------------
 
@@ -16774,9 +16829,10 @@
                     + '</div>'
                     + '<button type="button" id="btnGenGridGame' + n + '" style="width:100%;margin-top:6px;font-weight:bold;">Générer/remplacer les zones</button>'
                     + '</details>'
-                    + '<div style="margin-top:8px;">'
-                    + '<label style="font-size:12px;font-weight:bold;display:block;margin-bottom:4px;">Zones de dépôt</label>'
-                    + '<p style="font-size:11px;color:#64748b;margin:0 0 6px 0;">Cliquez une zone sur le canvas. Si le jeu est par étapes, configurez surtout les associations dans chaque étape (zone → carte).</p>'
+                    + '<div style="margin-top:8px;" class="mq-dnd-dropzones-host" data-game-num="' + n + '">'
+                    + '<label style="font-size:12px;font-weight:bold;display:block;margin-bottom:4px;">Zones de dépôt <span class="mq-dz-steps-sub" style="font-weight:normal;font-size:11px;color:#64748b;">(position &amp; taille)</span></label>'
+                    + '<p class="mq-dz-help-no-steps" style="font-size:11px;color:#64748b;margin:0 0 6px 0;">Cliquez une zone : position, taille et cartes acceptées.</p>'
+                    + '<p class="mq-dz-help-steps" style="display:none;font-size:11px;color:#64748b;margin:0 0 6px 0;">Cliquez une zone pour la déplacer ou la redimensionner. Les associations <strong>zone → carte</strong> se règlent uniquement dans chaque étape (encadré orange).</p>'
                     + '<div id="dndGame' + n + 'DropzonesList" style="max-height:360px;overflow-y:auto;background:#fff;padding:5px;border-radius:4px;border:1px solid #ddd;"></div>'
                     + '</div>';
             }
