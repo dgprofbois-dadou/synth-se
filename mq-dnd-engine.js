@@ -2105,10 +2105,47 @@
 
     function removeFromZone(zone, cardId, reactivate) {
       Array.prototype.slice.call(zone.querySelectorAll('[data-id="' + cssEscape(cardId) + '"]')).forEach(function (n) {
-        n.remove();
+        if (n.classList && n.classList.contains('dnd-placed')) n.remove();
       });
       if (reactivate !== false) setUsed(cardId, false);
       zone.classList.remove('dropzone-correct', 'dropzone-wrong');
+      if (!getZonePlacements(zone).length) zone.classList.remove('dnd-has-card');
+    }
+
+    /** Carte déposée : centrée dans la zone, au-dessus du fond (sans couper l’image source). */
+    function layoutPlacedCardInZone(clone) {
+      if (!clone) return;
+      clone.style.position = 'absolute';
+      clone.style.inset = '0';
+      clone.style.left = '0';
+      clone.style.top = '0';
+      clone.style.right = '0';
+      clone.style.bottom = '0';
+      clone.style.width = '100%';
+      clone.style.height = '100%';
+      clone.style.maxWidth = '100%';
+      clone.style.maxHeight = '100%';
+      clone.style.margin = '0';
+      clone.style.zIndex = '3';
+      clone.style.display = 'flex';
+      clone.style.alignItems = 'center';
+      clone.style.justifyContent = 'center';
+      clone.style.boxSizing = 'border-box';
+      clone.style.padding = '2px';
+      clone.style.pointerEvents = 'auto';
+      clone.style.overflow = 'visible';
+      var img = clone.tagName === 'IMG' ? clone : clone.querySelector('img');
+      if (img) {
+        img.style.position = 'static';
+        img.style.left = 'auto';
+        img.style.top = 'auto';
+        img.style.width = 'auto';
+        img.style.height = 'auto';
+        img.style.maxWidth = '100%';
+        img.style.maxHeight = '100%';
+        img.style.objectFit = 'contain';
+        img.style.flexShrink = '0';
+      }
     }
 
     function bindPlacedCardInteractions(clone, zone, id) {
@@ -2234,18 +2271,13 @@
       }
       clone.style.opacity = '1';
       clone.style.filter = 'none';
-      clone.style.position = 'static';
-      clone.style.left = 'auto';
-      clone.style.top = 'auto';
-      clone.style.margin = '0';
-      clone.style.maxWidth = '100%';
-      clone.style.maxHeight = '100%';
-      clone.style.pointerEvents = 'auto';
+      layoutPlacedCardInZone(clone);
       clone.setAttribute('tabindex', '0');
       clone.setAttribute('role', 'button');
 
       bindPlacedCardInteractions(clone, zone, id);
 
+      zone.classList.add('dnd-has-card');
       zone.appendChild(clone);
       if (isSingleUse(cardUse)) setUsed(id, true);
       clearSelection();

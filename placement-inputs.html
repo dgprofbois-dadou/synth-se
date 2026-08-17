@@ -849,15 +849,21 @@
             border: 5px dashed #666;
             border-radius: 8px;
             background: rgba(255, 255, 255, 0.5);
-            display: flex;
-            align-items: flex-start;
-            justify-content: flex-start;
+            position: relative;
+            overflow: visible;
+        }
+        .dropzone {
+            position: relative;
+            overflow: visible;
         }
         .dnd-dropzone-label,
         .dnd-dropzone-id-badge,
         .dropzone .dnd-dropzone-id-badge {
+            position: absolute;
+            top: 4px;
+            left: 4px;
             pointer-events: none;
-            margin: 6px;
+            margin: 0;
             padding: 3px 8px;
             border-radius: 6px;
             background: rgba(31, 39, 51, 0.82);
@@ -868,9 +874,8 @@
             text-overflow: ellipsis;
             white-space: nowrap;
             box-shadow: 0 1px 4px rgba(0,0,0,.25);
-            z-index: 2;
-            flex: 0 0 auto;
-            align-self: flex-start;
+            z-index: 4;
+            flex: none;
         }
         .dnd-dropzone.mq-dnd-selected .dnd-dropzone-label,
         .dnd-dropzone.mq-dnd-selected .dnd-dropzone-id-badge {
@@ -1049,8 +1054,29 @@
             40% { transform: scale(1.03); box-shadow: 0 0 0 10px rgba(245, 158, 11, 0); }
             100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
         }
-        .dropzone .dnd-placed { position: relative; z-index: 2; flex-shrink: 0; }
-        .dropzone .dnd-dropzone-id-badge { position: relative; z-index: 1; pointer-events: none; }
+        .dropzone .dnd-placed {
+            position: absolute;
+            inset: 0;
+            z-index: 3;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-sizing: border-box;
+            padding: 2px;
+            overflow: visible;
+            pointer-events: auto;
+        }
+        .dropzone .dnd-placed img {
+            width: auto !important;
+            height: auto !important;
+            max-width: 100% !important;
+            max-height: 100% !important;
+            object-fit: contain;
+            position: static !important;
+            left: auto !important;
+            top: auto !important;
+        }
+        .dropzone .dnd-dropzone-id-badge { pointer-events: none; }
         .dropzone.dnd-step-target {
             outline: 3px solid #f59e0b !important;
             outline-offset: 2px;
@@ -7862,7 +7888,7 @@
                         zone.setAttribute('data-zone-id', zid);
                         if (dz.groupId) zone.setAttribute('data-group-id', dz.groupId);
                         if (dz.label) zone.setAttribute('data-label', dz.label);
-                        zone.style.cssText = 'position:absolute; left:' + (dz.x || 0) + 'px; top:' + (dz.y || 0) + 'px; width:' + (dz.width || (gameConfig.zoneWidth || 80)) + 'px; height:' + (dz.height || (gameConfig.zoneHeight || 80)) + 'px; border:3px dashed #666; border-radius:8px; background:rgba(255,255,255,0.5); display:flex; align-items:flex-start; justify-content:flex-start; flex-wrap:wrap; gap:4px; transition:all 0.3s ease; pointer-events:auto; box-sizing:border-box; overflow:hidden;';
+                        zone.style.cssText = 'position:absolute; left:' + (dz.x || 0) + 'px; top:' + (dz.y || 0) + 'px; width:' + (dz.width || (gameConfig.zoneWidth || 80)) + 'px; height:' + (dz.height || (gameConfig.zoneHeight || 80)) + 'px; border:3px dashed #666; border-radius:8px; background:rgba(255,255,255,0.5); overflow:visible; transition:all 0.3s ease; pointer-events:auto; box-sizing:border-box;';
                         zone.innerHTML = '<span class="dnd-dropzone-id-badge">' + mqDropzoneCanvasLabel(dz, i) + '</span>';
                         targetsEl.appendChild(zone);
                     });

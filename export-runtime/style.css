@@ -217,12 +217,30 @@ input::placeholder {
     height: 50px;
     border: 2px dashed #999;
     border-radius: 6px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    position: relative;
+    overflow: visible;
     background: white;
     pointer-events: auto;
     transition: all 0.3s ease;
+}
+
+.dropzone .dnd-placed {
+    position: absolute;
+    inset: 0;
+    z-index: 3;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    overflow: visible;
+}
+
+.dropzone .dnd-dropzone-id-badge {
+    position: absolute;
+    top: 4px;
+    left: 4px;
+    z-index: 4;
+    pointer-events: none;
 }
 
 .dropzone.drag-over {
