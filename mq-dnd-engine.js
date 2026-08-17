@@ -2442,8 +2442,14 @@
       if (!zone.getAttribute('tabindex')) zone.setAttribute('tabindex', '0');
       var zid = zone.getAttribute('data-zone-id');
       var zcfg = findZoneConfig(zid);
-      var label = (zcfg && zcfg.label) || ('Zone ' + zid);
+      var label = zid ? ('ID ' + zid) : 'Zone';
       zone.setAttribute('aria-label', 'Zone de dépôt ' + label);
+      if (!zone.querySelector('.dnd-dropzone-id-badge')) {
+        var badge = document.createElement('span');
+        badge.className = 'dnd-dropzone-id-badge';
+        badge.textContent = label;
+        zone.insertBefore(badge, zone.firstChild);
+      }
       if (zcfg && zcfg.groupId) zone.setAttribute('data-group-id', zcfg.groupId);
 
       zone.addEventListener('dragover', function (e) {

@@ -853,22 +853,27 @@
             align-items: flex-start;
             justify-content: flex-start;
         }
-        .dnd-dropzone-label {
+        .dnd-dropzone-label,
+        .dnd-dropzone-id-badge,
+        .dropzone .dnd-dropzone-id-badge {
             pointer-events: none;
             margin: 6px;
             padding: 3px 8px;
             border-radius: 6px;
             background: rgba(31, 39, 51, 0.82);
             color: #fff;
-            font: 600 12px/1.2 Verdana, sans-serif;
+            font: 700 13px/1.2 Verdana, sans-serif;
             max-width: calc(100% - 12px);
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
             box-shadow: 0 1px 4px rgba(0,0,0,.25);
             z-index: 2;
+            flex: 0 0 auto;
+            align-self: flex-start;
         }
-        .dnd-dropzone.mq-dnd-selected .dnd-dropzone-label {
+        .dnd-dropzone.mq-dnd-selected .dnd-dropzone-label,
+        .dnd-dropzone.mq-dnd-selected .dnd-dropzone-id-badge {
             background: rgba(232, 82, 31, 0.95);
         }
         .dnd-id-badge {
@@ -7834,12 +7839,14 @@
 
                     (gameConfig.dropzones || []).forEach((dz, i) => {
                         const zone = document.createElement('div');
+                        const zid = mqDropzoneId(dz, i);
                         zone.className = 'dropzone';
                         zone.dataset.pos = String(i + 1);
-                        zone.setAttribute('data-zone-id', String(dz.id != null ? dz.id : (i + 1)));
+                        zone.setAttribute('data-zone-id', zid);
                         if (dz.groupId) zone.setAttribute('data-group-id', dz.groupId);
                         if (dz.label) zone.setAttribute('data-label', dz.label);
-                        zone.style.cssText = 'position:absolute; left:' + (dz.x || 0) + 'px; top:' + (dz.y || 0) + 'px; width:' + (dz.width || (gameConfig.zoneWidth || 80)) + 'px; height:' + (dz.height || (gameConfig.zoneHeight || 80)) + 'px; border:3px dashed #666; border-radius:8px; background:rgba(255,255,255,0.5); display:flex; align-items:center; justify-content:center; flex-wrap:wrap; gap:4px; transition:all 0.3s ease; pointer-events:auto; box-sizing:border-box; overflow:hidden;';
+                        zone.style.cssText = 'position:absolute; left:' + (dz.x || 0) + 'px; top:' + (dz.y || 0) + 'px; width:' + (dz.width || (gameConfig.zoneWidth || 80)) + 'px; height:' + (dz.height || (gameConfig.zoneHeight || 80)) + 'px; border:3px dashed #666; border-radius:8px; background:rgba(255,255,255,0.5); display:flex; align-items:flex-start; justify-content:flex-start; flex-wrap:wrap; gap:4px; transition:all 0.3s ease; pointer-events:auto; box-sizing:border-box; overflow:hidden;';
+                        zone.innerHTML = '<span class="dnd-dropzone-id-badge">' + mqDropzoneCanvasLabel(dz, i) + '</span>';
                         targetsEl.appendChild(zone);
                     });
                     gameEl.appendChild(targetsEl);
@@ -12740,9 +12747,15 @@
                     window.mqToast(n ? (n + ' ID(s) en double corrigé(s).') : 'Aucun doublon.');
                 }
             };
+            function mqDropzoneId(dz, index) {
+                return String((dz && dz.id != null) ? dz.id : (index + 1));
+            }
+            /** Badge canvas + pastilles inspecteur : toujours l’ID interne (pas le label L7-C2). */
+            function mqDropzoneCanvasLabel(dz, index) {
+                return 'ID ' + mqDropzoneId(dz, index);
+            }
             function mqDropzoneDisplayName(dz, index) {
-                if (dz && dz.label && String(dz.label).trim()) return String(dz.label).trim();
-                return 'Zone ' + ((dz && dz.id != null) ? dz.id : (index + 1));
+                return mqDropzoneCanvasLabel(dz, index);
             }
             function renderDropzonesList(gameId, focusIndex) {
                 const listId = 'dndGame' + mqGameNum(gameId) + 'DropzonesList';
@@ -12817,8 +12830,8 @@
                 body += ''
                     + '<div class="mq-dz-block" data-game="' + gameId + '" data-index="' + index + '" style="padding:8px; background:#fff7ed; border:2px solid #e8521f; border-radius:8px;">'
                     + '<div style="font-weight:bold; font-size:12px; color:#9a3412; margin-bottom:6px;">⚙️ ' + mqDropzoneDisplayName(dz, index).replace(/</g, '&lt;') + '</div>'
-                    + '<div class="row" style="margin:0 0 4px 0;"><label style="font-size:10px;">Label (affiché sur le canvas)</label>'
-                    + '<input type="text" data-field="label" value="' + String(dz.label || '').replace(/"/g, '&quot;') + '" style="font-size:11px;" placeholder="Ex: L1-C1 ou Casque"></div>'
+                    + '<div class="row" style="margin:0 0 4px 0;"><label style="font-size:10px;">Label (mémo admin — non affiché sur le canvas, voir badge ID)</label>'
+                    + '<input type="text" data-field="label" value="' + String(dz.label || '').replace(/"/g, '&quot;') + '" style="font-size:11px;" placeholder="Ex: L7-C1 (optionnel)"></div>'
                     + '<div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:4px; padding:6px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px;">'
                     + mqDimPosField('X', dz.x || 0, 'updateDropzonePosition', gameId, index, 'x', 5)
                     + mqDimPosField('Y', dz.y || 0, 'updateDropzonePosition', gameId, index, 'y', 5)
@@ -12894,7 +12907,7 @@
                 if (property === 'label') {
                     const el = document.querySelector(mqDndSelector(mqDndSel));
                     const lab = el && el.querySelector('.dnd-dropzone-label');
-                    if (lab) lab.textContent = mqDropzoneDisplayName(dropzone, index);
+                    if (lab) lab.textContent = mqDropzoneCanvasLabel(dropzone, index);
                 }
                 renderDropzonesList(gameId, index);
                 if (property !== 'label') renderDndGamesPreview();
@@ -13415,7 +13428,7 @@
                         + '<p style="margin:6px 0 0;font-size:10px;color:#065f46;">Sinon : passage automatique dès que les critères ci-dessous sont OK. Sans critère : bouton obligatoire.</p>'
                         + '</div>'
                         + '<div data-step-dnd-fields style="display:' + (showDnd ? 'grid' : 'none') + ';grid-template-columns:1fr 1fr;gap:6px;margin-top:8px;font-size:11px;">'
-                        + '<label>Zones à valider (IDs des zones, pas des cartes)<input data-field="zoneIds" type="text" value="' + zoneStr.replace(/"/g, '&quot;') + '" placeholder="Ex: 1,2,3" style="width:100%;font-size:11px;padding:4px;box-sizing:border-box;"></label>'
+                        + '<label>Zones à valider (IDs numériques des zones)<input data-field="zoneIds" type="text" value="' + zoneStr.replace(/"/g, '&quot;') + '" placeholder="Ex: 19,20,21 (voir badge ID sur le canvas)" style="width:100%;font-size:11px;padding:4px;box-sizing:border-box;"></label>'
                         + '<label>Cartes à placer (IDs)<input data-field="goodIds" type="text" value="' + String(s.goodIds || '').replace(/"/g, '&quot;') + '" placeholder="Ex: 4,5" style="width:100%;font-size:11px;padding:4px;box-sizing:border-box;"></label>'
                         + '</div>'
                         + '<label data-step-link-fields style="font-size:11px;display:' + (showLink ? 'block' : 'none') + ';margin-top:8px;">Flèches à valider (id&gt;id) — fin d’étape Relier'
@@ -13745,15 +13758,13 @@
                     });
 
                     (g.dropzones || []).forEach((dz, idx) => {
-                        const zoneName = (dz.label && String(dz.label).trim())
-                            ? String(dz.label).trim()
-                            : ('Zone ' + (dz.id != null ? dz.id : (idx + 1)));
-                        const safeName = zoneName.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+                        const badge = mqDropzoneCanvasLabel(dz, idx);
+                        const safeBadge = badge.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
                         html += `
                             <div class="dnd-element dnd-dropzone" data-game="${gameId}" data-type="dropzone" data-index="${idx}"
-                                 title="${safeName}"
+                                 title="${safeBadge}"
                                  style="left: ${dz.x}px; top: ${dz.y}px; width: ${dz.width}px; height: ${dz.height}px; z-index: 1;">
-                                <span class="dnd-dropzone-label">${safeName}</span>
+                                <span class="dnd-dropzone-label">${safeBadge}</span>
                                 <div class="dnd-element-handle" data-game="${gameId}" data-type="dropzone" data-index="${idx}"></div>
                             </div>`;
                     });
@@ -14660,7 +14671,8 @@
                     return '<div class="dropzone" data-pos="' + (i + 1) + '" data-zone-id="' + zid + '"'
                         + (dz.groupId ? ' data-group-id="' + String(dz.groupId).replace(/"/g, '&quot;') + '"' : '')
                         + (dz.label ? ' data-label="' + String(dz.label).replace(/"/g, '&quot;') + '"' : '')
-                        + ' style="position:absolute; left:' + dzX + '%; top:' + dzY + '%; width:' + dzW + '%; height:' + dzH + '%; font-size:' + Math.round((dz.height || g.zoneHeight || 80) * 0.4) + 'px; align-items:center; justify-content:center; display:flex; flex-wrap:wrap; gap:4px; box-sizing:border-box; pointer-events:auto;"></div>';
+                        + ' style="position:absolute; left:' + dzX + '%; top:' + dzY + '%; width:' + dzW + '%; height:' + dzH + '%; font-size:' + Math.round((dz.height || g.zoneHeight || 80) * 0.4) + 'px; align-items:flex-start; justify-content:flex-start; display:flex; flex-wrap:wrap; gap:4px; box-sizing:border-box; pointer-events:auto;">'
+                        + '<span class="dnd-dropzone-id-badge">ID ' + String(zid).replace(/</g, '&lt;') + '</span></div>';
                 }).join('');
                 out += '</div>';
                 out += '\n                        <div id="source' + sfx + '" style="position:absolute; inset:0; z-index:3; box-sizing:border-box; pointer-events:none;">';

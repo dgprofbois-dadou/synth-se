@@ -144,6 +144,24 @@ function rebuild() {
 .dropzone.dnd-step-locked {
   pointer-events: none !important;
 }
+.dnd-dropzone-id-badge,
+.dropzone .dnd-dropzone-id-badge {
+  pointer-events: none;
+  margin: 6px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: rgba(31, 39, 51, 0.82);
+  color: #fff;
+  font: 700 13px/1.2 Verdana, sans-serif;
+  max-width: calc(100% - 12px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  box-shadow: 0 1px 4px rgba(0,0,0,.25);
+  z-index: 2;
+  flex: 0 0 auto;
+  align-self: flex-start;
+}
 .dnd-link-zone .lz-stroke {
   fill: none;
   stroke: #0ea5e9;
