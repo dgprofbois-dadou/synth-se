@@ -137,6 +137,13 @@ function rebuild() {
   transition: fill-opacity 0.28s ease, stroke-opacity 0.28s ease, stroke-width 0.28s ease;
   pointer-events: all;
 }
+.drag-game:not(.dnd-link-mode) .dnd-link-zone,
+.drag-game:not(.dnd-link-mode) .dnd-link-zone * {
+  pointer-events: none !important;
+}
+.dropzone.dnd-step-locked {
+  pointer-events: none !important;
+}
 .dnd-link-zone .lz-stroke {
   fill: none;
   stroke: #0ea5e9;

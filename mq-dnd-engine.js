@@ -173,9 +173,10 @@
       g.steps = [normalizeStep({
         title: 'Étape 1',
         instructions: g.instructions,
+        activity: (normalizeGameType(g.gameType) === 'linking') ? 'linking' : 'dnd',
         zoneIds: [],
         goodIds: g.goodIds || '',
-        linkPairs: g.allowedLinks || []
+        linkPairs: []
       }, 0)];
     }
     return g;
@@ -197,15 +198,27 @@
     return new Set(parseIdList(game && game.goodIds));
   }
 
+  /** Au moins une zone a des cartes associées (cases cochées dans l’inspecteur). */
+  function usesZoneAcceptedIds(game) {
+    var zones = (game && game.dropzones) || [];
+    for (var i = 0; i < zones.length; i++) {
+      var acc = zones[i] && zones[i].acceptedIds;
+      if (Array.isArray(acc) && acc.length) return true;
+    }
+    return false;
+  }
+
   /** Une carte est-elle acceptée dans cette zone ? */
   function isCardAcceptedInZone(game, zone, cardId) {
     var id = String(cardId == null ? '' : cardId);
     if (!id) return false;
+    var accepted = (zone && Array.isArray(zone.acceptedIds)) ? zone.acceptedIds.map(String) : [];
+    // Les cases cochées sur la zone priment (même si le type est encore « Sélection »)
+    if (accepted.length) return accepted.indexOf(id) >= 0;
     if (isSelection(game)) {
       return goodIdSet(game).has(id);
     }
-    var accepted = (zone && Array.isArray(zone.acceptedIds)) ? zone.acceptedIds : [];
-    return accepted.map(String).indexOf(id) >= 0;
+    return false;
   }
 
   /**
@@ -290,7 +303,7 @@
     if (!game) return 0;
     var type = normalizeGameType(game.gameType);
     if (type === 'linking') return 0;
-    if (type === 'selection') {
+    if (type === 'selection' && !usesZoneAcceptedIds(game)) {
       var goods = parseIdList(game.goodIds);
       var tc = parseInt(game.targetCount, 10) || 0;
       if (goods.length && tc) return Math.min(goods.length, tc);
@@ -694,7 +707,7 @@
     var zones = Array.isArray(game && game.dropzones) ? game.dropzones : [];
     var score = 0;
 
-    if (type === 'selection') {
+    if (type === 'selection' && !usesZoneAcceptedIds(game)) {
       var good = goodIdSet(game);
       var seen = new Set();
       zones.forEach(function (z) {
@@ -754,7 +767,7 @@
       return ev.isCorrect && !ev.hasWrong && !ev.isEmpty;
     });
     var dndScore = 0;
-    if (isSelection(game)) {
+    if (isSelection(game) && !usesZoneAcceptedIds(game)) {
       var good2 = goodIdSet(game);
       var seen2 = new Set();
       zones.forEach(function (z) {
@@ -2096,10 +2109,9 @@
       if (!zcfg) return false;
       if (isSingleUse(cardUse) && used.has(id) && !opts.allowMove) return false;
 
-      // Étapes : bloquer le dépôt hors zones de l’étape active (ou pendant Relier pur)
+      // Étapes : pendant Relier pur, pas de dépôt (les IDs d’étape ne restreignent pas les zones)
       if (stepsEnabled) {
         var stPlace = getStepsState(game, collectPlacements(gameContainer, game));
-        // appliquer manuels
         stPlace.statuses.forEach(function (s, i) {
           var sid = String((stPlace.steps[i] && stPlace.steps[i].id) || i);
           if (manualStepDone[sid]) { s.isComplete = true; s.needsManualNext = false; }
@@ -2111,12 +2123,7 @@
           stPlace.active = stPlace.steps[stPlace.currentIndex] || null;
         }
         var act = stPlace.active ? normalizeStep(stPlace.active, 0) : null;
-        if (act) {
-          if (act.activity === 'linking') return false;
-          if ((act.activity === 'dnd' || act.activity === 'both') && act.zoneIds && act.zoneIds.length) {
-            if (act.zoneIds.map(String).indexOf(String(zid)) < 0) return false;
-          }
-        }
+        if (act && act.activity === 'linking') return false;
       }
 
       var orig = findOrig(id);
@@ -2413,6 +2420,23 @@
       });
     });
 
+    function dropzoneFromPoint(clientX, clientY) {
+      if (!isFinite(clientX) || !isFinite(clientY)) return null;
+      var stack = (typeof document.elementsFromPoint === 'function')
+        ? (document.elementsFromPoint(clientX, clientY) || [])
+        : [];
+      if (!stack.length) {
+        var top = document.elementFromPoint(clientX, clientY);
+        if (top) stack = [top];
+      }
+      for (var i = 0; i < stack.length; i++) {
+        var n = stack[i];
+        var z = n && n.closest ? n.closest('.dropzone') : null;
+        if (z && gameContainer.contains(z) && !z.classList.contains('dnd-step-locked')) return z;
+      }
+      return null;
+    }
+
     // Dropzones
     Array.prototype.forEach.call(gameContainer.querySelectorAll('.dropzone'), function (zone) {
       if (!zone.getAttribute('tabindex')) zone.setAttribute('tabindex', '0');
@@ -2448,6 +2472,26 @@
         }
       });
     });
+
+    // Dépôt même si une zone SVG Relier (z-index plus haut) est au-dessus de la dropzone
+    gameContainer.addEventListener('dragover', function (e) {
+      if (isLinkModeOn()) return;
+      if (!dropzoneFromPoint(e.clientX, e.clientY)) return;
+      e.preventDefault();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+    }, true);
+    gameContainer.addEventListener('drop', function (e) {
+      if (isLinkModeOn()) return;
+      var zone = dropzoneFromPoint(e.clientX, e.clientY);
+      if (!zone) return;
+      var id = '';
+      try { id = (e.dataTransfer && e.dataTransfer.getData('text/plain')) || ''; } catch (err) { id = ''; }
+      if (!id && selectedId) id = selectedId;
+      if (!id) return;
+      e.preventDefault();
+      e.stopPropagation();
+      placeInZone(zone, id, { allowMove: true });
+    }, true);
 
     // Bouton vérifier (mode deferred)
     var verifyBtn = gameContainer.querySelector('.dnd-verify-btn');
@@ -2539,6 +2583,7 @@
     normalizeDropzone: normalizeDropzone,
     applyGameDefaults: applyGameDefaults,
     isCardAcceptedInZone: isCardAcceptedInZone,
+    usesZoneAcceptedIds: usesZoneAcceptedIds,
     evaluateZone: evaluateZone,
     evaluateGame: evaluateGame,
     evaluateLinks: evaluateLinks,

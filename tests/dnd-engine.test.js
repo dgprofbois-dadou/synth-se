@@ -375,10 +375,34 @@ test('enableSteps seed depuis instructions', () => {
     enableSteps: true,
     instructions: 'Consigne unique',
     goodIds: '1,2',
+    allowedLinks: [{ from: 'a', to: 'b' }],
     steps: []
   });
   assert.strictEqual(g.steps.length, 1);
   assert.strictEqual(g.steps[0].instructions, 'Consigne unique');
+  assert.strictEqual(g.steps[0].activity, 'dnd');
+  assert.strictEqual(g.steps[0].linkPairs.length, 0);
+});
+
+test('selection + cartes cochées sur la zone → validation par zone', () => {
+  const g = Engine.applyGameDefaults({
+    gameType: 'selection',
+    goodIds: '',
+    dropzones: [
+      { id: 1, acceptedIds: ['bruit'], capacity: 1, required: true },
+      { id: 2, acceptedIds: ['casque'], capacity: 1, required: true }
+    ]
+  });
+  assert.strictEqual(Engine.usesZoneAcceptedIds(g), true);
+  assert.strictEqual(Engine.isCardAcceptedInZone(g, g.dropzones[0], 'bruit'), true);
+  assert.strictEqual(Engine.isCardAcceptedInZone(g, g.dropzones[0], 'casque'), false);
+  assert.strictEqual(Engine.isCardAcceptedInZone(g, g.dropzones[1], 'casque'), true);
+  const ev = Engine.evaluateGame(g, { '1': ['bruit'], '2': ['casque'] });
+  assert.strictEqual(ev.score, 2);
+  assert.strictEqual(ev.isComplete, true);
+  const bad = Engine.evaluateGame(g, { '1': ['casque'], '2': ['bruit'] });
+  assert.strictEqual(bad.isComplete, false);
+  assert.ok(bad.score < 2);
 });
 
 console.log('\n=== Test linking ===');
