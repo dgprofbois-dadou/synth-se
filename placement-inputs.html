@@ -1208,6 +1208,21 @@
             display:block; font-size:8px; color:#94a3b8; line-height:1;
         }
         .mq-dz-card.on { border-color:#1565c0; background:#e3f2fd; }
+        .mq-step-zmap-row { margin-top:8px; padding:6px; background:#fff; border:1px dashed #fdba74; border-radius:6px; }
+        .mq-step-zmap-row > .mq-step-zmap-label { font-size:11px; font-weight:bold; color:#9a3412; margin-bottom:4px; }
+        .mq-step-zmap-cards { display:flex; flex-wrap:wrap; gap:6px; }
+        .mq-step-zmap-card {
+            width:72px; min-height:56px; text-align:center; font-size:10px; border:1px solid #ccc;
+            border-radius:6px; padding:4px 3px; background:#fafafa; cursor:pointer;
+            display:flex; flex-direction:column; align-items:center; gap:2px; box-sizing:border-box;
+        }
+        .mq-step-zmap-card.on { border-color:#1565c0; background:#e3f2fd; }
+        .mq-step-zmap-card img { width:36px; height:36px; object-fit:contain; }
+        .mq-step-zmap-card .mq-dz-thumb-text {
+            width:100%; min-height:36px; max-height:44px; display:flex; align-items:center; justify-content:center;
+            padding:2px; box-sizing:border-box; border-radius:4px; background:#ffe082;
+            font-size:9px; line-height:1.15; overflow:hidden;
+        }
         .mq-dz-card.is-dup { border-color:#dc2626; background:#fef2f2; box-shadow:0 0 0 1px #fecaca; }
         .mq-dz-card.is-dup .mq-dz-card-id { color:#b91c1c; font-weight:700; }
         .mq-dz-dup-banner {
@@ -12817,11 +12832,12 @@
                     let assocHtml;
                     if (assoc.length) {
                         assocHtml = assoc.map((a) => {
-                            return '<li>Étape ' + a.stepNum + ' (« ' + mqEscapeHtmlLite(a.title) + ' ») → carte <strong>ID ' + mqEscapeHtmlLite(a.card) + '</strong></li>';
+                            const cards = Array.isArray(a.cards) ? a.cards.join(', ') : String(a.card || '');
+                            return '<li>Étape ' + a.stepNum + ' (« ' + mqEscapeHtmlLite(a.title) + ' ») → cartes <strong>ID ' + mqEscapeHtmlLite(cards) + '</strong></li>';
                         }).join('');
                         assocHtml = '<ul style="margin:4px 0 0;padding-left:18px;font-size:11px;color:#334155;">' + assocHtml + '</ul>';
                     } else {
-                        assocHtml = '<p style="margin:4px 0 0;font-size:11px;color:#9a3412;">Aucune association — configurez le menu déroulant dans l’<strong>étape</strong> qui utilise cette zone (encadré orange ci-dessus).</p>';
+                        assocHtml = '<p style="margin:4px 0 0;font-size:11px;color:#9a3412;">Aucune association — cochez une ou plusieurs cartes dans l’<strong>étape</strong> concernée (encadré orange ci-dessus).</p>';
                     }
                     acceptedSection = ''
                         + '<div style="margin-top:6px;padding:8px;background:#eef2ff;border:1px solid #c7d2fe;border-radius:8px;">'
@@ -12957,11 +12973,18 @@
                     g.steps.forEach((step) => {
                         if (!step.zoneMap) step.zoneMap = {};
                         const inStep = (step.zoneIds || []).map(String).indexOf(zid) >= 0;
-                        if (!inStep && !(step.zoneIds || []).length) inStep = true;
-                        if (!inStep) return;
-                        if (checked) step.zoneMap[zid] = id;
-                        else if (step.zoneMap[zid] === id) delete step.zoneMap[zid];
+                        if (!inStep && !(step.zoneIds || []).length) { /* legacy */ }
+                        else if ((step.zoneIds || []).length && !inStep) return;
+                        const arr = mqNormalizeZoneMapIds(step.zoneMap[zid]);
+                        if (checked) {
+                            if (arr.indexOf(id) < 0) arr.push(id);
+                            step.zoneMap[zid] = arr;
+                        } else {
+                            step.zoneMap[zid] = arr.filter((x) => x !== id);
+                            if (!step.zoneMap[zid].length) delete step.zoneMap[zid];
+                        }
                     });
+                    mqApplyStepZoneMaps(gameId);
                     renderStepsList(gameId);
                 }
                 mqDndSel = { gameId, type: 'dropzone', index: String(index) };
@@ -13363,18 +13386,26 @@
                     if (h1) h1.style.display = on ? '' : 'none';
                 });
             }
+            function mqNormalizeZoneMapIds(raw) {
+                if (window.MqDndEngine && MqDndEngine.normalizeZoneMapIds) {
+                    return MqDndEngine.normalizeZoneMapIds(raw);
+                }
+                if (Array.isArray(raw)) return raw.map(String).filter(Boolean);
+                if (raw == null || raw === '') return [];
+                return String(raw).split(/[,;\s]+/).map((s) => s.trim()).filter(Boolean);
+            }
             function mqZoneStepAssociationLines(gameId, zid) {
                 const g = state.dndGames[gameId];
                 const lines = [];
                 if (!g || !g.enableSteps || !Array.isArray(g.steps)) return lines;
                 g.steps.forEach((step, i) => {
                     const map = mqInferStepZoneMap(gameId, step);
-                    const card = map[String(zid)];
-                    if (card) {
+                    const cards = mqNormalizeZoneMapIds(map[String(zid)]);
+                    if (cards.length) {
                         lines.push({
                             stepNum: i + 1,
                             title: step.title || ('Étape ' + (i + 1)),
-                            card: String(card)
+                            cards: cards
                         });
                     }
                 });
@@ -13395,26 +13426,31 @@
                 (g.steps || []).forEach((step) => {
                     const map = (step && step.zoneMap) ? step.zoneMap : {};
                     Object.keys(map).forEach((zid) => {
-                        const cardId = String(map[zid] || '').trim();
-                        if (!cardId) return;
+                        const ids = mqNormalizeZoneMapIds(map[zid]);
+                        if (!ids.length) return;
                         g.dropzones.forEach((dz, i) => {
                             if (mqDropzoneId(dz, i) === String(zid)) {
-                                dz.acceptedIds = [cardId];
+                                dz.acceptedIds = ids.slice();
                             }
                         });
                     });
                 });
             }
             function mqInferStepZoneMap(gameId, step) {
-                const map = Object.assign({}, (step && step.zoneMap) || {});
+                const map = {};
+                const raw = (step && step.zoneMap) || {};
+                Object.keys(raw).forEach((k) => {
+                    const ids = mqNormalizeZoneMapIds(raw[k]);
+                    if (ids.length) map[String(k)] = ids;
+                });
                 const g = state.dndGames[gameId];
                 if (!g) return map;
                 (step.zoneIds || []).forEach((zid) => {
                     const sid = String(zid);
-                    if (map[sid]) return;
+                    if (map[sid] && map[sid].length) return;
                     (g.dropzones || []).forEach((dz, i) => {
                         if (mqDropzoneId(dz, i) === sid && Array.isArray(dz.acceptedIds) && dz.acceptedIds.length) {
-                            map[sid] = String(dz.acceptedIds[0]);
+                            map[sid] = dz.acceptedIds.map(String);
                         }
                     });
                 });
@@ -13427,18 +13463,39 @@
                 }
                 const map = mqInferStepZoneMap(gameId, step);
                 const opts = mqStepDraggableOptions(gameId, step);
+                const g = state.dndGames[gameId];
+                const dragById = {};
+                ((g && g.draggables) || []).forEach((d) => {
+                    const id = String(d && d.id != null ? d.id : '');
+                    if (id) dragById[id] = d;
+                });
                 return zoneIds.map((zid) => {
-                    const sel = map[String(zid)] || '';
-                    const optHtml = '<option value="">— choisir la carte —</option>'
-                        + opts.map((id) => {
-                            const safe = String(id).replace(/"/g, '&quot;');
-                            return '<option value="' + safe + '"' + (sel === String(id) ? ' selected' : '') + '>ID ' + safe + '</option>';
-                        }).join('');
-                    return '<label style="display:flex;align-items:center;gap:6px;font-size:11px;margin-top:4px;">'
-                        + 'Zone <strong style="min-width:28px;">' + String(zid).replace(/</g, '&lt;') + '</strong>'
-                        + '<span style="color:#64748b;">→</span>'
-                        + '<select data-field="zoneMap-' + String(zid).replace(/"/g, '&quot;') + '" style="flex:1;font-size:11px;padding:4px;box-sizing:border-box;">'
-                        + optHtml + '</select></label>';
+                    const accepted = mqNormalizeZoneMapIds(map[String(zid)]);
+                    const safeZid = String(zid).replace(/"/g, '&quot;').replace(/</g, '&lt;');
+                    const cardsHtml = opts.map((id) => {
+                        const c = dragById[id];
+                        const cid = String(id);
+                        const on = accepted.indexOf(cid) >= 0;
+                        const safeId = mqEscapeHtmlLite(cid);
+                        const label = mqDraggableCardLabel(c || { id: cid });
+                        const safeLabel = mqEscapeHtmlLite(label);
+                        let thumb;
+                        if (c && c.kind === 'text') {
+                            thumb = '<div class="mq-dz-thumb-text" title="' + safeLabel + '">' + safeLabel + '</div>';
+                        } else if (c && c.src && String(c.src).indexOf('idb:') !== 0) {
+                            thumb = '<img src="' + c.src + '" alt="' + safeLabel + '">';
+                        } else {
+                            thumb = '<div class="mq-dz-thumb-text" style="background:#e2e8f0;">' + safeLabel + '</div>';
+                        }
+                        return '<label class="mq-step-zmap-card' + (on ? ' on' : '') + '" title="' + safeLabel + ' (ID ' + safeId + ')">'
+                            + thumb
+                            + '<input type="checkbox" data-field="zoneMap-' + safeZid + '" data-card="' + safeId + '" ' + (on ? 'checked' : '') + '>'
+                            + '<span style="font-size:9px;">ID ' + safeId + '</span></label>';
+                    }).join('');
+                    return '<div class="mq-step-zmap-row">'
+                        + '<div class="mq-step-zmap-label">Zone <strong>' + safeZid + '</strong> → cartes acceptées</div>'
+                        + '<div class="mq-step-zmap-cards">' + (cardsHtml || '<span style="font-size:10px;color:#999;">Aucune carte dans le pool — renseignez « Cartes de l’étape » ou ajoutez des images.</span>') + '</div>'
+                        + '</div>';
                 }).join('');
             }
             /** Paires globales masquées si « Jeu par étapes » (les flèches se règlent dans chaque étape). */
@@ -13470,11 +13527,14 @@
                     const linksRaw = (card.querySelector('[data-field="linkPairs"]') || {}).value || '';
                     const zoneIds = zoneIdsRaw.split(/[,;\s]+/).map(s => s.trim()).filter(Boolean);
                     const zoneMap = {};
-                    card.querySelectorAll('[data-field^="zoneMap-"]').forEach((sel) => {
-                        const m = /^zoneMap-(.+)$/.exec(sel.getAttribute('data-field') || '');
-                        if (!m) return;
-                        const v = String(sel.value || '').trim();
-                        if (v) zoneMap[m[1]] = v;
+                    card.querySelectorAll('input[data-field^="zoneMap-"][data-card]').forEach((inp) => {
+                        const m = /^zoneMap-(.+)$/.exec(inp.getAttribute('data-field') || '');
+                        if (!m || !inp.checked) return;
+                        const zid = m[1];
+                        const cid = String(inp.getAttribute('data-card') || '').trim();
+                        if (!cid) return;
+                        if (!zoneMap[zid]) zoneMap[zid] = [];
+                        if (zoneMap[zid].indexOf(cid) < 0) zoneMap[zid].push(cid);
                     });
                     const linkPairs = (window.MqDndEngine && MqDndEngine.normalizeAllowedLinks)
                         ? MqDndEngine.normalizeAllowedLinks(linksRaw)
@@ -13607,8 +13667,8 @@
                         + '<label>Cartes de l’étape (pool)<input data-field="goodIds" type="text" value="' + String(s.goodIds || '').replace(/"/g, '&quot;') + '" placeholder="Ex: 3,4,5,6 (optionnel)" style="width:100%;font-size:11px;padding:4px;box-sizing:border-box;"></label>'
                         + '</div>'
                         + '<div style="margin-top:8px;padding:6px;background:#fff;border:1px dashed #ea580c;border-radius:6px;">'
-                        + '<div style="font-weight:bold;margin-bottom:4px;">Associations zone → carte (validation verte)</div>'
-                        + '<p style="margin:0 0 4px;font-size:10px;color:#64748b;">Choisissez quelle carte doit aller dans chaque zone. C’est ce qui fait passer la zone au vert en mode élève.</p>'
+                        + '<div style="font-weight:bold;margin-bottom:4px;">Associations zone → cartes (validation verte)</div>'
+                        + '<p style="margin:0 0 4px;font-size:10px;color:#64748b;">Cochez une ou plusieurs cartes acceptées par zone. C’est ce qui fait passer la zone au vert en mode élève.</p>'
                         + zoneMapHtml
                         + '</div>'
                         + '</div>'
@@ -13635,14 +13695,18 @@
                                 g2.allowedLinks = MqDndEngine.effectiveAllowedLinks(g2);
                             }
                             scheduleSaveLocal();
-                            // Rafraîchir l’affichage des champs selon le type d’activité
-                            if (inp.getAttribute('data-field') === 'activity') {
+                            const field = inp.getAttribute('data-field') || '';
+                            if (field === 'activity') {
                                 renderStepsList(gameId);
                                 return;
                             }
-                            if (inp.getAttribute('data-field') === 'zoneIds' || inp.getAttribute('data-field') === 'goodIds') {
+                            if (field === 'zoneIds' || field === 'goodIds') {
                                 renderStepsList(gameId);
                                 return;
+                            }
+                            if (field.indexOf('zoneMap-') === 0) {
+                                const lbl = inp.closest('.mq-step-zmap-card');
+                                if (lbl) lbl.classList.toggle('on', !!inp.checked);
                             }
                             renderDropzonesList(gameId);
                             renderDndGamesPreview();

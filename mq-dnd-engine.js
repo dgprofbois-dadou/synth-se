@@ -574,6 +574,24 @@
     return s.activity === 'linking' || s.activity === 'both';
   }
 
+  function normalizeZoneMapIds(raw) {
+    if (Array.isArray(raw)) {
+      return raw.map(function (x) { return String(x).trim(); }).filter(Boolean);
+    }
+    if (raw == null || raw === '') return [];
+    return String(raw).split(/[,;\s]+/).map(function (s) { return s.trim(); }).filter(Boolean);
+  }
+
+  function normalizeZoneMap(raw) {
+    var out = {};
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return out;
+    Object.keys(raw).forEach(function (k) {
+      var ids = normalizeZoneMapIds(raw[k]);
+      if (ids.length) out[String(k)] = ids;
+    });
+    return out;
+  }
+
   function normalizeStep(raw, index) {
     var s = raw && typeof raw === 'object' ? raw : {};
     var linkPairs = normalizeAllowedLinks(s.linkPairs || s.allowedLinks || s.links || []);
@@ -583,13 +601,7 @@
       : (Array.isArray(s.goodIds) ? s.goodIds.join(',') : (s.goodIds != null ? String(s.goodIds) : ''));
     var draft = { zoneIds: zoneIds, goodIds: goodIds, linkPairs: linkPairs };
     var activity = normalizeStepActivity(s.activity != null ? s.activity : s.mode, draft);
-    var zoneMap = {};
-    if (s.zoneMap && typeof s.zoneMap === 'object' && !Array.isArray(s.zoneMap)) {
-      Object.keys(s.zoneMap).forEach(function (k) {
-        var v = s.zoneMap[k];
-        if (v != null && String(v).trim()) zoneMap[String(k)] = String(v).trim();
-      });
-    }
+    var zoneMap = normalizeZoneMap(s.zoneMap);
     var stepGameType = normalizeGameType(s.stepGameType || s.gameType || 'exact');
     return {
       id: s.id != null ? String(s.id) : String(index + 1),
@@ -2615,6 +2627,8 @@
     hasLinkingFeature: hasLinkingFeature,
     computeDndBaseMaxScore: computeDndBaseMaxScore,
     normalizeStep: normalizeStep,
+    normalizeZoneMap: normalizeZoneMap,
+    normalizeZoneMapIds: normalizeZoneMapIds,
     normalizeSteps: normalizeSteps,
     normalizeStepActivity: normalizeStepActivity,
     stepNeedsRelier: stepNeedsRelier,

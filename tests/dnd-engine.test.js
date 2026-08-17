@@ -374,12 +374,18 @@ test('normalizeStep conserve zoneMap et stepGameType', () => {
   const s = Engine.normalizeStep({
     title: 'A',
     zoneIds: ['19', '20'],
-    zoneMap: { '19': '4', '20': '5' },
+    zoneMap: { '19': '4', '20': ['5', '6'] },
     stepGameType: 'exact'
   }, 0);
-  assert.strictEqual(s.zoneMap['19'], '4');
-  assert.strictEqual(s.zoneMap['20'], '5');
+  assert.deepStrictEqual(s.zoneMap['19'], ['4']);
+  assert.deepStrictEqual(s.zoneMap['20'], ['5', '6']);
   assert.strictEqual(s.stepGameType, 'exact');
+});
+
+test('normalizeZoneMapIds accepte chaîne CSV et tableaux', () => {
+  assert.deepStrictEqual(Engine.normalizeZoneMapIds('4, 5'), ['4', '5']);
+  assert.deepStrictEqual(Engine.normalizeZoneMapIds(['7', '8']), ['7', '8']);
+  assert.deepStrictEqual(Engine.normalizeZoneMap({ '19': '4', '20': '5,6' }), { '19': ['4'], '20': ['5', '6'] });
 });
 
 test('enableSteps seed depuis instructions', () => {
