@@ -388,6 +388,23 @@ test('normalizeZoneMapIds accepte chaîne CSV et tableaux', () => {
   assert.deepStrictEqual(Engine.normalizeZoneMap({ '19': '4', '20': '5,6' }), { '19': ['4'], '20': ['5', '6'] });
 });
 
+test('applyStepZoneMapsToDropzones copie zoneMap vers acceptedIds', () => {
+  const g = Engine.applyGameDefaults({
+    enableSteps: true,
+    gameType: 'exact',
+    dropzones: [
+      { id: 19, acceptedIds: [] },
+      { id: 20, acceptedIds: [] }
+    ],
+    steps: [{
+      zoneIds: ['19', '20'],
+      zoneMap: { '19': ['4', '5'], '20': '6' }
+    }]
+  });
+  assert.deepStrictEqual(g.dropzones[0].acceptedIds, ['4', '5']);
+  assert.deepStrictEqual(g.dropzones[1].acceptedIds, ['6']);
+});
+
 test('enableSteps seed depuis instructions', () => {
   const g = Engine.applyGameDefaults({
     enableSteps: true,

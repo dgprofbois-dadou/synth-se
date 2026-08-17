@@ -179,6 +179,25 @@
         linkPairs: []
       }, 0)];
     }
+    if (g.enableSteps) applyStepZoneMapsToDropzones(g);
+    return g;
+  }
+
+  /** Copie zoneMap des étapes → acceptedIds des dropzones (validation mode élève / export). */
+  function applyStepZoneMapsToDropzones(g) {
+    if (!g || !g.enableSteps || !Array.isArray(g.steps) || !Array.isArray(g.dropzones)) return g;
+    g.steps.forEach(function (step) {
+      var map = normalizeZoneMap(step && step.zoneMap);
+      Object.keys(map).forEach(function (zid) {
+        var ids = map[zid];
+        if (!ids || !ids.length) return;
+        g.dropzones.forEach(function (dz) {
+          if (String(dz.id) === String(zid)) {
+            dz.acceptedIds = ids.slice();
+          }
+        });
+      });
+    });
     return g;
   }
 
@@ -925,7 +944,7 @@
   // ---------- Runtime jouable (DOM) ----------
 
   function getZonePlacements(zoneEl) {
-    return Array.prototype.slice.call(zoneEl.querySelectorAll('[data-id]'))
+    return Array.prototype.slice.call(zoneEl.querySelectorAll('.dnd-placed[data-id]'))
       .map(function (el) { return el.getAttribute('data-id'); })
       .filter(Boolean);
   }
@@ -1980,7 +1999,7 @@
       }
       Array.prototype.forEach.call(gameContainer.querySelectorAll('.dropzone'), function (z) {
         z.classList.toggle('dnd-step-locked', linkingOnly);
-        z.style.pointerEvents = linkingOnly ? 'none' : '';
+        z.style.pointerEvents = linkingOnly ? 'none' : 'auto';
         if (linkingOnly) z.style.opacity = '0.5';
         else if (z.style.opacity === '0.5') z.style.opacity = '';
       });
@@ -1996,6 +2015,15 @@
           }
         }
       });
+      // Les polygones SVG Relier (z-index 5) ne doivent pas intercepter le drop DnD hors mode Relier
+      var linkLayer = gameContainer.querySelector('.dnd-link-zones-layer');
+      if (linkLayer) {
+        var blockLinkHit = !isLinkModeOn();
+        linkLayer.style.pointerEvents = blockLinkHit ? 'none' : '';
+        Array.prototype.forEach.call(linkLayer.querySelectorAll('.dnd-link-zone'), function (gEl) {
+          gEl.style.pointerEvents = blockLinkHit ? 'none' : 'auto';
+        });
+      }
     }
 
     function sourceRoot() {
@@ -2063,7 +2091,16 @@
     }
 
     function findZoneConfig(zid) {
-      return (game.dropzones || []).find(function (z) { return String(z.id) === String(zid); });
+      var zones = game.dropzones || [];
+      var found = zones.find(function (z) { return String(z.id) === String(zid); });
+      if (found) return found;
+      var zoneEl = zoneById(zid);
+      if (zoneEl) {
+        var all = gameContainer.querySelectorAll('.dropzone');
+        var idx = Array.prototype.indexOf.call(all, zoneEl);
+        if (idx >= 0 && zones[idx]) return zones[idx];
+      }
+      return null;
     }
 
     function removeFromZone(zone, cardId, reactivate) {
@@ -2456,7 +2493,20 @@
         var z = n && n.closest ? n.closest('.dropzone') : null;
         if (z && gameContainer.contains(z) && !z.classList.contains('dnd-step-locked')) return z;
       }
-      return null;
+      // Repli géométrique : SVG Relier / pointer-events parent peuvent masquer la dropzone
+      var hit = null;
+      var hitArea = Infinity;
+      Array.prototype.forEach.call(gameContainer.querySelectorAll('.dropzone'), function (z) {
+        if (z.classList.contains('dnd-step-locked')) return;
+        var r = z.getBoundingClientRect();
+        if (clientX < r.left || clientX > r.right || clientY < r.top || clientY > r.bottom) return;
+        var area = Math.max(1, r.width * r.height);
+        if (area < hitArea) {
+          hitArea = area;
+          hit = z;
+        }
+      });
+      return hit;
     }
 
     // Dropzones
@@ -2610,6 +2660,7 @@
     isSingleUse: isSingleUse,
     normalizeDropzone: normalizeDropzone,
     applyGameDefaults: applyGameDefaults,
+    applyStepZoneMapsToDropzones: applyStepZoneMapsToDropzones,
     isCardAcceptedInZone: isCardAcceptedInZone,
     usesZoneAcceptedIds: usesZoneAcceptedIds,
     evaluateZone: evaluateZone,

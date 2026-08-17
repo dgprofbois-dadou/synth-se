@@ -1049,6 +1049,8 @@
             40% { transform: scale(1.03); box-shadow: 0 0 0 10px rgba(245, 158, 11, 0); }
             100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
         }
+        .dropzone .dnd-placed { position: relative; z-index: 2; flex-shrink: 0; }
+        .dropzone .dnd-dropzone-id-badge { position: relative; z-index: 1; pointer-events: none; }
         .dropzone.dnd-step-target {
             outline: 3px solid #f59e0b !important;
             outline-offset: 2px;
@@ -7880,6 +7882,11 @@
 
                     container.appendChild(gameEl);
 
+                    if (gameConfig.enableSteps) mqApplyStepZoneMaps(gameId);
+                    if (window.MqDndEngine && MqDndEngine.applyGameDefaults) {
+                        MqDndEngine.applyGameDefaults(gameConfig);
+                    }
+
                     const cfg = Object.assign({}, gameConfig, { _gameId: gameId });
                     if (window.MqDndEngine && MqDndEngine.initPlayableDndGame) {
                         MqDndEngine.initPlayableDndGame(gameEl, cfg, {
@@ -7887,7 +7894,7 @@
                             showFloating: typeof showFloatingFeedback === 'function' ? showFloatingFeedback : null,
                             onScore: function (info) {
                                 if (!state.dndGames.dndResults) state.dndGames.dndResults = {};
-                                state.dndGames.dndResults[gameId] = info.score;
+                                state.dndGames.dndResults[gameId] = (info.displayScore != null) ? info.displayScore : info.score;
                                 updateScore();
                             }
                         });
@@ -13423,6 +13430,10 @@
             function mqApplyStepZoneMaps(gameId) {
                 const g = state.dndGames[gameId];
                 if (!g || !Array.isArray(g.dropzones)) return;
+                if (window.MqDndEngine && MqDndEngine.applyStepZoneMapsToDropzones) {
+                    MqDndEngine.applyStepZoneMapsToDropzones(g);
+                    return;
+                }
                 (g.steps || []).forEach((step) => {
                     const map = (step && step.zoneMap) ? step.zoneMap : {};
                     Object.keys(map).forEach((zid) => {
