@@ -370,6 +370,18 @@ test('requireNextButton bloque le passage auto', () => {
   assert.strictEqual(ev.isComplete, false);
 });
 
+test('normalizeStep conserve zoneMap et stepGameType', () => {
+  const s = Engine.normalizeStep({
+    title: 'A',
+    zoneIds: ['19', '20'],
+    zoneMap: { '19': '4', '20': '5' },
+    stepGameType: 'exact'
+  }, 0);
+  assert.strictEqual(s.zoneMap['19'], '4');
+  assert.strictEqual(s.zoneMap['20'], '5');
+  assert.strictEqual(s.stepGameType, 'exact');
+});
+
 test('enableSteps seed depuis instructions', () => {
   const g = Engine.applyGameDefaults({
     enableSteps: true,

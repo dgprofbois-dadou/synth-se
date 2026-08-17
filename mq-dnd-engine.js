@@ -583,15 +583,25 @@
       : (Array.isArray(s.goodIds) ? s.goodIds.join(',') : (s.goodIds != null ? String(s.goodIds) : ''));
     var draft = { zoneIds: zoneIds, goodIds: goodIds, linkPairs: linkPairs };
     var activity = normalizeStepActivity(s.activity != null ? s.activity : s.mode, draft);
+    var zoneMap = {};
+    if (s.zoneMap && typeof s.zoneMap === 'object' && !Array.isArray(s.zoneMap)) {
+      Object.keys(s.zoneMap).forEach(function (k) {
+        var v = s.zoneMap[k];
+        if (v != null && String(v).trim()) zoneMap[String(k)] = String(v).trim();
+      });
+    }
+    var stepGameType = normalizeGameType(s.stepGameType || s.gameType || 'exact');
     return {
       id: s.id != null ? String(s.id) : String(index + 1),
       title: s.title != null ? String(s.title) : ('Étape ' + (index + 1)),
       instructions: s.instructions != null ? String(s.instructions) : '',
       activity: activity,
+      stepGameType: activity === 'linking' ? 'linking' : stepGameType,
       requireNextButton: !!s.requireNextButton,
       zoneIds: zoneIds,
       goodIds: goodIds,
-      linkPairs: linkPairs
+      linkPairs: linkPairs,
+      zoneMap: zoneMap
     };
   }
 

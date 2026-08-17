@@ -3395,7 +3395,7 @@
                     <label>Titre</label>
                     <input id="dndGame1Title" type="text" placeholder="Ex: Risques liés à la machine">
                 </div>
-                <div class="row">
+                <div class="row mq-dnd-hide-when-steps">
                     <label>Bonnes réponses (IDs)</label>
                     <input id="dndGame1GoodIds" type="text" placeholder="Ex: 1,4,5,6,8">
                 </div>
@@ -3503,7 +3503,7 @@
                     <label>Titre</label>
                     <input id="dndGame2Title" type="text" placeholder="Ex: Les Obligations">
                 </div>
-                <div class="row">
+                <div class="row mq-dnd-hide-when-steps">
                     <label>Bonnes réponses (IDs)</label>
                     <input id="dndGame2GoodIds" type="text" placeholder="Ex: 1,2,4,8">
                 </div>
@@ -11909,11 +11909,13 @@
                     if (el('EnableSteps')) g.enableSteps = el('EnableSteps').checked;
                     if (g.enableSteps) {
                         g.steps = mqReadStepsFromUI(n);
+                        mqApplyStepZoneMaps(gid);
                         if ((g.steps || []).some((st) => st.activity === 'linking' || st.activity === 'both' || (st.linkPairs && st.linkPairs.length))) {
                             g.enableLinking = true;
                             const enL = el('EnableLinking');
                             if (enL) enL.checked = true;
                         }
+                        g.gameType = 'exact';
                     }
                     if (!g.instructionsBox) g.instructionsBox = {};
                     if (el('InstrX')) g.instructionsBox.x = parseInt(val('InstrX'), 10) || 0;
@@ -12844,7 +12846,7 @@
                     + '<label style="grid-column:1/-1;"><input type="checkbox" data-field="required" ' + (dz.required === false ? '' : 'checked') + '> Zone obligatoire</label>'
                     + '</div>'
                     + '<div style="margin-top:6px;"><div style="font-size:11px;font-weight:bold;">Réponses acceptées</div>'
-                    + '<p style="margin:2px 0 6px;font-size:10px;color:#9a3412;">Cochez les cartes qui doivent aller dans <b>cette</b> zone (ça valide en mode élève, même si le type est encore « Sélection simple »).</p>'
+                    + '<p style="margin:2px 0 6px;font-size:10px;color:#9a3412;">Cochez la carte qui valide <b>cette</b> zone (vert en mode élève). Avec « Jeu par étapes », préférez le menu déroulant dans l’étape — les deux restent synchronisés.</p>'
                     + dupBanner
                     + '<div class="mq-dz-cards">' + (cardsHtml || '<span style="font-size:10px;color:#999;">Aucune carte</span>') + '</div></div>'
                     + '<div class="row" style="margin-top:4px;"><label style="font-size:10px;">Msg réussite</label>'
@@ -12915,13 +12917,26 @@
                 saveLocal();
             };
             window.mqToggleZoneAccepted = function (gameId, index, cardId, checked) {
-                const dropzone = state.dndGames[gameId].dropzones[index];
+                const g = state.dndGames[gameId];
+                const dropzone = g && g.dropzones[index];
                 if (!dropzone) return;
                 if (!Array.isArray(dropzone.acceptedIds)) dropzone.acceptedIds = [];
                 const id = String(cardId);
                 const set = new Set(dropzone.acceptedIds.map(String));
                 if (checked) set.add(id); else set.delete(id);
                 dropzone.acceptedIds = Array.from(set);
+                const zid = mqDropzoneId(dropzone, index);
+                if (g && g.enableSteps && Array.isArray(g.steps)) {
+                    g.steps.forEach((step) => {
+                        if (!step.zoneMap) step.zoneMap = {};
+                        const inStep = (step.zoneIds || []).map(String).indexOf(zid) >= 0;
+                        if (!inStep && !(step.zoneIds || []).length) inStep = true;
+                        if (!inStep) return;
+                        if (checked) step.zoneMap[zid] = id;
+                        else if (step.zoneMap[zid] === id) delete step.zoneMap[zid];
+                    });
+                    renderStepsList(gameId);
+                }
                 mqDndSel = { gameId, type: 'dropzone', index: String(index) };
                 renderDropzonesList(gameId, index);
                 saveLocal();
@@ -13281,14 +13296,93 @@
             // ===== Étapes / consignes =====
             function mqToggleStepsUI(n, on) {
                 const host = document.getElementById('dndGame' + n + 'AdvancedHost');
-                if (!host) return;
-                host.querySelectorAll('.mq-dnd-steps-only').forEach((row) => {
-                    row.style.display = on ? 'flex' : 'none';
-                });
-                host.querySelectorAll('.mq-dnd-instr-simple').forEach((row) => {
-                    row.style.display = on ? 'none' : 'flex';
-                });
+                if (host) {
+                    host.querySelectorAll('.mq-dnd-steps-only').forEach((row) => {
+                        row.style.display = on ? 'flex' : 'none';
+                    });
+                    host.querySelectorAll('.mq-dnd-instr-simple').forEach((row) => {
+                        row.style.display = on ? 'none' : 'flex';
+                    });
+                    host.querySelectorAll('.mq-dnd-hide-when-steps').forEach((row) => {
+                        row.style.display = on ? 'none' : '';
+                    });
+                }
+                const panel = document.querySelector('[data-mq-dnd-panel="' + n + '"]');
+                if (panel) {
+                    panel.querySelectorAll('.mq-dnd-hide-when-steps').forEach((row) => {
+                        row.style.display = on ? 'none' : '';
+                    });
+                }
+                const goodInp = document.getElementById('dndGame' + n + 'GoodIds');
+                if (goodInp) {
+                    const row = goodInp.closest('.row');
+                    if (row && !row.classList.contains('mq-dnd-hide-when-steps')) {
+                        row.classList.add('mq-dnd-hide-when-steps');
+                    }
+                    if (row) row.style.display = on ? 'none' : '';
+                }
                 mqUpdateLinkingPairsVisibility(n);
+            }
+            /** Cartes draggables proposées dans une étape (filtrées par goodIds si renseigné). */
+            function mqStepDraggableOptions(gameId, step) {
+                const g = state.dndGames[gameId];
+                const all = ((g && g.draggables) || []).map((d) => String(d.id != null ? d.id : '')).filter(Boolean);
+                const pool = String((step && step.goodIds) || '').split(/[,;\s]+/).map((s) => s.trim()).filter(Boolean);
+                if (pool.length) return all.filter((id) => pool.indexOf(id) >= 0);
+                return all;
+            }
+            /** Applique zoneMap des étapes → acceptedIds des dropzones (validation mode élève). */
+            function mqApplyStepZoneMaps(gameId) {
+                const g = state.dndGames[gameId];
+                if (!g || !Array.isArray(g.dropzones)) return;
+                (g.steps || []).forEach((step) => {
+                    const map = (step && step.zoneMap) ? step.zoneMap : {};
+                    Object.keys(map).forEach((zid) => {
+                        const cardId = String(map[zid] || '').trim();
+                        if (!cardId) return;
+                        g.dropzones.forEach((dz, i) => {
+                            if (mqDropzoneId(dz, i) === String(zid)) {
+                                dz.acceptedIds = [cardId];
+                            }
+                        });
+                    });
+                });
+            }
+            function mqInferStepZoneMap(gameId, step) {
+                const map = Object.assign({}, (step && step.zoneMap) || {});
+                const g = state.dndGames[gameId];
+                if (!g) return map;
+                (step.zoneIds || []).forEach((zid) => {
+                    const sid = String(zid);
+                    if (map[sid]) return;
+                    (g.dropzones || []).forEach((dz, i) => {
+                        if (mqDropzoneId(dz, i) === sid && Array.isArray(dz.acceptedIds) && dz.acceptedIds.length) {
+                            map[sid] = String(dz.acceptedIds[0]);
+                        }
+                    });
+                });
+                return map;
+            }
+            function mqStepZoneMapHTML(gameId, step, stepIndex) {
+                const zoneIds = Array.isArray(step.zoneIds) ? step.zoneIds.map(String) : [];
+                if (!zoneIds.length) {
+                    return '<p style="margin:4px 0 0;font-size:10px;color:#9a3412;">Indiquez d’abord les IDs de zones ci-dessus (badges sur le canvas).</p>';
+                }
+                const map = mqInferStepZoneMap(gameId, step);
+                const opts = mqStepDraggableOptions(gameId, step);
+                return zoneIds.map((zid) => {
+                    const sel = map[String(zid)] || '';
+                    const optHtml = '<option value="">— choisir la carte —</option>'
+                        + opts.map((id) => {
+                            const safe = String(id).replace(/"/g, '&quot;');
+                            return '<option value="' + safe + '"' + (sel === String(id) ? ' selected' : '') + '>ID ' + safe + '</option>';
+                        }).join('');
+                    return '<label style="display:flex;align-items:center;gap:6px;font-size:11px;margin-top:4px;">'
+                        + 'Zone <strong style="min-width:28px;">' + String(zid).replace(/</g, '&lt;') + '</strong>'
+                        + '<span style="color:#64748b;">→</span>'
+                        + '<select data-field="zoneMap-' + String(zid).replace(/"/g, '&quot;') + '" style="flex:1;font-size:11px;padding:4px;box-sizing:border-box;">'
+                        + optHtml + '</select></label>';
+                }).join('');
             }
             /** Paires globales masquées si « Jeu par étapes » (les flèches se règlent dans chaque étape). */
             function mqUpdateLinkingPairsVisibility(n) {
@@ -13314,8 +13408,17 @@
                     const requireNextButton = !!(card.querySelector('[data-field="requireNextButton"]') || {}).checked;
                     const zoneIdsRaw = (card.querySelector('[data-field="zoneIds"]') || {}).value || '';
                     const goodIds = (card.querySelector('[data-field="goodIds"]') || {}).value || '';
+                    const stepGameTypeEl = card.querySelector('[data-field="stepGameType"]');
+                    const stepGameType = (stepGameTypeEl && stepGameTypeEl.value) || 'exact';
                     const linksRaw = (card.querySelector('[data-field="linkPairs"]') || {}).value || '';
                     const zoneIds = zoneIdsRaw.split(/[,;\s]+/).map(s => s.trim()).filter(Boolean);
+                    const zoneMap = {};
+                    card.querySelectorAll('[data-field^="zoneMap-"]').forEach((sel) => {
+                        const m = /^zoneMap-(.+)$/.exec(sel.getAttribute('data-field') || '');
+                        if (!m) return;
+                        const v = String(sel.value || '').trim();
+                        if (v) zoneMap[m[1]] = v;
+                    });
                     const linkPairs = (window.MqDndEngine && MqDndEngine.normalizeAllowedLinks)
                         ? MqDndEngine.normalizeAllowedLinks(linksRaw)
                         : [];
@@ -13324,10 +13427,12 @@
                         title,
                         instructions,
                         activity,
+                        stepGameType,
                         requireNextButton,
                         zoneIds,
                         goodIds,
-                        linkPairs
+                        linkPairs,
+                        zoneMap
                     };
                 });
             }
@@ -13341,10 +13446,12 @@
                     title: 'Étape ' + (g.steps.length + 1),
                     instructions: '',
                     activity: 'dnd',
+                    stepGameType: 'exact',
                     requireNextButton: false,
                     zoneIds: [],
                     goodIds: '',
-                    linkPairs: []
+                    linkPairs: [],
+                    zoneMap: {}
                 });
                 const n = mqGameNum(gameId);
                 const es = document.getElementById('dndGame' + n + 'EnableSteps');
@@ -13400,6 +13507,10 @@
                     const reqNext = s.requireNextButton ? ' checked' : '';
                     const showDnd = activity !== 'linking';
                     const showLink = activity !== 'dnd';
+                    const stepGt = (s.stepGameType === 'classification') ? 'classification' : 'exact';
+                    const gtExact = stepGt === 'exact' ? ' selected' : '';
+                    const gtClass = stepGt === 'classification' ? ' selected' : '';
+                    const zoneMapHtml = showDnd ? mqStepZoneMapHTML(gameId, s, index) : '';
                     return ''
                         + '<div data-step-idx="' + index + '" class="mq-dnd-step-card" style="border:1px solid #cfd6df;border-radius:8px;padding:8px;margin-bottom:8px;background:#f8fafc;">'
                         + '<div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;">'
@@ -13427,9 +13538,22 @@
                         + '<span>Exiger le bouton « Étape suivante » (même si les critères sont remplis)</span></label>'
                         + '<p style="margin:6px 0 0;font-size:10px;color:#065f46;">Sinon : passage automatique dès que les critères ci-dessous sont OK. Sans critère : bouton obligatoire.</p>'
                         + '</div>'
-                        + '<div data-step-dnd-fields style="display:' + (showDnd ? 'grid' : 'none') + ';grid-template-columns:1fr 1fr;gap:6px;margin-top:8px;font-size:11px;">'
-                        + '<label>Zones à valider (IDs numériques des zones)<input data-field="zoneIds" type="text" value="' + zoneStr.replace(/"/g, '&quot;') + '" placeholder="Ex: 19,20,21 (voir badge ID sur le canvas)" style="width:100%;font-size:11px;padding:4px;box-sizing:border-box;"></label>'
-                        + '<label>Cartes à placer (IDs)<input data-field="goodIds" type="text" value="' + String(s.goodIds || '').replace(/"/g, '&quot;') + '" placeholder="Ex: 4,5" style="width:100%;font-size:11px;padding:4px;box-sizing:border-box;"></label>'
+                        + '<div data-step-dnd-fields style="display:' + (showDnd ? 'block' : 'none') + ';margin-top:8px;padding:8px;background:#fff7ed;border:1px solid #fdba74;border-radius:8px;font-size:11px;">'
+                        + '<p style="margin:0 0 6px;font-size:11px;font-weight:bold;color:#9a3412;">📦 Configuration DnD de cette étape</p>'
+                        + '<label style="display:block;margin-bottom:6px;">Type de placement'
+                        + '<select data-field="stepGameType" style="width:100%;font-size:11px;padding:4px;box-sizing:border-box;margin-top:2px;">'
+                        + '<option value="exact"' + gtExact + '>Placement exact (1 carte par zone)</option>'
+                        + '<option value="classification"' + gtClass + '>Classement par catégories</option>'
+                        + '</select></label>'
+                        + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">'
+                        + '<label>Zones à valider (fin d’étape)<input data-field="zoneIds" type="text" value="' + zoneStr.replace(/"/g, '&quot;') + '" placeholder="Ex: 19,20,21" style="width:100%;font-size:11px;padding:4px;box-sizing:border-box;"></label>'
+                        + '<label>Cartes de l’étape (pool)<input data-field="goodIds" type="text" value="' + String(s.goodIds || '').replace(/"/g, '&quot;') + '" placeholder="Ex: 3,4,5,6 (optionnel)" style="width:100%;font-size:11px;padding:4px;box-sizing:border-box;"></label>'
+                        + '</div>'
+                        + '<div style="margin-top:8px;padding:6px;background:#fff;border:1px dashed #ea580c;border-radius:6px;">'
+                        + '<div style="font-weight:bold;margin-bottom:4px;">Associations zone → carte (validation verte)</div>'
+                        + '<p style="margin:0 0 4px;font-size:10px;color:#64748b;">Choisissez quelle carte doit aller dans chaque zone. C’est ce qui fait passer la zone au vert en mode élève.</p>'
+                        + zoneMapHtml
+                        + '</div>'
                         + '</div>'
                         + '<label data-step-link-fields style="font-size:11px;display:' + (showLink ? 'block' : 'none') + ';margin-top:8px;">Flèches à valider (id&gt;id) — fin d’étape Relier'
                         + '<textarea data-field="linkPairs" rows="2" placeholder="Ex: 1&gt;3" style="width:100%;font-size:11px;padding:4px;box-sizing:border-box;font-family:monospace;">' + linksToText(s.linkPairs).replace(/</g, '&lt;') + '</textarea></label>'
@@ -13442,12 +13566,14 @@
                             if (!g2) return;
                             g2.steps = mqReadStepsFromUI(n);
                             g2.enableSteps = true;
+                            mqApplyStepZoneMaps(gameId);
                             const needsRelier = (g2.steps || []).some((st) => st.activity === 'linking' || st.activity === 'both' || (st.linkPairs && st.linkPairs.length));
                             if (needsRelier) {
                                 g2.enableLinking = true;
                                 const en = document.getElementById('dndGame' + n + 'EnableLinking');
                                 if (en) en.checked = true;
                             }
+                            if (g2.enableSteps) g2.gameType = 'exact';
                             if (window.MqDndEngine && MqDndEngine.effectiveAllowedLinks) {
                                 g2.allowedLinks = MqDndEngine.effectiveAllowedLinks(g2);
                             }
@@ -13457,6 +13583,11 @@
                                 renderStepsList(gameId);
                                 return;
                             }
+                            if (inp.getAttribute('data-field') === 'zoneIds' || inp.getAttribute('data-field') === 'goodIds') {
+                                renderStepsList(gameId);
+                                return;
+                            }
+                            renderDropzonesList(gameId);
                             renderDndGamesPreview();
                         } catch (e) {}
                     };
@@ -14425,9 +14556,12 @@
                                         id: '1',
                                         title: 'Étape 1',
                                         instructions: g.instructions || '',
+                                        activity: 'dnd',
+                                        stepGameType: g.gameType === 'classification' ? 'classification' : 'exact',
                                         zoneIds: [],
-                                        goodIds: '',
-                                        linkPairs: seedPairs
+                                        goodIds: g.goodIds || '',
+                                        linkPairs: seedPairs,
+                                        zoneMap: {}
                                     }];
                                     g.enableSteps = true;
                                 }
@@ -14575,10 +14709,12 @@
                             title: ns.title || '',
                             instructions: ns.instructions || '',
                             activity: ns.activity || 'dnd',
+                            stepGameType: ns.stepGameType || 'exact',
                             requireNextButton: !!ns.requireNextButton,
                             zoneIds: ns.zoneIds || [],
                             goodIds: ns.goodIds || '',
-                            linkPairs: ns.linkPairs || []
+                            linkPairs: ns.linkPairs || [],
+                            zoneMap: ns.zoneMap || {}
                         };
                     }) : [],
                     linkMode: g.linkMode || 'one-to-one',
@@ -16538,7 +16674,7 @@
             
             function mqDndTypeControlsHTML(n) {
                 return ''
-                    + '<div class="row mq-dnd-type-row"><label>Type de jeu</label>'
+                    + '<div class="row mq-dnd-type-row mq-dnd-hide-when-steps"><label>Type de jeu</label>'
                     + '<select id="dndGame' + n + 'GameType" style="width:100%;">'
                     + '<option value="selection">Sélection simple</option>'
                     + '<option value="exact">Placement exact</option>'
@@ -16640,7 +16776,7 @@
                     + '</details>'
                     + '<div style="margin-top:8px;">'
                     + '<label style="font-size:12px;font-weight:bold;display:block;margin-bottom:4px;">Zones de dépôt</label>'
-                    + '<p style="font-size:11px;color:#64748b;margin:0 0 6px 0;">Cliquez une zone sur le canvas pour afficher ses paramètres ici.</p>'
+                    + '<p style="font-size:11px;color:#64748b;margin:0 0 6px 0;">Cliquez une zone sur le canvas. Si le jeu est par étapes, configurez surtout les associations dans chaque étape (zone → carte).</p>'
                     + '<div id="dndGame' + n + 'DropzonesList" style="max-height:360px;overflow-y:auto;background:#fff;padding:5px;border-radius:4px;border:1px solid #ddd;"></div>'
                     + '</div>';
             }
@@ -16655,7 +16791,7 @@
                     + '<input type="checkbox" id="dndGame' + n + 'Enabled" style="width:auto;"></div>'
                     + '<div class="row"><label>Titre</label>'
                     + '<input id="dndGame' + n + 'Title" type="text" placeholder="Titre du jeu"></div>'
-                    + '<div class="row"><label>Bonnes réponses (IDs)</label>'
+                    + '<div class="row mq-dnd-hide-when-steps"><label>Bonnes réponses (IDs)</label>'
                     + '<input id="dndGame' + n + 'GoodIds" type="text" placeholder="Ex: 1,2,3"></div>'
                     + '<div class="row"><label>Nombre de zones</label>'
                     + '<input id="dndGame' + n + 'TargetCount" type="number" min="1" max="100" value="4"></div>'
