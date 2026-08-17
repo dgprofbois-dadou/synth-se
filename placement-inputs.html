@@ -7750,6 +7750,28 @@
                     titleEl.innerHTML = '<h2 style="margin:0; width:100%; color:white; font-family:' + (hdr.font || 'Verdana, sans-serif') + '; font-size:' + (hdr.fontSize || 60) + 'px; font-weight:' + (hdr.bold ? 'bold' : 'normal') + '; font-style:' + (hdr.italic ? 'italic' : 'normal') + '; text-align:' + (hdr.align || 'center') + '; text-shadow:11px 9px 12px rgb(0 0 0);">' + (gameConfig.title || 'Jeu DnD') + '</h2>';
                     gameEl.appendChild(titleEl);
 
+                    const stepsOnStudent = !!(gameConfig.enableSteps && Array.isArray(gameConfig.steps) && gameConfig.steps.length);
+                    if (gameConfig.showInstructions !== false) {
+                        const instrText = stepsOnStudent
+                            ? String((gameConfig.steps[0] && gameConfig.steps[0].instructions) || '').trim()
+                            : String(gameConfig.instructions || '').trim();
+                        if (instrText || stepsOnStudent) {
+                            const instrEl = document.createElement('div');
+                            instrEl.className = 'dnd-instructions';
+                            instrEl.setAttribute('role', 'status');
+                            instrEl.setAttribute('aria-live', 'polite');
+                            const st0 = stepsOnStudent ? gameConfig.steps[0] : null;
+                            const label0 = (st0 && window.MqDndEngine && MqDndEngine.stepInstructionLabel)
+                                ? MqDndEngine.stepInstructionLabel(st0, 0, gameConfig.steps.length)
+                                : (st0 ? ((st0.title || 'Étape 1') + ' (1/' + gameConfig.steps.length + ')') : '');
+                            instrEl.textContent = (label0 ? label0 + '\n' : '') + instrText;
+                            if (window.MqDndEngine && MqDndEngine.applyInstructionsBoxToElement) {
+                                MqDndEngine.applyInstructionsBoxToElement(instrEl, gameConfig);
+                            }
+                            gameEl.appendChild(instrEl);
+                        }
+                    }
+
                     (gameConfig.decorImages || []).forEach((dc) => {
                         const wrap = document.createElement('div');
                         const decorId = (dc.id != null && String(dc.id).trim() !== '') ? String(dc.id).trim() : '';
@@ -13971,7 +13993,12 @@
                         g.instructionsBox = ib;
                         let previewText = '';
                         if (stepsOn) {
-                            previewText = g.steps.map((s, i) => (i + 1) + '. ' + (s.title || ('Étape ' + (i + 1))) + ' — ' + String(s.instructions || '').trim()).filter(Boolean).join('\n');
+                            const s0 = g.steps[0];
+                            previewText = String((s0 && s0.instructions) || '').trim();
+                            if (previewText) {
+                                previewText = '1. ' + (s0.title || 'Étape 1') + ' — ' + previewText
+                                    + '\n(mode élève : une consigne à la fois)';
+                            }
                         } else {
                             previewText = instrPrev;
                         }

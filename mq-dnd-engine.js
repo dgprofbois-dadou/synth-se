@@ -641,11 +641,30 @@
     return raw.map(normalizeStep);
   }
 
+  /** IDs de zones à valider pour une étape (zoneIds ou clés du zoneMap). */
+  function effectiveStepZoneIds(step) {
+    step = normalizeStep(step, 0);
+    if (step.activity === 'linking') return [];
+    var zoneIds = (step.zoneIds || []).map(String).filter(Boolean);
+    if (!zoneIds.length) {
+      var zm = normalizeZoneMap(step.zoneMap);
+      zoneIds = Object.keys(zm).filter(Boolean);
+    }
+    return zoneIds;
+  }
+
+  function stepInstructionLabel(step, index, total) {
+    step = normalizeStep(step, index);
+    var n = (typeof index === 'number' ? index : 0) + 1;
+    var t = typeof total === 'number' ? total : n;
+    return (step.title || ('Étape ' + n)) + ' (' + n + '/' + t + ')';
+  }
+
   function evaluateStep(game, step, placements) {
     placements = placements || {};
     step = normalizeStep(step, 0);
     var activity = step.activity || 'dnd';
-    var zoneIds = (activity === 'linking') ? [] : (step.zoneIds || []);
+    var zoneIds = effectiveStepZoneIds(step);
     var goodIds = (activity === 'linking') ? [] : parseIdList(step.goodIds);
     var linkPairs = (activity === 'dnd') ? [] : (step.linkPairs || []);
     var hasCriteria = zoneIds.length > 0 || goodIds.length > 0 || linkPairs.length > 0;
@@ -1829,6 +1848,7 @@
     var instructionsEl = gameContainer.querySelector('.dnd-instructions');
     var stepsEnabled = !!(game.enableSteps && game.steps && game.steps.length);
     var lastStepIndex = -1;
+    var lastActiveStepId = null;
     var manualStepDone = {};
     var showInstructions = game.showInstructions !== false;
 
@@ -1874,8 +1894,27 @@
       if (meta && meta.pulse) pulseInstructions();
     }
 
+    function syncStepInstructions(st, opts) {
+      if (!stepsEnabled || !st || !st.active) return;
+      opts = opts || {};
+      var act = st.active;
+      var sid = String(act.id);
+      if (!opts.force && sid === lastActiveStepId) return;
+      var prevId = lastActiveStepId;
+      lastActiveStepId = sid;
+      lastStepIndex = st.currentIndex;
+      setInstructionsContent(act.instructions || '', {
+        pulse: opts.pulse !== false,
+        stepLabel: stepInstructionLabel(act, st.currentIndex, st.steps.length)
+      });
+      highlightStepZones(act);
+      if (prevId != null && prevId !== sid && typeof hooks.playSound === 'function') {
+        try { hooks.playSound('ok'); } catch (e) {}
+      }
+    }
+
     function highlightStepZones(step) {
-      var ids = (step && step.zoneIds) ? step.zoneIds.map(String) : [];
+      var ids = step ? effectiveStepZoneIds(step) : [];
       Array.prototype.forEach.call(gameContainer.querySelectorAll('.dropzone'), function (z) {
         var zid = String(z.getAttribute('data-zone-id') || '');
         var on = stepsEnabled && ids.length && ids.indexOf(zid) >= 0;
@@ -1905,13 +1944,23 @@
     // Init consignes
     if (stepsEnabled) {
       var st0 = getStepsState(game, {});
-      lastStepIndex = st0.currentIndex;
-      var a0 = st0.active;
-      setInstructionsContent(a0 ? a0.instructions : '', {
-        pulse: true,
-        stepLabel: a0 ? ((a0.title || ('Étape ' + (st0.currentIndex + 1))) + ' (' + (st0.currentIndex + 1) + '/' + st0.steps.length + ')') : ''
+      st0.statuses.forEach(function (s, i) {
+        var sid0 = String((st0.steps[i] && st0.steps[i].id) || i);
+        if (manualStepDone[sid0]) {
+          s.isComplete = true;
+          s.needsManualNext = false;
+        }
       });
-      highlightStepZones(a0);
+      st0.allComplete = st0.statuses.every(function (s) { return s.isComplete; });
+      if (st0.allComplete) {
+        st0.currentIndex = st0.steps.length - 1;
+      } else {
+        st0.currentIndex = st0.statuses.findIndex(function (s) { return !s.isComplete; });
+        if (st0.currentIndex < 0) st0.currentIndex = 0;
+      }
+      st0.active = st0.steps[st0.currentIndex] || null;
+      st0.activeStatus = st0.statuses[st0.currentIndex] || null;
+      syncStepInstructions(st0, { force: true, pulse: true });
     } else {
       updateInstructionsVisibility(false);
     }
@@ -2340,20 +2389,8 @@
         st.activeStatus = st.statuses[st.currentIndex] || null;
         stepsComplete = st.allComplete;
 
-        if (st.currentIndex !== lastStepIndex) {
-          lastStepIndex = st.currentIndex;
-          var act = st.active;
-          setInstructionsContent(act ? act.instructions : '', {
-            pulse: true,
-            stepLabel: act
-              ? ((act.title || ('Étape ' + (st.currentIndex + 1))) + ' (' + (st.currentIndex + 1) + '/' + st.steps.length + ')')
-              : ''
-          });
-          highlightStepZones(act);
-          if (typeof hooks.playSound === 'function' && st.currentIndex > 0) {
-            try { hooks.playSound('ok'); } catch (e) {}
-          }
-        } else if (st.active) {
+        syncStepInstructions(st);
+        if (st.active && String(st.active.id) === lastActiveStepId) {
           highlightStepZones(st.active);
         }
         syncStepNextBtn(st);
@@ -2717,6 +2754,8 @@
     stepNeedsRelier: stepNeedsRelier,
     evaluateStep: evaluateStep,
     getStepsState: getStepsState,
+    effectiveStepZoneIds: effectiveStepZoneIds,
+    stepInstructionLabel: stepInstructionLabel,
     normalizeInstructionsBox: normalizeInstructionsBox,
     applyInstructionsBoxToElement: applyInstructionsBoxToElement,
     normalizeRelierBtn: normalizeRelierBtn,

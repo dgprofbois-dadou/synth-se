@@ -357,6 +357,27 @@ test('DnD puis Relier : étapes successives', () => {
   assert.strictEqual(stDone.allComplete, true);
 });
 
+test('zoneMap sans zoneIds → critères de fin d’étape', () => {
+  const g = Engine.applyGameDefaults({
+    gameType: 'exact',
+    enableSteps: true,
+    dropzones: [
+      { id: '19', acceptedIds: ['4'], capacity: 1, required: true },
+      { id: '20', acceptedIds: ['5'], capacity: 1, required: true }
+    ],
+    steps: [
+      { title: 'Étape 1', instructions: 'Placez 4', zoneMap: { '19': ['4'] } },
+      { title: 'Étape 2', instructions: 'Placez 5', zoneMap: { '20': ['5'] } }
+    ]
+  });
+  assert.deepStrictEqual(Engine.effectiveStepZoneIds(g.steps[0]), ['19']);
+  const st0 = Engine.getStepsState(g, {});
+  assert.strictEqual(st0.active.instructions, 'Placez 4');
+  const st1 = Engine.getStepsState(g, { '19': ['4'] });
+  assert.strictEqual(st1.currentIndex, 1);
+  assert.strictEqual(st1.active.instructions, 'Placez 5');
+});
+
 test('requireNextButton bloque le passage auto', () => {
   const g = Engine.applyGameDefaults({
     gameType: 'exact',
