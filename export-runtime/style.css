@@ -258,6 +258,11 @@ input::placeholder {
     background: transparent !important;
     box-shadow: none !important;
     outline: none !important;
+    pointer-events: none !important;
+}
+
+.dropzone.dnd-step-zone-hidden .dnd-placed {
+    pointer-events: auto !important;
 }
 
 .dropzone.dnd-step-zone-hidden .dnd-dropzone-id-badge {

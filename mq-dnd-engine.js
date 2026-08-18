@@ -630,11 +630,11 @@
   function normalizeStepActivity(raw, stepHint) {
     var a = raw != null ? String(raw).trim().toLowerCase() : '';
     if (STEP_ACTIVITIES.indexOf(a) >= 0) return a;
-    // Inférence rétro-compat : selon les critères déjà saisis
     var hasLink = !!(stepHint && Array.isArray(stepHint.linkPairs) && stepHint.linkPairs.length);
     var hasDnd = !!(stepHint && (
       (Array.isArray(stepHint.zoneIds) && stepHint.zoneIds.length) ||
-      String(stepHint.goodIds || '').trim()
+      String(stepHint.goodIds || '').trim() ||
+      (stepHint.zoneMap && typeof stepHint.zoneMap === 'object' && Object.keys(stepHint.zoneMap).length)
     ));
     if (hasLink && hasDnd) return 'both';
     if (hasLink) return 'linking';
@@ -676,9 +676,9 @@
     var goodIds = typeof s.goodIds === 'string'
       ? s.goodIds
       : (Array.isArray(s.goodIds) ? s.goodIds.join(',') : (s.goodIds != null ? String(s.goodIds) : ''));
-    var draft = { zoneIds: zoneIds, goodIds: goodIds, linkPairs: linkPairs };
-    var activity = normalizeStepActivity(s.activity != null ? s.activity : s.mode, draft);
     var zoneMap = normalizeZoneMap(s.zoneMap);
+    var draft = { zoneIds: zoneIds, goodIds: goodIds, linkPairs: linkPairs, zoneMap: zoneMap };
+    var activity = normalizeStepActivity(s.activity != null ? s.activity : s.mode, draft);
     var stepGameType = normalizeGameType(s.stepGameType || s.gameType || 'exact');
     return {
       id: s.id != null ? String(s.id) : String(index + 1),
@@ -2225,12 +2225,15 @@
       }
       Array.prototype.forEach.call(gameContainer.querySelectorAll('.dropzone'), function (z) {
         z.classList.toggle('dnd-step-locked', linkingOnly);
-        z.style.pointerEvents = linkingOnly ? 'none' : 'auto';
         z.style.removeProperty('opacity');
         var zid = String(z.getAttribute('data-zone-id') || '');
-        var hideChrome = linkingOnly || st && st.allComplete;
-        if (!hideChrome && currentZoneIds) hideChrome = currentZoneIds.indexOf(zid) < 0;
+        var hideChrome = linkingOnly || !!(st && st.allComplete);
+        // Étape 1 (index 0) : ne jamais masquer les zones — elles recouvraient les cartes sources.
+        if (!hideChrome && currentZoneIds && st && st.currentIndex > 0) {
+          hideChrome = currentZoneIds.indexOf(zid) < 0;
+        }
         z.classList.toggle('dnd-step-zone-hidden', !!hideChrome);
+        z.style.pointerEvents = (linkingOnly || hideChrome) ? 'none' : 'auto';
       });
       Array.prototype.forEach.call(gameContainer.querySelectorAll('.draggable'), function (el) {
         if (el.classList.contains('dnd-placed')) return;

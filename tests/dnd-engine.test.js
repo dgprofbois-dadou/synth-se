@@ -339,6 +339,16 @@ test('activité linking / dnd + Relier gating helpers', () => {
   assert.strictEqual(Engine.stepAutoLinkMode(both), false);
   const inferred = Engine.normalizeStep({ title: 'D', linkPairs: [{ from: 'a', to: 'b' }] }, 3);
   assert.strictEqual(inferred.activity, 'linking');
+  const byMap = Engine.normalizeStep({ title: 'E', zoneMap: { '19': ['4'] } }, 4);
+  assert.strictEqual(byMap.activity, 'dnd');
+  assert.strictEqual(Engine.stepAutoLinkMode(byMap), false);
+  const mapAndLinks = Engine.normalizeStep({
+    title: 'F',
+    zoneMap: { '19': ['4'] },
+    linkPairs: [{ from: 'a', to: 'b' }]
+  }, 5);
+  assert.strictEqual(mapAndLinks.activity, 'both');
+  assert.strictEqual(Engine.stepAutoLinkMode(mapAndLinks), false);
 });
 
 test('DnD puis Relier : étapes successives', () => {
