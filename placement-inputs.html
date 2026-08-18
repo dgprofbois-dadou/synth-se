@@ -733,7 +733,11 @@
             box-sizing: border-box;
             pointer-events: auto;
         }
-        .dnd-game-container { pointer-events: auto; }
+        .dnd-game-container {
+            pointer-events: auto;
+            overflow: visible;
+        }
+        .dnd-game-background { pointer-events: none; }
         .dnd-element.mq-dnd-selected {
             border-color: #e8521f !important;
             box-shadow: 0 0 0 2px rgba(232,82,31,.45);
@@ -849,12 +853,11 @@
             border: 5px dashed #666;
             border-radius: 8px;
             background: rgba(255, 255, 255, 0.5);
-            position: relative;
+            position: absolute;
             overflow: visible;
             z-index: 8;
         }
         .dropzone {
-            position: relative;
             overflow: visible;
         }
         .dnd-dropzone-label,
@@ -13976,7 +13979,7 @@
                     html += `
                         <div class="dnd-game-container" data-game="${gameId}"
                              style="position: absolute; left: ${g.x}px; top: ${g.y}px; width: ${g.width}px; height: ${g.height}px;">
-                            <div class="dnd-game-background" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: ${g.bgColor}; border-radius: 30px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); z-index: 0;mix-blend-mode: multiply;"></div>
+                            <div class="dnd-game-background" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: ${g.bgColor}; border-radius: 30px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); z-index: 0; mix-blend-mode: multiply; pointer-events: none;"></div>
                             <div class="dnd-resize-handle" data-game="${gameId}" title="Ctrl + Glisser pour redimensionner"
                                  style="position: absolute; right: -5px; bottom: -5px; width: 20px; height: 20px; background: ${handleColor}; cursor: nwse-resize; border-radius: 50%; border: 3px solid white; z-index: 100; box-shadow: 0 2px 6px rgba(0,0,0,0.4);"></div>
                             <div class="dnd-element dnd-title" data-game="${gameId}" data-type="title"
@@ -14075,7 +14078,7 @@
                         html += `
                             <div class="dnd-element dnd-dropzone" data-game="${gameId}" data-type="dropzone" data-index="${idx}"
                                  title="${safeBadge}"
-                                 style="left: ${dz.x || 0}px; top: ${dz.y || 0}px; width: ${zw}px; height: ${zh}px; z-index: 8;">
+                                 style="position:absolute; left: ${dz.x || 0}px; top: ${dz.y || 0}px; width: ${zw}px; height: ${zh}px; z-index: 8;">
                                 <span class="dnd-dropzone-label">${safeBadge}</span>
                                 <div class="dnd-element-handle" data-game="${gameId}" data-type="dropzone" data-index="${idx}"></div>
                             </div>`;
