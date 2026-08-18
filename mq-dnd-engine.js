@@ -770,6 +770,14 @@
     };
   }
 
+  /** Cartes sources déjà déposées (grisées) : les masquer dès l’étape suivante. */
+  function shouldHideUsedStepSources(st) {
+    if (!st || !st.enabled) return false;
+    if (st.allComplete) return true;
+    if (st.currentIndex > 0) return true;
+    return !!(st.active && normalizeStep(st.active, 0).activity === 'linking');
+  }
+
   /**
    * Score brut (sans malus) : nombre de cartes correctement placées / liens corrects.
    * placements: { zoneKey: id[] }  OU  pour linking: { links: [{from,to}] } / tableau de liens
@@ -2144,20 +2152,33 @@
       });
     }
 
-    /** Pendant une étape Relier pure : zones de dépôt non interactives. */
+    /** Pendant une étape Relier / étape suivante : masquer sources grisées et chrome des zones DnD hors étape. */
     function syncZonesForStep(st) {
       var linkingOnly = false;
-      if (stepsEnabled && st && st.active && !st.allComplete) {
-        linkingOnly = normalizeStep(st.active, 0).activity === 'linking';
+      var hideUsedSources = false;
+      var currentZoneIds = null;
+      if (stepsEnabled && st && st.active) {
+        var act = normalizeStep(st.active, 0).activity;
+        if (!st.allComplete) linkingOnly = act === 'linking';
+        hideUsedSources = shouldHideUsedStepSources(st);
+        if (!st.allComplete && !linkingOnly) {
+          currentZoneIds = effectiveStepZoneIds(st.active);
+          if (!currentZoneIds.length) currentZoneIds = null;
+        }
       }
       Array.prototype.forEach.call(gameContainer.querySelectorAll('.dropzone'), function (z) {
         z.classList.toggle('dnd-step-locked', linkingOnly);
         z.style.pointerEvents = linkingOnly ? 'none' : 'auto';
-        // Ne pas utiliser opacity sur la zone : les enfants (.dnd-placed) héritent du rendu atténué.
         z.style.removeProperty('opacity');
+        var zid = String(z.getAttribute('data-zone-id') || '');
+        var hideChrome = linkingOnly || st && st.allComplete;
+        if (!hideChrome && currentZoneIds) hideChrome = currentZoneIds.indexOf(zid) < 0;
+        z.classList.toggle('dnd-step-zone-hidden', !!hideChrome);
       });
       Array.prototype.forEach.call(gameContainer.querySelectorAll('.draggable'), function (el) {
+        if (el.classList.contains('dnd-placed')) return;
         var id = String(el.getAttribute('data-id') || '');
+        var isUsed = used.has(id) || el.classList.contains('used');
         if (linkingOnly) {
           el.draggable = false;
           el.classList.add('dnd-step-link-phase');
@@ -2166,6 +2187,17 @@
           if (!(cardUse !== 'reusable' && used.has(id))) {
             if (!el.classList.contains('used')) el.draggable = true;
           }
+        }
+        if (hideUsedSources && isUsed) {
+          el.classList.add('dnd-step-source-hidden');
+          el.style.visibility = 'hidden';
+          el.style.pointerEvents = 'none';
+          el.setAttribute('aria-hidden', 'true');
+        } else {
+          el.classList.remove('dnd-step-source-hidden');
+          el.style.visibility = '';
+          el.style.pointerEvents = '';
+          el.removeAttribute('aria-hidden');
         }
       });
       // Les polygones SVG Relier (z-index 5) ne doivent pas intercepter le drop DnD hors mode Relier
@@ -2875,6 +2907,7 @@
     normalizeStepActivity: normalizeStepActivity,
     stepNeedsRelier: stepNeedsRelier,
     stepAutoLinkMode: stepAutoLinkMode,
+    shouldHideUsedStepSources: shouldHideUsedStepSources,
     evaluateStep: evaluateStep,
     getStepsState: getStepsState,
     effectiveStepZoneIds: effectiveStepZoneIds,

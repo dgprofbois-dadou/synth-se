@@ -253,6 +253,23 @@ input::placeholder {
     box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.06);
 }
 
+.dropzone.dnd-step-zone-hidden {
+    border-color: transparent !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    outline: none !important;
+}
+
+.dropzone.dnd-step-zone-hidden .dnd-dropzone-id-badge {
+    display: none !important;
+}
+
+.draggable.dnd-step-source-hidden {
+    visibility: hidden !important;
+    pointer-events: none !important;
+    opacity: 0 !important;
+}
+
 .dropzone.dnd-step-locked .dnd-placed,
 .dropzone.dnd-step-locked .dnd-placed img {
     opacity: 1 !important;

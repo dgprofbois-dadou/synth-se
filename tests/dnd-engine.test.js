@@ -360,6 +360,9 @@ test('DnD puis Relier : étapes successives', () => {
   assert.strictEqual(Engine.stepNeedsRelier(st1.active), true);
   const stDone = Engine.getStepsState(g, { '1': ['a'], links: [{ from: '1', to: '2' }] });
   assert.strictEqual(stDone.allComplete, true);
+  assert.strictEqual(Engine.shouldHideUsedStepSources(st0), false);
+  assert.strictEqual(Engine.shouldHideUsedStepSources(st1), true);
+  assert.strictEqual(Engine.shouldHideUsedStepSources(stDone), true);
 });
 
 test('zoneMap sans zoneIds → critères de fin d’étape', () => {
