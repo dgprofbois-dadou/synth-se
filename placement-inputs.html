@@ -851,6 +851,7 @@
             background: rgba(255, 255, 255, 0.5);
             position: relative;
             overflow: visible;
+            z-index: 8;
         }
         .dropzone {
             position: relative;
@@ -13993,12 +13994,7 @@
                         g.instructionsBox = ib;
                         let previewText = '';
                         if (stepsOn) {
-                            const s0 = g.steps[0];
-                            previewText = String((s0 && s0.instructions) || '').trim();
-                            if (previewText) {
-                                previewText = '1. ' + (s0.title || 'Étape 1') + ' — ' + previewText
-                                    + '\n(mode élève : une consigne à la fois)';
-                            }
+                            previewText = g.steps.map((s, i) => (i + 1) + '. ' + (s.title || ('Étape ' + (i + 1))) + ' — ' + String(s.instructions || '').trim()).filter(Boolean).join('\n');
                         } else {
                             previewText = instrPrev;
                         }
@@ -14074,10 +14070,12 @@
                     (g.dropzones || []).forEach((dz, idx) => {
                         const badge = mqDropzoneCanvasLabel(dz, idx);
                         const safeBadge = badge.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+                        const zw = (Number(dz.width) > 0) ? dz.width : (g.zoneWidth || 80);
+                        const zh = (Number(dz.height) > 0) ? dz.height : (g.zoneHeight || 80);
                         html += `
                             <div class="dnd-element dnd-dropzone" data-game="${gameId}" data-type="dropzone" data-index="${idx}"
                                  title="${safeBadge}"
-                                 style="left: ${dz.x}px; top: ${dz.y}px; width: ${dz.width}px; height: ${dz.height}px; z-index: 1;">
+                                 style="left: ${dz.x || 0}px; top: ${dz.y || 0}px; width: ${zw}px; height: ${zh}px; z-index: 8;">
                                 <span class="dnd-dropzone-label">${safeBadge}</span>
                                 <div class="dnd-element-handle" data-game="${gameId}" data-type="dropzone" data-index="${idx}"></div>
                             </div>`;
