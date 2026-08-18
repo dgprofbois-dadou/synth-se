@@ -1234,6 +1234,9 @@
             white-space: pre-wrap;
             text-align: center;
         }
+        .dnd-link-hit-locked {
+            cursor: not-allowed !important;
+        }
         .dnd-link-line.dnd-link-pending { stroke: #1565c0; }
         .dnd-link-line.dnd-link-ok { stroke: #2e7d32; }
         .dnd-link-line.dnd-link-bad { stroke: #d32f2f; }
@@ -16937,8 +16940,8 @@
                     + '<button type="button" id="btnLinkZoneFreeGame' + n + '" style="flex:1;font-size:11px;font-weight:bold;">✏️ Zone SVG (crayon)</button>'
                     + '</div>'
                     + '<label style="width:auto;font-size:12px;font-weight:bold;margin-top:4px;">Tooltip Relier</label>'
-                    + '<input id="dndGame' + n + 'LinkTooltip" type="text" placeholder="Clic droit maintenu… tirez jusqu’à l’arrivée" style="width:100%;font-size:12px;padding:6px;box-sizing:border-box;">'
-                    + '<p style="margin:0;font-size:10px;color:#64748b;">Sur une étape Relier, le tracé au <strong>clic droit</strong> est actif tout de suite (un tooltip suit la souris). Le clic gauche déplace la vue. En admin : glisser le bouton pour le positionner, poignée pour la taille.</p>'
+                    + '<input id="dndGame' + n + 'LinkTooltip" type="text" placeholder="Clic droit : tracer. Clic gauche sur une flèche : supprimer." style="width:100%;font-size:12px;padding:6px;box-sizing:border-box;">'
+                    + '<p style="margin:0;font-size:10px;color:#64748b;">Sur une étape Relier, le tracé au <strong>clic droit</strong> est actif tout de suite (un tooltip suit la souris). <strong>Clic gauche</strong> sur une flèche pour la supprimer (les flèches vertes restent verrouillées). En admin : glisser le bouton pour le positionner, poignée pour la taille.</p>'
                     + '</div>'
                     + '<div class="row" style="gap:12px;flex-wrap:wrap;">'
                     + '<label style="width:auto;"><input type="checkbox" id="dndGame' + n + 'ShowScore" checked> Afficher score</label>'

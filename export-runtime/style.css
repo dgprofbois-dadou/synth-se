@@ -291,6 +291,10 @@ input::placeholder {
     text-align: center;
 }
 
+.dnd-link-hit-locked {
+    cursor: not-allowed !important;
+}
+
 .dropzone .dnd-dropzone-id-badge {
     position: absolute;
     top: 4px;

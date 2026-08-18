@@ -165,6 +165,9 @@ function rebuild() {
   z-index: 30;
   pointer-events: none;
 }
+.dnd-link-hit-locked {
+  cursor: not-allowed !important;
+}
 .dnd-dropzone-id-badge,
 .dropzone .dnd-dropzone-id-badge {
   pointer-events: none;

@@ -485,6 +485,16 @@ test('linking : score et complétion', () => {
   assert.ok(bad.wrongLinks.length >= 1);
 });
 
+test('flèche verte (correcte) non supprimable', () => {
+  const g = Engine.applyGameDefaults({
+    gameType: 'linking',
+    allowedLinks: [{ from: '1', to: '3' }]
+  });
+  assert.strictEqual(Engine.canRemoveDrawnLink(g, { from: '1', to: '3' }, false), true);
+  assert.strictEqual(Engine.canRemoveDrawnLink(g, { from: '1', to: '3' }, true), false);
+  assert.strictEqual(Engine.canRemoveDrawnLink(g, { from: '1', to: '9' }, true), true);
+});
+
 test('enableLinking hybride avec selection', () => {
   const g = Engine.applyGameDefaults({
     gameType: 'selection',

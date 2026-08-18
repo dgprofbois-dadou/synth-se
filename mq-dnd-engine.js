@@ -160,7 +160,7 @@
     }
     if (normalizeGameType(g.gameType) === 'linking') g.enableLinking = true;
     if (g.linkTooltip == null || g.linkTooltip === '') {
-      g.linkTooltip = 'Clic droit maintenu sur une image, puis glissez jusqu’à l’arrivée.';
+      g.linkTooltip = 'Clic droit maintenu : tracer une flèche.\nClic gauche sur une flèche : la supprimer.';
     } else {
       g.linkTooltip = String(g.linkTooltip);
     }
@@ -395,6 +395,19 @@
       isComplete: maxScore > 0 && score >= maxScore && wrong.length === 0,
       gameType: 'linking'
     };
+  }
+
+  /** Une flèche verte (paire autorisée + feedback visible) ne peut pas être retirée. */
+  function canRemoveDrawnLink(game, link, showFeedback) {
+    if (!link) return false;
+    if (!showFeedback) return true;
+    var allowed = effectiveAllowedLinks(game);
+    var from = String(link.from);
+    var to = String(link.to);
+    for (var i = 0; i < allowed.length; i++) {
+      if (String(allowed[i].from) === from && String(allowed[i].to) === to) return false;
+    }
+    return true;
   }
 
   function normalizeInstructionsBox(raw, game) {
@@ -1008,7 +1021,10 @@
     var completeFired = false;
     /** Centres temporaires pendant un drag HTML5 (id → {x,y} en coords layout). */
     var dragCenterOverrides = Object.create(null);
-    var DEFAULT_LINK_TIP = 'Clic droit maintenu sur une image, puis glissez jusqu’à l’arrivée.';
+    var DEFAULT_LINK_TIP = 'Clic droit maintenu : tracer une flèche.\nClic gauche sur une flèche : la supprimer.';
+    var DELETE_LINK_TIP = 'Clic gauche sur la flèche pour la supprimer.';
+    var LOCKED_LINK_TIP = 'Flèche correcte : elle ne peut pas être supprimée.';
+    var DRAW_LINK_TIP = 'Maintenez le clic droit et glissez jusqu’à l’image d’arrivée.';
     var BTN_TIP = 'Mode Relier — clic droit maintenu pour tracer une flèche entre deux images';
 
     gameContainer.classList.add('dnd-linking-ready');
@@ -1478,8 +1494,21 @@
       return true;
     }
 
+    function showingLinkFeedback(ev) {
+      var showFb = feedbackMode === 'immediate' || verifiedOnce || (ev && ev.isComplete);
+      if (typeof opts.getVerifiedOnce === 'function') {
+        showFb = feedbackMode === 'immediate' || opts.getVerifiedOnce() || (ev && ev.isComplete);
+      }
+      return !!showFb;
+    }
+
+    function isLinkLocked(link) {
+      return !canRemoveDrawnLink(game, link, showingLinkFeedback());
+    }
+
     function removeLinkAt(index) {
       if (index < 0 || index >= links.length) return;
+      if (isLinkLocked(links[index])) return;
       links.splice(index, 1);
       if (typeof opts.onChange === 'function') opts.onChange();
       else refreshStandalone();
@@ -1489,10 +1518,7 @@
       Array.prototype.slice.call(svg.querySelectorAll('line.dnd-link-line, line.dnd-link-hit')).forEach(function (n) {
         n.parentNode.removeChild(n);
       });
-      var showFb = feedbackMode === 'immediate' || verifiedOnce || (ev && ev.isComplete);
-      if (typeof opts.getVerifiedOnce === 'function') {
-        showFb = feedbackMode === 'immediate' || opts.getVerifiedOnce() || (ev && ev.isComplete);
-      }
+      var showFb = showingLinkFeedback(ev);
       links.forEach(function (l, idx) {
         var a = findNode(l.from);
         var b = findNode(l.to);
@@ -1501,6 +1527,7 @@
         var cb = nodeCenter(b);
         var ok = isAllowedPair(l.from, l.to);
         var state = showFb ? (ok ? 'ok' : 'bad') : 'pending';
+        var locked = state === 'ok';
         var line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
         line.setAttribute('x1', String(ca.x));
         line.setAttribute('y1', String(ca.y));
@@ -1518,20 +1545,22 @@
         hit.setAttribute('y1', String(ca.y));
         hit.setAttribute('x2', String(cb.x));
         hit.setAttribute('y2', String(cb.y));
-        hit.setAttribute('class', 'dnd-link-hit');
+        hit.setAttribute('class', 'dnd-link-hit' + (locked ? ' dnd-link-hit-locked' : ''));
+        hit.setAttribute('data-locked', locked ? '1' : '0');
         hit.setAttribute('stroke', 'transparent');
         hit.setAttribute('stroke-width', '18');
         hit.style.pointerEvents = 'stroke';
-        hit.style.cursor = 'pointer';
-        (function (linkIndex) {
+        hit.style.cursor = locked ? 'not-allowed' : 'pointer';
+        (function (linkIndex, isLocked) {
           hit.addEventListener('pointerdown', function (e) {
             if (!linkModeActive) return;
             if (e.button != null && e.button !== 0) return;
             e.preventDefault();
             e.stopPropagation();
+            if (isLocked) return;
             removeLinkAt(linkIndex);
           });
-        })(idx);
+        })(idx, locked);
         svg.appendChild(hit);
       });
       if (dragState && dragState.line && !dragState.line.parentNode) svg.appendChild(dragState.line);
@@ -1577,7 +1606,7 @@
       svg.style.pointerEvents = 'none';
       fromEl.classList.add('dnd-link-from', 'dnd-selected');
       dragState = { fromId: id, fromEl: fromEl, line: line, hoverEl: null };
-      showTip('Maintenez le clic droit et glissez jusqu’à l’image d’arrivée.', pt.x, pt.y);
+      showTip(DRAW_LINK_TIP, pt.x, pt.y);
     }
 
     function moveDrag(clientX, clientY) {
@@ -1602,7 +1631,7 @@
       dragState.line.setAttribute('y1', String(c0.y));
       dragState.line.setAttribute('x2', String(pt.x));
       dragState.line.setAttribute('y2', String(pt.y));
-      showTip('Maintenez le clic droit et glissez jusqu’à l’image d’arrivée.', pt.x, pt.y);
+      showTip(DRAW_LINK_TIP, pt.x, pt.y);
     }
 
     function endDrag(clientX, clientY) {
@@ -1629,6 +1658,18 @@
       }
     }
 
+    function hitTipFromEvent(e) {
+      var t = e && e.target;
+      if (!t) return null;
+      var hit = null;
+      if (t.classList && t.classList.contains('dnd-link-hit')) hit = t;
+      else if (typeof t.closest === 'function') {
+        try { hit = t.closest('.dnd-link-hit'); } catch (err) { hit = null; }
+      }
+      if (!hit) return null;
+      return hit.getAttribute('data-locked') === '1' ? LOCKED_LINK_TIP : DELETE_LINK_TIP;
+    }
+
     function onPointerDown(e) {
       if (!linkModeActive) return;
       // Clic droit uniquement — le clic gauche reste pour le pan
@@ -1644,7 +1685,7 @@
     }
     function onPointerMove(e) {
       if (linkModeActive && !dragState) {
-        followTip(e.clientX, e.clientY, tipText());
+        followTip(e.clientX, e.clientY, hitTipFromEvent(e) || tipText());
         return;
       }
       if (!dragState) return;
@@ -2815,6 +2856,7 @@
     evaluateZone: evaluateZone,
     evaluateGame: evaluateGame,
     evaluateLinks: evaluateLinks,
+    canRemoveDrawnLink: canRemoveDrawnLink,
     computeGameScore: computeGameScore,
     computeGameMaxScore: computeGameMaxScore,
     generateGrid: generateGrid,
