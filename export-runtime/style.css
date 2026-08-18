@@ -224,6 +224,11 @@ input::placeholder {
     transition: all 0.3s ease;
 }
 
+.drag-game:not(.dnd-link-mode) [id^="source"] .draggable {
+    pointer-events: auto !important;
+    z-index: 9;
+}
+
 .dropzone .dnd-placed {
     position: absolute;
     inset: 0;

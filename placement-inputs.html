@@ -1110,8 +1110,12 @@
             pointer-events: all;
         }
         /* Hors mode Relier : les polygones SVG ne volent pas le drop des cartes */
-        .drag-game:not(.dnd-link-mode) .dnd-link-zone,
-        .drag-game:not(.dnd-link-mode) .dnd-link-zone * {
+        .drag-game:not(.dnd-link-mode) [id^="source"] .draggable {
+            pointer-events: auto !important;
+            z-index: 9;
+        }
+        .drag-game:not(.dnd-link-mode) .dnd-link-zones-layer,
+        .drag-game:not(.dnd-link-mode) .dnd-link-zones-layer * {
             pointer-events: none !important;
         }
         .dropzone.dnd-step-locked {
@@ -7414,6 +7418,35 @@
             let lastX = 0, lastY = 0;
             let _panRaf = 0;
             let _panPendingDx = 0, _panPendingDy = 0;
+            let _panPending = false;
+            let _panPointerId = null;
+            let _panDownX = 0, _panDownY = 0;
+            const MQ_PAN_THRESHOLD = 10;
+
+            function mqPointerOnDndCard(e) {
+                if (!e) return false;
+                const x = e.clientX, y = e.clientY;
+                let stack = [];
+                try { stack = (document.elementsFromPoint && document.elementsFromPoint(x, y)) || []; } catch (_) {}
+                if (!stack.length && e.target) stack = [e.target];
+                for (let i = 0; i < stack.length; i++) {
+                    const el = stack[i];
+                    if (!el || !el.closest) continue;
+                    const game = el.closest('.drag-game');
+                    if (!game) continue;
+                    if (game.classList.contains('dnd-link-mode')) return false;
+                    if (el.closest('.dnd-relier-btn, .dnd-verify-btn, .dnd-next-step-btn, .dnd-step-next-btn')) continue;
+                    const card = el.closest('.draggable, .dnd-placed, .png-wrap');
+                    if (card && !card.classList.contains('dnd-step-source-hidden') && !card.classList.contains('used')) return true;
+                    if (el.closest('.dropzone:not(.dnd-step-locked):not(.dnd-step-zone-hidden)')) return true;
+                }
+                return false;
+            }
+
+            function mqCancelPendingPan() {
+                _panPending = false;
+                _panPointerId = null;
+            }
 
             function mqSetPanning(active) {
                 panning = !!active;
@@ -7449,6 +7482,8 @@
                 // Mais si on drag un vertex (state.draggingVertex), ça bloque déjà
                 if (state.draggingVertex) return;
 
+                if (mqPointerOnDndCard(e)) return;
+
                 if (e.target.closest && (
                     e.target.closest('.box') ||
                     e.target.closest('.hotspot-group') ||
@@ -7457,21 +7492,20 @@
                     e.target.closest('.dnd-relier-btn') ||
                     e.target.closest('.dnd-verify-btn') ||
                     e.target.closest('.dnd-next-step-btn') ||
-                    // Mode élève : ne pas voler le glisser-déposer (setPointerCapture bloquait dragstart)
+                    e.target.closest('.dnd-step-next-btn') ||
                     e.target.closest('.draggable') ||
                     e.target.closest('.dropzone') ||
                     e.target.closest('.dnd-placed') ||
-                    e.target.closest('[data-link-node]') ||
-                    e.target.closest('.dnd-link-zone-hit') ||
-                    // Admin : zones / cartes éditables (déplacement via Ctrl+glisser)
                     e.target.closest('.dnd-element') ||
                     e.target.closest('.dnd-resize-handle') ||
                     e.target.closest('.dnd-element-handle')
                 )) return;
 
-                mqSetPanning(true);
-                lastX = e.clientX; lastY = e.clientY;
-                viewport.setPointerCapture(e.pointerId);
+                // Ne pas capturer tout de suite : laisser le HTML5 drag démarrer sur les cartes
+                _panPending = true;
+                _panPointerId = e.pointerId;
+                _panDownX = lastX = e.clientX;
+                _panDownY = lastY = e.clientY;
             });
 
             viewport.addEventListener('pointermove', (e) => {
@@ -7488,7 +7522,21 @@
                     return;
                 }
 
-                // 2. PAN en priorité : chemin minimal (pas d'insertion / render / chrome)
+                // 2. PAN : ne démarre qu’après un seuil, jamais sur une carte DnD
+                if (_panPending && !panning && (_panPointerId == null || e.pointerId === _panPointerId)) {
+                    if (mqPointerOnDndCard(e)) {
+                        mqCancelPendingPan();
+                    } else {
+                        const dist = Math.hypot(e.clientX - _panDownX, e.clientY - _panDownY);
+                        if (dist >= MQ_PAN_THRESHOLD) {
+                            mqSetPanning(true);
+                            _panPending = false;
+                            lastX = e.clientX;
+                            lastY = e.clientY;
+                            try { viewport.setPointerCapture(e.pointerId); } catch (_) {}
+                        }
+                    }
+                }
                 if (panning) {
                     _panPendingDx += e.clientX - lastX;
                     _panPendingDy += e.clientY - lastY;
@@ -7620,6 +7668,7 @@
                     state.draggingVertex = null;
                     saveLocal(); // Save position after drag
                 }
+                mqCancelPendingPan();
                 if (!panning) return;
                 if (_panRaf) {
                     cancelAnimationFrame(_panRaf);
@@ -7628,7 +7677,11 @@
                 mqSetPanning(false);
                 applyTransform(); // sync slider + chrome une seule fois en fin de pan
             });
+            window.addEventListener('dragstart', () => {
+                mqCancelPendingPan();
+            }, true);
             viewport.addEventListener('pointercancel', () => {
+                mqCancelPendingPan();
                 if (_panRaf) {
                     cancelAnimationFrame(_panRaf);
                     mqFlushPanTransform();
@@ -7920,7 +7973,7 @@
 
                     const sourceEl = document.createElement('div');
                     sourceEl.id = 'source-' + gameId;
-                    sourceEl.style.cssText = 'position:absolute; inset:0; z-index:3; pointer-events:none;';
+                    sourceEl.style.cssText = 'position:absolute; inset:0; z-index:8; pointer-events:none;';
 
                     (gameConfig.draggables || []).forEach((drag, idx) => {
                         const dx = (typeof drag.x === 'number') ? drag.x : (10 + idx * 70);
@@ -15059,7 +15112,7 @@
                         + '<span class="dnd-dropzone-id-badge">ID ' + String(zid).replace(/</g, '&lt;') + '</span></div>';
                 }).join('');
                 out += '</div>';
-                out += '\n                        <div id="source' + sfx + '" style="position:absolute; inset:0; z-index:3; box-sizing:border-box; pointer-events:none;">';
+                out += '\n                        <div id="source' + sfx + '" style="position:absolute; inset:0; z-index:8; box-sizing:border-box; pointer-events:none;">';
                 out += (g.draggables || []).map(function (d) {
                     const dW = ((d.width || 250) / G_W) * 100;
                     const dH = ((d.height || 250) / G_H) * 100;

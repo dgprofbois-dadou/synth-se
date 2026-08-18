@@ -141,6 +141,14 @@ function rebuild() {
 .drag-game:not(.dnd-link-mode) .dnd-link-zone * {
   pointer-events: none !important;
 }
+.drag-game:not(.dnd-link-mode) .dnd-link-zones-layer,
+.drag-game:not(.dnd-link-mode) .dnd-link-zones-layer * {
+  pointer-events: none !important;
+}
+.drag-game:not(.dnd-link-mode) [id^="source"] .draggable {
+  pointer-events: auto !important;
+  z-index: 9;
+}
 .dropzone.dnd-step-locked {
   pointer-events: none !important;
   border-color: rgba(150, 150, 150, 0.55) !important;

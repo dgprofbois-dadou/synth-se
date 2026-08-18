@@ -724,19 +724,39 @@
     const INTERACTIVE_SELECTOR = [
       'input', 'textarea', 'button', 'select', 'a', 'label',
       '.input-wrapper',
-      '.drag-game', '.draggable', '.dropzone', '.dnd-placed',
-      '[data-link-node]', '.dnd-link-zone-hit',
-      '.dnd-relier-btn', '.dnd-verify-btn', '.dnd-next-step-btn',
+      '.draggable', '.dropzone', '.dnd-placed', '.png-wrap',
+      '[data-link-node]', '.dnd-link-zone', '.dnd-link-zone-hit',
+      '.dnd-relier-btn', '.dnd-verify-btn', '.dnd-next-step-btn', '.dnd-step-next-btn',
       '.pdf-buttons', '.controls', '.mobile-zoom-bar',
       '#svg-tooltip', '#btnFullscreen'
     ].join(',');
 
-    function isInteractiveTarget(t) {
+    function pointerOnDndCard(e) {
+      if (!e) return false;
+      const x = e.clientX, y = e.clientY;
+      let stack = [];
+      try { stack = (document.elementsFromPoint && document.elementsFromPoint(x, y)) || []; } catch { }
+      if (!stack.length && e.target) stack = [e.target];
+      for (let i = 0; i < stack.length; i++) {
+        const el = stack[i];
+        if (!el || !el.closest) continue;
+        const game = el.closest('.drag-game');
+        if (!game) continue;
+        if (game.classList.contains('dnd-link-mode')) return false;
+        const card = el.closest('.draggable, .dnd-placed, .png-wrap');
+        if (card && !card.classList.contains('dnd-step-source-hidden') && !card.classList.contains('used')) return true;
+        if (el.closest('.dropzone:not(.dnd-step-locked):not(.dnd-step-zone-hidden)')) return true;
+      }
+      return false;
+    }
+
+    function isInteractiveTarget(t, ev) {
       if (!t || !t.closest) return false;
       // Mode Relier actif : clic gauche = pan (les flèches se tracent au clic droit)
       if (t.closest('.dnd-link-mode')) {
-        return !!(t.closest('.dnd-relier-btn, .dnd-verify-btn, .dnd-next-step-btn, button, input, textarea, select, a, label, .pdf-buttons, .controls, .mobile-zoom-bar, #btnFullscreen'));
+        return !!(t.closest('.dnd-relier-btn, .dnd-verify-btn, .dnd-next-step-btn, .dnd-step-next-btn, button, input, textarea, select, a, label, .pdf-buttons, .controls, .mobile-zoom-bar, #btnFullscreen'));
       }
+      if (ev && pointerOnDndCard(ev)) return true;
       return !!t.closest(INTERACTIVE_SELECTOR);
     }
 
@@ -873,12 +893,12 @@
 
     canvasContainer.addEventListener('pointerdown', (e) => {
       if (e.button !== 0) return;
-      if (isInteractiveTarget(e.target)) return;
+      if (isInteractiveTarget(e.target, e)) return;
 
       activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-      try { canvasContainer.setPointerCapture(e.pointerId); } catch { }
 
       if (activePointers.size === 2) {
+        try { canvasContainer.setPointerCapture(e.pointerId); } catch { }
         beginPinch();
         e.preventDefault();
         return;
@@ -886,6 +906,7 @@
 
       if (activePointers.size > 2) return;
 
+      // Pas de capture immédiate : laisse le drag HTML5 des cartes DnD démarrer
       panPointerId = e.pointerId;
       pendingPan = true;
       isPanning = false;
@@ -911,9 +932,15 @@
 
       const dist = Math.hypot(e.clientX - downX, e.clientY - downY);
       if (!isPanning) {
+        if (pointerOnDndCard(e)) {
+          pendingPan = false;
+          panPointerId = null;
+          return;
+        }
         if (dist < PAN_THRESHOLD) return;
         isPanning = true;
         pendingPan = false;
+        try { canvasContainer.setPointerCapture(e.pointerId); } catch { }
         canvasContainer.style.cursor = 'grabbing';
         e.preventDefault();
       } else {
@@ -938,10 +965,11 @@
     }
 
     canvasContainer.addEventListener('pointerup', onPointerEnd);
+    document.addEventListener('dragstart', () => { endPan(); }, true);
     canvasContainer.addEventListener('pointercancel', onPointerEnd);
 
     canvasContainer.addEventListener('wheel', (e) => {
-      if (isInteractiveTarget(e.target)) return;
+      if (isInteractiveTarget(e.target, e)) return;
       e.preventDefault();
       const rect = canvasContainer.getBoundingClientRect();
       zoomAt(e.deltaY > 0 ? 0.6 : 1.1, e.clientX - rect.left, e.clientY - rect.top);
