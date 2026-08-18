@@ -1210,10 +1210,29 @@
         .dnd-link-mode .dnd-link-node {
             cursor: crosshair !important;
         }
+        .drag-game.dnd-step-relier-auto .dnd-relier-btn {
+            display: none !important;
+        }
+        .dropzone.dnd-step-locked .dnd-placed,
+        .dnd-link-mode .dropzone.dnd-step-locked .dnd-placed {
+            pointer-events: auto !important;
+            cursor: crosshair !important;
+        }
         .dnd-link-tooltip {
             position: absolute;
-            z-index: 20;
+            z-index: 30;
             pointer-events: none;
+            max-width: 280px;
+            padding: 8px 12px;
+            border-radius: 10px;
+            background: rgba(30, 30, 30, 0.92);
+            color: #fff;
+            font-size: 14px;
+            font-weight: 600;
+            line-height: 1.3;
+            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+            white-space: pre-wrap;
+            text-align: center;
         }
         .dnd-link-line.dnd-link-pending { stroke: #1565c0; }
         .dnd-link-line.dnd-link-ok { stroke: #2e7d32; }
@@ -13728,7 +13747,7 @@
                         + '<option value="linking"' + actLink + '>🔗 Relier (flèches) — dépôt verrouillé</option>'
                         + '<option value="both"' + actBoth + '>📦🔗 Les deux (déposer + Relier)</option>'
                         + '</select>'
-                        + '<p style="margin:6px 0 0;font-size:10px;color:#4338ca;">Le bouton Relier n’apparaît que si l’étape active est « Relier » ou « Les deux ».</p>'
+                        + '<p style="margin:6px 0 0;font-size:10px;color:#4338ca;">Étape Relier : le mode flèche s’active tout seul (bouton bleu masqué). Étape « Les deux » : le bouton Relier reste cliquable.</p>'
                         + '</div>'
                         + '<div style="margin-top:8px;padding:8px;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:8px;">'
                         + '<label style="font-size:11px;font-weight:bold;display:block;margin-bottom:4px;">Fin d’étape → passage à la suivante</label>'
@@ -16919,7 +16938,7 @@
                     + '</div>'
                     + '<label style="width:auto;font-size:12px;font-weight:bold;margin-top:4px;">Tooltip Relier</label>'
                     + '<input id="dndGame' + n + 'LinkTooltip" type="text" placeholder="Clic droit maintenu… tirez jusqu’à l’arrivée" style="width:100%;font-size:12px;padding:6px;box-sizing:border-box;">'
-                    + '<p style="margin:0;font-size:10px;color:#64748b;">L’élève active le bouton flèche, puis maintient le <strong>clic droit</strong> pour tracer (le clic gauche = déplacer la vue). En admin : glisser le bouton pour le positionner, poignée pour la taille.</p>'
+                    + '<p style="margin:0;font-size:10px;color:#64748b;">Sur une étape Relier, le tracé au <strong>clic droit</strong> est actif tout de suite (un tooltip suit la souris). Le clic gauche déplace la vue. En admin : glisser le bouton pour le positionner, poignée pour la taille.</p>'
                     + '</div>'
                     + '<div class="row" style="gap:12px;flex-wrap:wrap;">'
                     + '<label style="width:auto;"><input type="checkbox" id="dndGame' + n + 'ShowScore" checked> Afficher score</label>'
@@ -16959,7 +16978,7 @@
                     + '</div>'
                     + '<div class="row mq-dnd-steps-only" style="display:none;flex-direction:column;align-items:stretch;gap:6px;">'
                     + '<label style="width:auto;font-size:12px;font-weight:bold;">Étapes & consignes</label>'
-                    + '<p style="margin:0;font-size:10px;color:#64748b;">Chaque étape a : une consigne, un <strong>type d’activité</strong> (Déposer / Relier / Les deux) et des critères de <strong>fin d’étape</strong>. Le bouton Relier n’apparaît que sur les étapes Relier. Ex. : étape 1 = Déposer (zones) → étape 2 = Relier (flèches) → étape 3 = Déposer…</p>'
+                    + '<p style="margin:0;font-size:10px;color:#64748b;">Chaque étape a : une consigne, un <strong>type d’activité</strong> (Déposer / Relier / Les deux) et des critères de <strong>fin d’étape</strong>. Étape Relier : mode flèche automatique, DnD bloqué. Ex. : étape 1 = Déposer → étape 2 = Relier (clic droit) → étape 3 = Déposer…</p>'
                     + '<div id="dndGame' + n + 'StepsList"></div>'
                     + '<button type="button" id="btnAddStepGame' + n + '" style="width:100%;font-weight:bold;">+ Ajouter une étape</button>'
                     + '</div>'

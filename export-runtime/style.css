@@ -260,6 +260,37 @@ input::placeholder {
     mix-blend-mode: normal !important;
 }
 
+.dropzone.dnd-step-locked .dnd-placed {
+    pointer-events: auto !important;
+    cursor: crosshair !important;
+}
+
+.drag-game.dnd-step-relier-auto .dnd-relier-btn {
+    display: none !important;
+}
+
+.dnd-link-mode .draggable,
+.dnd-link-mode .dnd-link-node {
+    cursor: crosshair !important;
+}
+
+.dnd-link-tooltip {
+    position: absolute;
+    z-index: 30;
+    pointer-events: none;
+    max-width: 280px;
+    padding: 8px 12px;
+    border-radius: 10px;
+    background: rgba(30, 30, 30, 0.92);
+    color: #fff;
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1.3;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+    white-space: pre-wrap;
+    text-align: center;
+}
+
 .dropzone .dnd-dropzone-id-badge {
     position: absolute;
     top: 4px;

@@ -160,7 +160,7 @@
     }
     if (normalizeGameType(g.gameType) === 'linking') g.enableLinking = true;
     if (g.linkTooltip == null || g.linkTooltip === '') {
-      g.linkTooltip = 'Clic droit maintenu sur une image, puis tirez la flèche jusqu’à l’arrivée.';
+      g.linkTooltip = 'Clic droit maintenu sur une image, puis glissez jusqu’à l’arrivée.';
     } else {
       g.linkTooltip = String(g.linkTooltip);
     }
@@ -593,6 +593,11 @@
     return s.activity === 'linking' || s.activity === 'both';
   }
 
+  /** Étape Relier pure : le mode lien s’active tout seul, sans bouton bleu. */
+  function stepAutoLinkMode(step) {
+    return normalizeStep(step, 0).activity === 'linking';
+  }
+
   function normalizeZoneMapIds(raw) {
     if (Array.isArray(raw)) {
       return raw.map(function (x) { return String(x).trim(); }).filter(Boolean);
@@ -1003,7 +1008,7 @@
     var completeFired = false;
     /** Centres temporaires pendant un drag HTML5 (id → {x,y} en coords layout). */
     var dragCenterOverrides = Object.create(null);
-    var DEFAULT_LINK_TIP = 'Clic droit maintenu sur une image, puis tirez la flèche jusqu’à l’arrivée.';
+    var DEFAULT_LINK_TIP = 'Clic droit maintenu sur une image, puis glissez jusqu’à l’arrivée.';
     var BTN_TIP = 'Mode Relier — clic droit maintenu pour tracer une flèche entre deux images';
 
     gameContainer.classList.add('dnd-linking-ready');
@@ -1306,18 +1311,37 @@
       tip = document.createElement('div');
       tip.className = 'dnd-link-tooltip';
       tip.setAttribute('role', 'status');
-      tip.style.cssText = 'position:absolute;z-index:20;pointer-events:none;display:none;max-width:280px;padding:8px 12px;border-radius:10px;background:rgba(30,30,30,0.92);color:#fff;font-size:14px;font-weight:600;line-height:1.3;box-shadow:0 4px 14px rgba(0,0,0,0.25);transform:translate(-50%,-120%);white-space:pre-wrap;text-align:center;';
+      tip.style.cssText = 'position:absolute;z-index:20;pointer-events:none;display:none;max-width:280px;padding:8px 12px;border-radius:10px;background:rgba(30,30,30,0.92);color:#fff;font-size:14px;font-weight:600;line-height:1.3;box-shadow:0 4px 14px rgba(0,0,0,0.25);transform:none;white-space:pre-wrap;text-align:center;';
       gameContainer.appendChild(tip);
     }
     function showTip(text, x, y) {
       tip.textContent = text || '';
-      tip.style.display = text ? 'block' : 'none';
-      if (text) {
-        tip.style.left = Math.max(20, Math.min((gameContainer.clientWidth || 400) - 20, x)) + 'px';
-        tip.style.top = Math.max(24, y) + 'px';
+      if (!text) {
+        tip.style.display = 'none';
+        return;
       }
+      tip.style.display = 'block';
+      var maxW = gameContainer.clientWidth || 400;
+      var maxH = gameContainer.clientHeight || 300;
+      tip.style.left = '0px';
+      tip.style.top = '0px';
+      var tw = tip.offsetWidth || 220;
+      var th = tip.offsetHeight || 40;
+      var left = (typeof x === 'number' ? x : 0) + 16;
+      var top = (typeof y === 'number' ? y : 0) + 20;
+      if (left + tw > maxW - 8) left = x - tw - 12;
+      if (top + th > maxH - 8) top = y - th - 12;
+      left = Math.max(8, Math.min(maxW - tw - 8, left));
+      top = Math.max(8, Math.min(maxH - th - 8, top));
+      tip.style.left = left + 'px';
+      tip.style.top = top + 'px';
+      tip.style.transform = 'none';
     }
     function hideTip() { tip.style.display = 'none'; }
+    function followTip(clientX, clientY, text) {
+      var pt = localPoint(clientX, clientY);
+      showTip(text || tipText(), pt.x, pt.y);
+    }
 
     // Logo Relier (assets/logo-relier-zones.svg)
     var relierSize = (normalizeRelierBtn(game.relierBtn, game).size);
@@ -1354,10 +1378,17 @@
           el.style.cursor = 'crosshair';
         } else {
           el.classList.remove('dnd-link-node', 'dnd-link-from', 'dnd-selected');
-          // Autoriser le déplacement des images (flèches suivent) hors mode Relier
-          if (el.classList.contains('draggable')) {
-            el.draggable = true;
-            el.style.cursor = 'grab';
+          if (el.classList.contains('dnd-placed')) {
+            el.draggable = false;
+            el.style.cursor = 'pointer';
+          } else if (el.classList.contains('draggable')) {
+            if (el.classList.contains('used')) {
+              el.draggable = false;
+              el.style.cursor = 'not-allowed';
+            } else {
+              el.draggable = true;
+              el.style.cursor = 'grab';
+            }
           } else if (hybrid) {
             el.draggable = el.dataset._prevDraggable === '1';
             el.style.cursor = '';
@@ -1368,7 +1399,9 @@
         }
       });
       if (linkModeActive) {
-        showTip(tipText(), (gameContainer.clientWidth || 200) / 2, 40);
+        var cx = (gameContainer.clientWidth || 200) / 2;
+        var cy = Math.max(48, (gameContainer.clientHeight || 120) * 0.18);
+        showTip(tipText(), cx, cy);
       } else {
         hideTip();
         cancelDrag();
@@ -1517,7 +1550,7 @@
       }
       dragState = null;
       if (linkModeActive) {
-        showTip(tipText(), (gameContainer.clientWidth || 200) / 2, 40);
+        /* le tooltip reprend le suivi souris via pointermove */
       } else {
         hideTip();
       }
@@ -1544,7 +1577,7 @@
       svg.style.pointerEvents = 'none';
       fromEl.classList.add('dnd-link-from', 'dnd-selected');
       dragState = { fromId: id, fromEl: fromEl, line: line, hoverEl: null };
-      showTip('Maintenez le clic droit et tirez jusqu’à l’image d’arrivée.', pt.x, pt.y);
+      showTip('Maintenez le clic droit et glissez jusqu’à l’image d’arrivée.', pt.x, pt.y);
     }
 
     function moveDrag(clientX, clientY) {
@@ -1569,7 +1602,7 @@
       dragState.line.setAttribute('y1', String(c0.y));
       dragState.line.setAttribute('x2', String(pt.x));
       dragState.line.setAttribute('y2', String(pt.y));
-      showTip('Maintenez le clic droit et tirez jusqu’à l’image d’arrivée.', pt.x, pt.y);
+      showTip('Maintenez le clic droit et glissez jusqu’à l’image d’arrivée.', pt.x, pt.y);
     }
 
     function endDrag(clientX, clientY) {
@@ -1594,9 +1627,6 @@
       } else {
         cancelDrag();
       }
-      if (linkModeActive) {
-        showTip(tipText(), (gameContainer.clientWidth || 200) / 2, 40);
-      }
     }
 
     function onPointerDown(e) {
@@ -1613,6 +1643,10 @@
       startDrag(el, e.clientX, e.clientY);
     }
     function onPointerMove(e) {
+      if (linkModeActive && !dragState) {
+        followTip(e.clientX, e.clientY, tipText());
+        return;
+      }
       if (!dragState) return;
       e.preventDefault();
       moveDrag(e.clientX, e.clientY);
@@ -1625,9 +1659,12 @@
     }
 
     gameContainer.addEventListener('pointerdown', onPointerDown, true);
-    gameContainer.addEventListener('pointermove', onPointerMove);
+    gameContainer.addEventListener('pointermove', onPointerMove, true);
     gameContainer.addEventListener('pointerup', onPointerUp);
     gameContainer.addEventListener('pointercancel', function () { cancelDrag(); });
+    gameContainer.addEventListener('pointerleave', function () {
+      if (!dragState && linkModeActive) hideTip();
+    });
 
     allNodes().forEach(function (el) {
       if (!hybrid) {
@@ -1779,7 +1816,7 @@
     var instructionsEl = gameContainer.querySelector('.dnd-instructions');
     var instructionsText = String(game.instructions || '').trim();
     if (!instructionsText && game.showInstructions !== false) {
-      instructionsText = 'Cliquez sur le bouton flèche, puis maintenez le clic droit sur une image et tirez jusqu’à l’arrivée.';
+      instructionsText = 'Maintenez le clic droit sur une image et glissez jusqu’à l’arrivée.';
     }
     var showInstructions = game.showInstructions !== false && !!instructionsText;
     if (showInstructions && !instructionsEl) {
@@ -2015,29 +2052,36 @@
       }
     }
 
-    /** Affiche Relier seulement si l’étape active est linking/both (masqué sinon). */
+    /** Affiche Relier si l’étape le demande ; étape Relier pure : activation auto, sans bouton. */
     function syncRelierForStep(st) {
       var btn = gameContainer.querySelector('.dnd-relier-btn');
       if (!btn && !linkingApi) return;
-      var show = false;
+      var showBtn = false;
+      var autoLink = false;
       if (linkingApi) {
         if (!stepsEnabled) {
-          show = !!game.enableLinking;
+          showBtn = !!game.enableLinking;
         } else if (st && st.enabled && !st.allComplete && st.active) {
-          show = stepNeedsRelier(st.active);
-        } else {
-          show = false;
+          autoLink = stepAutoLinkMode(st.active);
+          showBtn = !autoLink && stepNeedsRelier(st.active);
         }
       }
       if (btn) {
-        btn.style.display = show ? '' : 'none';
-        btn.hidden = !show;
-        btn.setAttribute('aria-hidden', show ? 'false' : 'true');
+        btn.style.display = showBtn ? '' : 'none';
+        btn.hidden = !showBtn;
+        btn.setAttribute('aria-hidden', showBtn ? 'false' : 'true');
       }
-      if (!show && linkingApi && linkingApi.setLinkMode) {
-        try { linkingApi.setLinkMode(false); } catch (e) {}
+      if (linkingApi && linkingApi.setLinkMode) {
+        try {
+          if (autoLink) {
+            if (!linkingApi.isLinkModeActive()) linkingApi.setLinkMode(true);
+          } else if (!showBtn) {
+            if (linkingApi.isLinkModeActive()) linkingApi.setLinkMode(false);
+          }
+        } catch (e) {}
       }
-      gameContainer.classList.toggle('dnd-step-relier-on', !!show);
+      gameContainer.classList.toggle('dnd-step-relier-on', !!(autoLink || showBtn));
+      gameContainer.classList.toggle('dnd-step-relier-auto', !!autoLink);
     }
 
     /** Cartes déposées : toujours opacité pleine (jamais grisées par l’étape ou la zone). */
@@ -2233,6 +2277,7 @@
       }
 
       clone.addEventListener('click', function (e) {
+        if (isLinkModeOn()) return;
         e.preventDefault();
         e.stopPropagation();
         if (selectedId && selectedId !== id) {
@@ -2247,6 +2292,7 @@
         selectCard(id, clone);
       });
       clone.addEventListener('keydown', function (e) {
+        if (isLinkModeOn()) return;
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
           onRemove();
@@ -2256,6 +2302,10 @@
       // Mode retry : glisser une mauvaise carte vers une autre zone
       if (cardUse === 'retry' && clone.draggable) {
         clone.addEventListener('dragstart', function (e) {
+          if (isLinkModeOn()) {
+            e.preventDefault();
+            return;
+          }
           e.dataTransfer.setData('text/plain', id);
           e.dataTransfer.effectAllowed = 'move';
           selectCard(id, clone);
@@ -2782,6 +2832,7 @@
     normalizeSteps: normalizeSteps,
     normalizeStepActivity: normalizeStepActivity,
     stepNeedsRelier: stepNeedsRelier,
+    stepAutoLinkMode: stepAutoLinkMode,
     evaluateStep: evaluateStep,
     getStepsState: getStepsState,
     effectiveStepZoneIds: effectiveStepZoneIds,

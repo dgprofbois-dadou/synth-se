@@ -153,6 +153,18 @@ function rebuild() {
   filter: none !important;
   mix-blend-mode: normal !important;
 }
+.dropzone.dnd-step-locked .dnd-placed {
+  pointer-events: auto !important;
+  cursor: crosshair !important;
+}
+.drag-game.dnd-step-relier-auto .dnd-relier-btn {
+  display: none !important;
+}
+.dnd-link-tooltip {
+  position: absolute;
+  z-index: 30;
+  pointer-events: none;
+}
 .dnd-dropzone-id-badge,
 .dropzone .dnd-dropzone-id-badge {
   pointer-events: none;
@@ -230,6 +242,9 @@ g.dnd-link-zone.dnd-link-node.dnd-link-from {
 .dnd-link-mode .draggable,
 .dnd-link-mode .dnd-link-node {
   cursor: crosshair !important;
+}
+.drag-game.dnd-step-relier-auto .dnd-relier-btn {
+  display: none !important;
 }
 .dropzone {
   flex-wrap: wrap;

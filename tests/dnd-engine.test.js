@@ -329,10 +329,15 @@ test('activité linking / dnd + Relier gating helpers', () => {
   const dnd = Engine.normalizeStep({ title: 'A', zoneIds: ['1'], activity: 'dnd' }, 0);
   assert.strictEqual(dnd.activity, 'dnd');
   assert.strictEqual(Engine.stepNeedsRelier(dnd), false);
+  assert.strictEqual(Engine.stepAutoLinkMode(dnd), false);
   const link = Engine.normalizeStep({ title: 'B', linkPairs: [{ from: '1', to: '2' }], activity: 'linking' }, 1);
   assert.strictEqual(link.activity, 'linking');
   assert.strictEqual(Engine.stepNeedsRelier(link), true);
-  const inferred = Engine.normalizeStep({ title: 'C', linkPairs: [{ from: 'a', to: 'b' }] }, 2);
+  assert.strictEqual(Engine.stepAutoLinkMode(link), true);
+  const both = Engine.normalizeStep({ title: 'C', activity: 'both', zoneIds: ['1'], linkPairs: [{ from: 'a', to: 'b' }] }, 2);
+  assert.strictEqual(Engine.stepNeedsRelier(both), true);
+  assert.strictEqual(Engine.stepAutoLinkMode(both), false);
+  const inferred = Engine.normalizeStep({ title: 'D', linkPairs: [{ from: 'a', to: 'b' }] }, 3);
   assert.strictEqual(inferred.activity, 'linking');
 });
 
