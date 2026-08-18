@@ -179,6 +179,11 @@ function rebuild() {
   z-index: 30;
   pointer-events: none;
 }
+.dnd-link-line,
+.dnd-link-drag,
+.dnd-link-hit {
+  fill: none;
+}
 .dnd-link-hit-locked {
   cursor: not-allowed !important;
 }

@@ -113,6 +113,46 @@
     return String(from) + '\0' + String(to);
   }
 
+  function round1(n) {
+    return Math.round(Number(n) * 10) / 10;
+  }
+
+  /**
+   * Courbe spline (cubique) entre deux points — plus lisible que le segment droit.
+   * opts.sign : 1 | -1 (côté du bombé)
+   * opts.rank : 0,1,2… (écart supplémentaire si plusieurs flèches du même départ)
+   */
+  function linkSplinePath(x1, y1, x2, y2, opts) {
+    opts = opts || {};
+    x1 = Number(x1); y1 = Number(y1); x2 = Number(x2); y2 = Number(y2);
+    var dx = x2 - x1;
+    var dy = y2 - y1;
+    var len = Math.sqrt(dx * dx + dy * dy);
+    if (!isFinite(len) || len < 6) {
+      return 'M ' + round1(x1) + ',' + round1(y1) + ' L ' + round1(x2) + ',' + round1(y2);
+    }
+    var ux = dx / len;
+    var uy = dy / len;
+    var px = -uy;
+    var py = ux;
+    var sign = opts.sign < 0 ? -1 : 1;
+    var rank = Math.max(0, parseInt(opts.rank, 10) || 0);
+    var bulge = Math.max(22, Math.min(120, len * 0.26)) * (1 + rank * 0.34);
+    var inset = Math.min(16, len * 0.1);
+    var sx = x1 + ux * inset;
+    var sy = y1 + uy * inset;
+    var ex = x2 - ux * inset;
+    var ey = y2 - uy * inset;
+    var c1x = sx + (ex - sx) / 3 + px * bulge * sign;
+    var c1y = sy + (ey - sy) / 3 + py * bulge * sign;
+    var c2x = sx + 2 * (ex - sx) / 3 + px * bulge * sign;
+    var c2y = sy + 2 * (ey - sy) / 3 + py * bulge * sign;
+    return 'M ' + round1(sx) + ',' + round1(sy)
+      + ' C ' + round1(c1x) + ',' + round1(c1y)
+      + ' ' + round1(c2x) + ',' + round1(c2y)
+      + ' ' + round1(ex) + ',' + round1(ey);
+  }
+
   function normalizeDropzone(dz, index) {
     var src = dz && typeof dz === 'object' ? dz : {};
     var id = src.id != null ? src.id : (index + 1);
@@ -1522,8 +1562,43 @@
       else refreshStandalone();
     }
 
+    function splineOptsForIndex(idx) {
+      var l = links[idx];
+      if (!l) return { sign: 1, rank: 0 };
+      var from = String(l.from);
+      var siblings = [];
+      for (var i = 0; i < links.length; i++) {
+        if (String(links[i].from) === from) siblings.push(i);
+      }
+      var origin = findNode(from) ? nodeCenter(findNode(from)) : null;
+      siblings.sort(function (ia, ib) {
+        var na = findNode(links[ia].to);
+        var nb = findNode(links[ib].to);
+        if (!origin || !na || !nb) return ia - ib;
+        var a = nodeCenter(na);
+        var b = nodeCenter(nb);
+        return Math.atan2(a.y - origin.y, a.x - origin.x) - Math.atan2(b.y - origin.y, b.x - origin.x);
+      });
+      var pos = siblings.indexOf(idx);
+      if (pos < 0) pos = 0;
+      return { sign: pos % 2 === 0 ? 1 : -1, rank: Math.floor(pos / 2) };
+    }
+
+    function makeSplineEl(tagClass, d, extra) {
+      var el = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      el.setAttribute('class', tagClass);
+      el.setAttribute('d', d);
+      el.setAttribute('fill', 'none');
+      el.setAttribute('stroke-linecap', 'round');
+      el.setAttribute('stroke-linejoin', 'round');
+      if (extra) {
+        Object.keys(extra).forEach(function (k) { el.setAttribute(k, extra[k]); });
+      }
+      return el;
+    }
+
     function drawLinks(ev) {
-      Array.prototype.slice.call(svg.querySelectorAll('line.dnd-link-line, line.dnd-link-hit')).forEach(function (n) {
+      Array.prototype.slice.call(svg.querySelectorAll('.dnd-link-line, .dnd-link-hit')).forEach(function (n) {
         n.parentNode.removeChild(n);
       });
       var showFb = showingLinkFeedback(ev);
@@ -1536,27 +1611,19 @@
         var ok = isAllowedPair(l.from, l.to);
         var state = showFb ? (ok ? 'ok' : 'bad') : 'pending';
         var locked = state === 'ok';
-        var line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-        line.setAttribute('x1', String(ca.x));
-        line.setAttribute('y1', String(ca.y));
-        line.setAttribute('x2', String(cb.x));
-        line.setAttribute('y2', String(cb.y));
-        line.setAttribute('class', 'dnd-link-line dnd-link-' + state);
-        line.setAttribute('stroke-width', '4');
-        line.setAttribute('stroke-linecap', 'round');
+        var d = linkSplinePath(ca.x, ca.y, cb.x, cb.y, splineOptsForIndex(idx));
         var colors = { pending: '#1565c0', ok: '#2e7d32', bad: '#d32f2f' };
-        line.setAttribute('stroke', colors[state] || colors.pending);
-        line.setAttribute('marker-end', 'url(#arrow-' + state + '-' + gameId + ')');
+        var line = makeSplineEl('dnd-link-line dnd-link-' + state, d, {
+          'stroke-width': '4',
+          stroke: colors[state] || colors.pending,
+          'marker-end': 'url(#arrow-' + state + '-' + gameId + ')'
+        });
         svg.appendChild(line);
-        var hit = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-        hit.setAttribute('x1', String(ca.x));
-        hit.setAttribute('y1', String(ca.y));
-        hit.setAttribute('x2', String(cb.x));
-        hit.setAttribute('y2', String(cb.y));
-        hit.setAttribute('class', 'dnd-link-hit' + (locked ? ' dnd-link-hit-locked' : ''));
-        hit.setAttribute('data-locked', locked ? '1' : '0');
-        hit.setAttribute('stroke', 'transparent');
-        hit.setAttribute('stroke-width', '18');
+        var hit = makeSplineEl('dnd-link-hit' + (locked ? ' dnd-link-hit-locked' : ''), d, {
+          'stroke-width': '18',
+          stroke: 'transparent',
+          'data-locked': locked ? '1' : '0'
+        });
         hit.style.pointerEvents = 'stroke';
         hit.style.cursor = locked ? 'not-allowed' : 'pointer';
         (function (linkIndex, isLocked) {
@@ -1597,18 +1664,13 @@
       var id = fromEl.getAttribute('data-id');
       if (!id) return;
       var c = nodeCenter(fromEl);
-      var line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-      line.setAttribute('class', 'dnd-link-drag');
-      line.setAttribute('x1', String(c.x));
-      line.setAttribute('y1', String(c.y));
       var pt = localPoint(clientX, clientY);
-      line.setAttribute('x2', String(pt.x));
-      line.setAttribute('y2', String(pt.y));
-      line.setAttribute('stroke', '#f59e0b');
-      line.setAttribute('stroke-width', '4');
-      line.setAttribute('stroke-linecap', 'round');
-      line.setAttribute('stroke-dasharray', '8 6');
-      line.setAttribute('marker-end', 'url(#arrow-drag-' + gameId + ')');
+      var line = makeSplineEl('dnd-link-drag', linkSplinePath(c.x, c.y, pt.x, pt.y), {
+        stroke: '#f59e0b',
+        'stroke-width': '4',
+        'stroke-dasharray': '8 6',
+        'marker-end': 'url(#arrow-drag-' + gameId + ')'
+      });
       line.style.pointerEvents = 'none';
       svg.appendChild(line);
       svg.style.pointerEvents = 'none';
@@ -1635,10 +1697,8 @@
         dragState.hoverEl = null;
       }
       var c0 = nodeCenter(dragState.fromEl);
-      dragState.line.setAttribute('x1', String(c0.x));
-      dragState.line.setAttribute('y1', String(c0.y));
-      dragState.line.setAttribute('x2', String(pt.x));
-      dragState.line.setAttribute('y2', String(pt.y));
+      var end = target && target !== dragState.fromEl ? nodeCenter(target) : pt;
+      dragState.line.setAttribute('d', linkSplinePath(c0.x, c0.y, end.x, end.y));
       showTip(DRAW_LINK_TIP, pt.x, pt.y);
     }
 
@@ -1654,10 +1714,7 @@
         var ca = nodeCenter(fromEl);
         var cb = nodeCenter(target);
         if (dragState.line) {
-          dragState.line.setAttribute('x1', String(ca.x));
-          dragState.line.setAttribute('y1', String(ca.y));
-          dragState.line.setAttribute('x2', String(cb.x));
-          dragState.line.setAttribute('y2', String(cb.y));
+          dragState.line.setAttribute('d', linkSplinePath(ca.x, ca.y, cb.x, cb.y));
         }
         cancelDrag();
         addLink(fromId, toId);
@@ -2879,6 +2936,7 @@
     normalizeAllowedLinks: normalizeAllowedLinks,
     allowedLinksToText: allowedLinksToText,
     effectiveAllowedLinks: effectiveAllowedLinks,
+    linkSplinePath: linkSplinePath,
     isSingleUse: isSingleUse,
     normalizeDropzone: normalizeDropzone,
     applyGameDefaults: applyGameDefaults,

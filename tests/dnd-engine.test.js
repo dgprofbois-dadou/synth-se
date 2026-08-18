@@ -498,6 +498,16 @@ test('flèche verte (correcte) non supprimable', () => {
   assert.strictEqual(Engine.canRemoveDrawnLink(g, { from: '1', to: '9' }, true), true);
 });
 
+test('linkSplinePath produit une courbe cubique', () => {
+  const d = Engine.linkSplinePath(0, 0, 200, 0);
+  assert.ok(d.indexOf('C') >= 0);
+  assert.ok(d.charAt(0) === 'M');
+  const short = Engine.linkSplinePath(0, 0, 2, 0);
+  assert.ok(short.indexOf('L') >= 0);
+  const other = Engine.linkSplinePath(0, 0, 200, 0, { sign: -1 });
+  assert.notStrictEqual(d, other);
+});
+
 test('enableLinking hybride avec selection', () => {
   const g = Engine.applyGameDefaults({
     gameType: 'selection',
