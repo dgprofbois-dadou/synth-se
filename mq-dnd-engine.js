@@ -2040,6 +2040,25 @@
       gameContainer.classList.toggle('dnd-step-relier-on', !!show);
     }
 
+    /** Cartes déposées : toujours opacité pleine (jamais grisées par l’étape ou la zone). */
+    function syncPlacedCardsAppearance() {
+      Array.prototype.forEach.call(gameContainer.querySelectorAll('.dropzone .dnd-placed'), function (clone) {
+        clone.style.opacity = '1';
+        clone.style.filter = 'none';
+        clone.style.webkitFilter = 'none';
+        clone.style.mixBlendMode = 'normal';
+        clone.classList.remove('used', 'png-wrap');
+        var img = clone.tagName === 'IMG' ? clone : clone.querySelector('img');
+        if (img) {
+          img.style.opacity = '1';
+          img.style.filter = 'none';
+          img.style.webkitFilter = 'none';
+          img.style.mixBlendMode = 'normal';
+          img.classList.remove('used');
+        }
+      });
+    }
+
     /** Pendant une étape Relier pure : zones de dépôt non interactives. */
     function syncZonesForStep(st) {
       var linkingOnly = false;
@@ -2049,8 +2068,8 @@
       Array.prototype.forEach.call(gameContainer.querySelectorAll('.dropzone'), function (z) {
         z.classList.toggle('dnd-step-locked', linkingOnly);
         z.style.pointerEvents = linkingOnly ? 'none' : 'auto';
-        if (linkingOnly) z.style.opacity = '0.5';
-        else if (z.style.opacity === '0.5') z.style.opacity = '';
+        // Ne pas utiliser opacity sur la zone : les enfants (.dnd-placed) héritent du rendu atténué.
+        z.style.removeProperty('opacity');
       });
       Array.prototype.forEach.call(gameContainer.querySelectorAll('.draggable'), function (el) {
         var id = String(el.getAttribute('data-id') || '');
@@ -2405,12 +2424,14 @@
         syncStepNextBtn(st);
         syncRelierForStep(st);
         syncZonesForStep(st);
+        syncPlacedCardsAppearance();
         ev.stepsState = st;
         ev.isComplete = st.allComplete;
       } else {
         stepsComplete = !!ev.isComplete;
         syncRelierForStep(null);
         syncZonesForStep(null);
+        syncPlacedCardsAppearance();
       }
 
       // Groupes

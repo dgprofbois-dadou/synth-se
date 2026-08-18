@@ -143,6 +143,15 @@ function rebuild() {
 }
 .dropzone.dnd-step-locked {
   pointer-events: none !important;
+  border-color: rgba(150, 150, 150, 0.55) !important;
+  background: rgba(255, 255, 255, 0.4) !important;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.06);
+}
+.dropzone.dnd-step-locked .dnd-placed,
+.dropzone.dnd-step-locked .dnd-placed img {
+  opacity: 1 !important;
+  filter: none !important;
+  mix-blend-mode: normal !important;
 }
 .dnd-dropzone-id-badge,
 .dropzone .dnd-dropzone-id-badge {
