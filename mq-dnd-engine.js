@@ -216,9 +216,10 @@
         activity: (normalizeGameType(g.gameType) === 'linking') ? 'linking' : 'dnd',
         zoneIds: [],
         goodIds: g.goodIds || '',
-        linkPairs: []
+        linkPairs: (normalizeGameType(g.gameType) === 'linking') ? (g.allowedLinks || []) : []
       }, 0)];
     }
+    migrateLegacyLinkingToSteps(g);
     if (g.enableSteps) applyStepZoneMapsToDropzones(g);
     return g;
   }
@@ -249,8 +250,29 @@
     return normalizeGameType(game && game.gameType) === 'linking';
   }
 
+  /** Une étape Relier (explicite) ou une étape sans type mais avec des paires. */
+  function gameHasRelierStep(game) {
+    var steps = (game && Array.isArray(game.steps)) ? game.steps : [];
+    for (var i = 0; i < steps.length; i++) {
+      var s = steps[i] || {};
+      var a = String(s.activity != null ? s.activity : (s.mode || '')).trim().toLowerCase();
+      if (a === 'linking' || a === 'both') return true;
+      if (!a && Array.isArray(s.linkPairs) && s.linkPairs.length) return true;
+    }
+    return false;
+  }
+
+  /** Relier n’existe plus comme type de jeu global : uniquement via les étapes (hors migration). */
+  function gameNeedsRelier(game) {
+    if (!game) return false;
+    if (game.enableSteps && Array.isArray(game.steps) && game.steps.length) {
+      return gameHasRelierStep(game);
+    }
+    return isLinking(game) || !!game.enableLinking;
+  }
+
   function hasLinkingFeature(game) {
-    return isLinking(game) || !!(game && game.enableLinking);
+    return gameNeedsRelier(game);
   }
 
   function goodIdSet(game) {
@@ -697,6 +719,81 @@
   function normalizeSteps(raw) {
     if (!Array.isArray(raw)) return [];
     return raw.map(normalizeStep);
+  }
+
+  /**
+   * Ancienne config Relier au niveau jeu (gameType linking / enableLinking / allowedLinks)
+   * → une étape Relier, pour pouvoir reprendre la config sur une étape précise.
+   */
+  function migrateLegacyLinkingToSteps(g) {
+    if (!g || typeof g !== 'object') return g;
+    var wasLinkingType = normalizeGameType(g.gameType) === 'linking';
+    var globalPairs = normalizeAllowedLinks(g.allowedLinks);
+    var leftoverHybrid = !!g.enableLinking && !wasLinkingType;
+    if (!Array.isArray(g.steps)) g.steps = [];
+    var stepsOn = !!g.enableSteps && g.steps.length > 0;
+
+    function isDndShellWithPairs(s) {
+      var ns = normalizeStep(s, 0);
+      return ns.activity === 'dnd'
+        && ns.linkPairs.length > 0
+        && !ns.zoneIds.length
+        && !String(ns.goodIds || '').trim()
+        && !(ns.zoneMap && Object.keys(ns.zoneMap).length);
+    }
+
+    function fillEmptyRelierPairs() {
+      if (!globalPairs.length) return;
+      g.steps.forEach(function (s) {
+        var ns = normalizeStep(s, 0);
+        if (!stepNeedsRelier(ns)) return;
+        if (!ns.linkPairs.length) s.linkPairs = globalPairs.slice();
+      });
+      g.steps = normalizeSteps(g.steps);
+    }
+
+    if (!stepsOn) {
+      if (wasLinkingType || leftoverHybrid) {
+        g.enableSteps = true;
+        g.steps = [normalizeStep({
+          title: wasLinkingType ? 'Relier' : 'Étape 1',
+          instructions: g.instructions || '',
+          activity: wasLinkingType ? 'linking' : 'both',
+          stepGameType: wasLinkingType
+            ? 'linking'
+            : (normalizeGameType(g.gameType) === 'classification' ? 'classification' : 'exact'),
+          goodIds: wasLinkingType ? '' : (g.goodIds || ''),
+          linkPairs: globalPairs
+        }, 0)];
+      }
+    } else {
+      var converted = false;
+      g.steps.forEach(function (s) {
+        if (isDndShellWithPairs(s) && (wasLinkingType || leftoverHybrid || globalPairs.length)) {
+          s.activity = 'linking';
+          converted = true;
+        }
+      });
+      if (converted) g.steps = normalizeSteps(g.steps);
+
+      if (!gameHasRelierStep(g) && (wasLinkingType || (leftoverHybrid && globalPairs.length))) {
+        g.steps.push(normalizeStep({
+          title: 'Relier',
+          instructions: '',
+          activity: 'linking',
+          linkPairs: globalPairs
+        }, g.steps.length));
+      } else {
+        fillEmptyRelierPairs();
+      }
+    }
+
+    if (wasLinkingType) g.gameType = 'exact';
+    g.enableLinking = gameHasRelierStep(g);
+    if (g.enableSteps && Array.isArray(g.steps) && g.steps.length) {
+      g.allowedLinks = effectiveAllowedLinks(Object.assign({}, g, { enableSteps: true }));
+    }
+    return g;
   }
 
   /** IDs de zones à valider pour une étape (zoneIds ou clés du zoneMap). */
@@ -2960,6 +3057,9 @@
     attachLinkingFeature: attachLinkingFeature,
     collectPlacements: collectPlacements,
     hasLinkingFeature: hasLinkingFeature,
+    gameNeedsRelier: gameNeedsRelier,
+    gameHasRelierStep: gameHasRelierStep,
+    migrateLegacyLinkingToSteps: migrateLegacyLinkingToSteps,
     computeDndBaseMaxScore: computeDndBaseMaxScore,
     normalizeStep: normalizeStep,
     normalizeZoneMap: normalizeZoneMap,

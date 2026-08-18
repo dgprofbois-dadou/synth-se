@@ -28,9 +28,9 @@ node rebuild-mq-export-runtime.js --extract
 | `instructionsBox` | Disposition consignes : `{ x, y, width, height, font, fontSize, bold, italic, align, bgColor, color, borderColor }` |
 | `enableSteps` | Jeu par étapes avec consignes successives |
 | `steps` | Liste d’étapes `{ id, title, instructions, zoneIds, goodIds, linkPairs }` |
-| `allowedLinks` | Paires `{ from, to }` pour Relier **sans** étapes. Avec `enableSteps`, les `linkPairs` des étapes primenet (union exposée aussi via `effectiveAllowedLinks`). |
+| `allowedLinks` | Union des `linkPairs` des étapes Relier (cache runtime). Plus de paires globales : Relier se configure **par étape**. |
 | `linkMode` | `one-to-one` (défaut) ou `one-to-many` |
-| `enableLinking` | Active les flèches **en plus** d’un autre type de jeu |
+| `enableLinking` | Dérivé automatiquement : `true` si au moins une étape est Relier / Les deux |
 | `linkTooltip` | Texte d’aide (défaut : clic droit maintenu) |
 | `relierBtn` | Position/taille du bouton flèche `{ x, y, size }` |
 | `linkZones` | Zones SVG transparentes Relier `{ id, points:[[x,y],…] }` (visibles admin) |
@@ -50,17 +50,19 @@ Exemple typique : étape 1 = Déposer (zones 1,2) → étape 2 = Relier (`1>3`) 
 
 Sans critère et sans bouton forcé → bouton **Étape suivante** obligatoire. Le jeu est réussi quand **toutes** les étapes sont terminées.
 
-Dans le panneau admin Relier : si **Jeu par étapes** est coché, le champ global **Paires correctes (flèches)** est masqué — configurez les flèches dans chaque étape (`Flèches à valider`).
+**Relier n’existe plus comme type de jeu global.** L’ancienne config (`gameType: linking`, case « Activer Relier », paires globales) est migrée vers une **étape Relier** au chargement, pour reprendre la config sur cette étape.
 
-### Type `linking` / option Relier
+Les outils canvas (zones SVG, mode de liaison, tooltip) s’affichent dès que « Jeu par étapes » est coché. Les flèches à valider se règlent dans chaque étape (`Flèches à valider`).
 
-- Bouton **flèche** (icône) → active le mode Relier — **glissable** + **poignée de taille** en admin.
+### Relier (étape)
+
+- Bouton **flèche** (icône) → visible seulement sur une étape « Les deux » — **glissable** + **poignée de taille** en admin.
+- Étape Relier pure : mode flèche **automatique** (bouton masqué).
 - **Clic droit maintenu** sur une image, puis **tirer** jusqu’à l’arrivée (flèche élastique orange).
 - Le **clic gauche** seul déplace la vue (**pas de pan au clic droit**).
 - Tooltip d’explication sur le bouton et pendant la manip.
-- Peut être utilisé seul (`gameType: linking`) ou combiné (`enableLinking: true` + selection/exact/…).
 - **Zones SVG Relier** : polygones dessinés (points ou crayon) — visibles en admin, **transparents** pour l’élève, avec un **ID** utilisable dans les paires (`zone-1>2`).
-- Score = score DnD + nombre de paires correctes.
+- Score = score DnD des étapes + nombre de paires correctes des étapes Relier.
 - Les **images fixes** et **textes fixes** ont un **ID** éditable (badge vert sur le canvas) et peuvent servir de nœuds Relier (`idDépart>idArrivée`).
 
 Les consignes restent visibles jusqu’à la réussite du jeu (`dnd-game-complete`), puis sont masquées.

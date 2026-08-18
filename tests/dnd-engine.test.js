@@ -486,7 +486,9 @@ test('linking : score et complétion', () => {
     allowedLinks: [{ from: '1', to: '3' }, { from: '2', to: '4' }],
     dropzones: []
   });
-  assert.strictEqual(g.gameType, 'linking');
+  assert.strictEqual(g.enableSteps, true);
+  assert.strictEqual(g.steps[0].activity, 'linking');
+  assert.notStrictEqual(g.gameType, 'linking');
   assert.strictEqual(g.enableLinking, true);
   assert.strictEqual(Engine.computeGameMaxScore(g), 2);
   assert.strictEqual(Engine.computeGameScore(g, { links: [{ from: '1', to: '3' }] }), 1);
@@ -572,14 +574,31 @@ test('effectiveAllowedLinks : étapes primenet sur allowedLinks', () => {
   assert.strictEqual(Engine.effectiveAllowedLinks(g2)[0].from, 'a');
 });
 
-test('UI linking dans placement-inputs.html', () => {
+test('UI Relier uniquement par étape dans placement-inputs.html', () => {
   const html = fs.readFileSync(path.join(__dirname, '..', 'placement-inputs.html'), 'utf8');
   assert.ok(html.includes('value="linking"'));
-  assert.ok(html.includes('AllowedLinks'));
-  assert.ok(html.includes('EnableLinking'));
-  assert.ok(html.includes('mq-dnd-global-pairs'));
-  assert.ok(html.includes('mqUpdateLinkingPairsVisibility'));
-  assert.ok(html.includes('dnd-relier-btn') || html.includes('Activer Relier'));
+  assert.ok(html.includes('data-field="activity"'));
+  assert.ok(html.includes('mqSyncLinkingToolsVisibility'));
+  assert.ok(html.includes('dnd-relier-btn') || html.includes('Relier (flèches)'));
+  assert.ok(!html.includes('EnableLinking'));
+  assert.ok(!html.includes('Relier seul'));
+  assert.ok(!html.includes('Activer Relier (flèches) en plus'));
+  assert.ok(!html.includes('mq-dnd-global-pairs'));
+});
+
+test('ancienne config Relier jeu → étape Relier (reprise)', () => {
+  const g = Engine.applyGameDefaults({
+    gameType: 'linking',
+    allowedLinks: [{ from: '1', to: '3' }],
+    enableSteps: true,
+    steps: [{ title: 'Étape 1', activity: 'dnd', linkPairs: [{ from: '1', to: '3' }] }]
+  });
+  assert.strictEqual(g.gameType, 'exact');
+  assert.strictEqual(g.steps.length, 1);
+  assert.strictEqual(g.steps[0].activity, 'linking');
+  assert.strictEqual(g.steps[0].linkPairs[0].from, '1');
+  assert.strictEqual(g.enableLinking, true);
+  assert.strictEqual(Engine.gameNeedsRelier(g), true);
 });
 
 console.log('\n--------------------------------');
