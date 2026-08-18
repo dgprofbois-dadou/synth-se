@@ -586,6 +586,16 @@ test('UI Relier uniquement par étape dans placement-inputs.html', () => {
   assert.ok(!html.includes('mq-dnd-global-pairs'));
 });
 
+test('saisie IDs d’étape : textarea + pastilles, pas de rerender à chaque frappe', () => {
+  const html = fs.readFileSync(path.join(__dirname, '..', 'placement-inputs.html'), 'utf8');
+  assert.ok(html.includes('textarea data-field="zoneIds"'));
+  assert.ok(html.includes('textarea data-field="goodIds"'));
+  assert.ok(html.includes('mqStepIdChipsHTML'));
+  assert.ok(html.includes('mqRefreshStepZoneMap'));
+  assert.ok(html.includes('data-ids-preview="zoneIds"'));
+  assert.ok(!/if \(field === 'zoneIds' \|\| field === 'goodIds'\) \{\s*renderStepsList/.test(html));
+});
+
 test('ancienne config Relier jeu → étape Relier (reprise)', () => {
   const g = Engine.applyGameDefaults({
     gameType: 'linking',

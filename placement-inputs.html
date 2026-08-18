@@ -13700,11 +13700,12 @@
                     const activity = (activityEl && activityEl.value) || 'dnd';
                     const requireNextButton = !!(card.querySelector('[data-field="requireNextButton"]') || {}).checked;
                     const zoneIdsRaw = (card.querySelector('[data-field="zoneIds"]') || {}).value || '';
-                    const goodIds = (card.querySelector('[data-field="goodIds"]') || {}).value || '';
+                    const goodIdsRaw = (card.querySelector('[data-field="goodIds"]') || {}).value || '';
                     const stepGameTypeEl = card.querySelector('[data-field="stepGameType"]');
                     const stepGameType = (stepGameTypeEl && stepGameTypeEl.value) || 'exact';
                     const linksRaw = (card.querySelector('[data-field="linkPairs"]') || {}).value || '';
-                    const zoneIds = zoneIdsRaw.split(/[,;\s]+/).map(s => s.trim()).filter(Boolean);
+                    const zoneIds = mqParseStepIdList(zoneIdsRaw);
+                    const goodIds = mqParseStepIdList(goodIdsRaw).join(',');
                     const zoneMap = {};
                     card.querySelectorAll('input[data-field^="zoneMap-"][data-card]').forEach((inp) => {
                         const m = /^zoneMap-(.+)$/.exec(inp.getAttribute('data-field') || '');
@@ -13775,6 +13776,36 @@
                 renderStepsList(gameId);
                 scheduleSaveLocal();
             };
+            function mqParseStepIdList(raw) {
+                return String(raw || '').split(/[,;\s]+/).map((s) => s.trim()).filter(Boolean);
+            }
+            function mqStepIdChipsHTML(raw) {
+                const ids = mqParseStepIdList(raw);
+                if (!ids.length) {
+                    return '<span style="color:#94a3b8;font-size:10px;">Aucun ID saisi</span>';
+                }
+                const chips = ids.map((id) => {
+                    const safe = mqEscapeHtmlLite(id);
+                    return '<span title="' + safe + '" style="display:inline-block;margin:2px 4px 2px 0;padding:3px 8px;background:#ffedd5;border:1px solid #fdba74;border-radius:999px;font-family:ui-monospace,Consolas,monospace;font-size:12px;font-weight:bold;color:#9a3412;max-width:100%;overflow:hidden;text-overflow:ellipsis;vertical-align:middle;">' + safe + '</span>';
+                }).join('');
+                return '<div style="font-size:10px;color:#9a3412;margin-bottom:2px;">' + ids.length + ' ID' + (ids.length > 1 ? 's' : '') + '</div>' + chips;
+            }
+            function mqUpdateStepIdChips(inp) {
+                const field = inp && inp.getAttribute('data-field');
+                const host = inp && inp.closest('[data-step-idx]');
+                if (!field || !host) return;
+                const preview = host.querySelector('[data-ids-preview="' + field + '"]');
+                if (preview) preview.innerHTML = mqStepIdChipsHTML(inp.value);
+            }
+            function mqRefreshStepZoneMap(gameId, card) {
+                const host = card && card.querySelector('[data-step-zonemap]');
+                if (!host) return;
+                const idx = parseInt(card.getAttribute('data-step-idx'), 10);
+                const g = state.dndGames[gameId];
+                const step = g && Array.isArray(g.steps) ? g.steps[idx] : null;
+                if (!step) return;
+                host.innerHTML = mqStepZoneMapHTML(gameId, step, idx);
+            }
             function renderStepsList(gameId) {
                 const n = mqGameNum(gameId);
                 const list = document.getElementById('dndGame' + n + 'StepsList');
@@ -13841,54 +13872,87 @@
                         + '<option value="exact"' + gtExact + '>Placement exact (1 carte par zone)</option>'
                         + '<option value="classification"' + gtClass + '>Classement par catégories</option>'
                         + '</select></label>'
-                        + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">'
-                        + '<label>Zones à valider (fin d’étape)<input data-field="zoneIds" type="text" value="' + zoneStr.replace(/"/g, '&quot;') + '" placeholder="Ex: 19,20,21" style="width:100%;font-size:11px;padding:4px;box-sizing:border-box;"></label>'
-                        + '<label>Cartes de l’étape (pool)<input data-field="goodIds" type="text" value="' + String(s.goodIds || '').replace(/"/g, '&quot;') + '" placeholder="Ex: 3,4,5,6 (optionnel)" style="width:100%;font-size:11px;padding:4px;box-sizing:border-box;"></label>'
-                        + '</div>'
+                        + '<label style="display:block;margin-bottom:8px;">Zones à valider (fin d’étape)'
+                        + '<textarea data-field="zoneIds" rows="3" spellcheck="false" placeholder="Ex : 19, 20, 21" style="width:100%;min-height:72px;margin-top:2px;font-size:13px;line-height:1.45;padding:8px;box-sizing:border-box;font-family:ui-monospace,Consolas,monospace;resize:vertical;word-break:break-word;">' + zoneStr.replace(/</g, '&lt;') + '</textarea></label>'
+                        + '<div data-ids-preview="zoneIds" style="margin:-4px 0 8px 0;">' + mqStepIdChipsHTML(zoneStr) + '</div>'
+                        + '<label style="display:block;margin-bottom:8px;">Cartes de l’étape (pool)'
+                        + '<textarea data-field="goodIds" rows="3" spellcheck="false" placeholder="Ex : 3, 4, 5, Tx11 (optionnel)" style="width:100%;min-height:72px;margin-top:2px;font-size:13px;line-height:1.45;padding:8px;box-sizing:border-box;font-family:ui-monospace,Consolas,monospace;resize:vertical;word-break:break-word;">' + String(s.goodIds || '').replace(/</g, '&lt;') + '</textarea></label>'
+                        + '<div data-ids-preview="goodIds" style="margin:-4px 0 8px 0;">' + mqStepIdChipsHTML(s.goodIds) + '</div>'
+                        + '<p style="margin:0 0 8px;font-size:10px;color:#9a3412;">Séparez les IDs par une virgule, un espace ou un retour à la ligne. La saisie reste dans le champ ; les pastilles ci-dessus listent ce qui est reconnu.</p>'
                         + '<div style="margin-top:8px;padding:6px;background:#fff;border:1px dashed #ea580c;border-radius:6px;">'
                         + '<div style="font-weight:bold;margin-bottom:4px;">Associations zone → cartes (validation verte)</div>'
                         + '<p style="margin:0 0 4px;font-size:10px;color:#64748b;">Cochez une ou plusieurs cartes acceptées par zone. C’est ce qui fait passer la zone au vert en mode élève.</p>'
-                        + zoneMapHtml
+                        + '<div data-step-zonemap>' + zoneMapHtml + '</div>'
                         + '</div>'
                         + '</div>'
                         + '<label data-step-link-fields style="font-size:11px;display:' + (showLink ? 'block' : 'none') + ';margin-top:8px;">Flèches à valider (id&gt;id) — fin d’étape Relier'
                         + '<textarea data-field="linkPairs" rows="2" placeholder="Ex: 1&gt;3" style="width:100%;font-size:11px;padding:4px;box-sizing:border-box;font-family:monospace;">' + linksToText(s.linkPairs).replace(/</g, '&lt;') + '</textarea></label>'
                         + '</div>';
                 }).join('');
-                list.querySelectorAll('input,textarea,select').forEach((inp) => {
-                    const sync = () => {
+                const persist = () => {
+                    const g2 = state.dndGames[gameId];
+                    if (!g2) return;
+                    g2.steps = mqReadStepsFromUI(n);
+                    g2.enableSteps = true;
+                    mqApplyStepZoneMaps(gameId);
+                    g2.enableLinking = mqGameNeedsRelier(g2);
+                    if (g2.gameType === 'linking') g2.gameType = 'exact';
+                    if (window.MqDndEngine && MqDndEngine.effectiveAllowedLinks) {
+                        g2.allowedLinks = MqDndEngine.effectiveAllowedLinks(g2);
+                    }
+                    scheduleSaveLocal();
+                };
+                if (list.dataset.stepBound !== '1') {
+                    list.dataset.stepBound = '1';
+                    let zoneMapTimer = null;
+                    list.addEventListener('input', (e) => {
+                        const inp = e.target && e.target.closest && e.target.closest('input, textarea, select');
+                        if (!inp || !list.contains(inp)) return;
                         try {
-                            const g2 = state.dndGames[gameId];
-                            if (!g2) return;
-                            g2.steps = mqReadStepsFromUI(n);
-                            g2.enableSteps = true;
-                            mqApplyStepZoneMaps(gameId);
-                            g2.enableLinking = mqGameNeedsRelier(g2);
-                            if (g2.gameType === 'linking') g2.gameType = 'exact';
-                            if (window.MqDndEngine && MqDndEngine.effectiveAllowedLinks) {
-                                g2.allowedLinks = MqDndEngine.effectiveAllowedLinks(g2);
-                            }
-                            scheduleSaveLocal();
+                            persist();
                             const field = inp.getAttribute('data-field') || '';
-                            if (field === 'activity') {
-                                renderStepsList(gameId);
-                                return;
-                            }
                             if (field === 'zoneIds' || field === 'goodIds') {
-                                renderStepsList(gameId);
+                                mqUpdateStepIdChips(inp);
+                                const card = inp.closest('[data-step-idx]');
+                                clearTimeout(zoneMapTimer);
+                                zoneMapTimer = setTimeout(() => {
+                                    if (card) mqRefreshStepZoneMap(gameId, card);
+                                    renderDropzonesList(gameId);
+                                    renderDndGamesPreview();
+                                }, 350);
                                 return;
                             }
                             if (field.indexOf('zoneMap-') === 0) {
                                 const lbl = inp.closest('.mq-step-zmap-card');
                                 if (lbl) lbl.classList.toggle('on', !!inp.checked);
                             }
+                            if (field === 'title' || field === 'instructions' || field === 'linkPairs') return;
                             renderDropzonesList(gameId);
                             renderDndGamesPreview();
-                        } catch (e) {}
-                    };
-                    inp.addEventListener('change', sync);
-                    if (inp.tagName !== 'SELECT') inp.addEventListener('input', sync);
-                });
+                        } catch (err) {}
+                    });
+                    list.addEventListener('change', (e) => {
+                        const inp = e.target && e.target.closest && e.target.closest('input, textarea, select');
+                        if (!inp || !list.contains(inp)) return;
+                        try {
+                            persist();
+                            const field = inp.getAttribute('data-field') || '';
+                            if (field === 'activity') {
+                                renderStepsList(gameId);
+                                return;
+                            }
+                            if (field === 'zoneIds' || field === 'goodIds') {
+                                const card = inp.closest('[data-step-idx]');
+                                if (card) mqRefreshStepZoneMap(gameId, card);
+                                renderDropzonesList(gameId);
+                                renderDndGamesPreview();
+                                return;
+                            }
+                            renderDropzonesList(gameId);
+                            renderDndGamesPreview();
+                        } catch (err) {}
+                    });
+                }
             }
             // GESTION IMPORT / EXPORT COMPLET DU PROJET
             // ---------------------------------------------------------
