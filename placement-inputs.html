@@ -1308,20 +1308,45 @@
             display:block; font-size:8px; color:#94a3b8; line-height:1;
         }
         .mq-dz-card.on { border-color:#1565c0; background:#e3f2fd; }
-        .mq-step-zmap-row { margin-top:8px; padding:6px; background:#fff; border:1px dashed #fdba74; border-radius:6px; }
-        .mq-step-zmap-row > .mq-step-zmap-label { font-size:11px; font-weight:bold; color:#9a3412; margin-bottom:4px; }
-        .mq-step-zmap-cards { display:flex; flex-wrap:wrap; gap:6px; }
-        .mq-step-zmap-card {
-            width:72px; min-height:56px; text-align:center; font-size:10px; border:1px solid #ccc;
-            border-radius:6px; padding:4px 3px; background:#fafafa; cursor:pointer;
-            display:flex; flex-direction:column; align-items:center; gap:2px; box-sizing:border-box;
+        .mq-zmap { display:flex; flex-direction:column; gap:4px; }
+        .mq-zmap-hint { margin:0 0 6px; font-size:10px; color:#9a3412; line-height:1.35; }
+        .mq-zmap-row { border:1px solid #fed7aa; border-radius:8px; background:#fff; overflow:hidden; }
+        .mq-zmap-row.open { border-color:#ea580c; }
+        .mq-zmap-toggle {
+            display:flex; align-items:center; gap:8px; width:100%; text-align:left;
+            border:none; background:#fff7ed; padding:8px 10px; cursor:pointer; font-size:12px;
+            color:#9a3412; box-sizing:border-box;
         }
-        .mq-step-zmap-card.on { border-color:#1565c0; background:#e3f2fd; }
-        .mq-step-zmap-card img { width:36px; height:36px; object-fit:contain; }
-        .mq-step-zmap-card .mq-dz-thumb-text {
-            width:100%; min-height:36px; max-height:44px; display:flex; align-items:center; justify-content:center;
-            padding:2px; box-sizing:border-box; border-radius:4px; background:#ffe082;
-            font-size:9px; line-height:1.15; overflow:hidden;
+        .mq-zmap-toggle:hover { background:#ffedd5; }
+        .mq-zmap-toggle-id { flex:0 0 auto; font-weight:800; }
+        .mq-zmap-summary { flex:1; display:flex; flex-wrap:wrap; gap:3px; min-width:0; align-items:center; }
+        .mq-zmap-mini {
+            display:inline-flex; align-items:center; padding:1px 7px; border-radius:999px;
+            background:#ffedd5; border:1px solid #fdba74; font-size:10px; font-weight:700;
+            font-family:ui-monospace,Consolas,monospace; color:#9a3412; max-width:9em;
+            overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+        }
+        .mq-zmap-empty { color:#94a3b8; font-size:10px; font-style:italic; }
+        .mq-zmap-count { flex:0 0 auto; font-size:10px; color:#c2410c; font-weight:600; }
+        .mq-zmap-chevron { flex:0 0 auto; color:#c2410c; font-size:12px; }
+        .mq-zmap-picker { display:flex; flex-wrap:wrap; gap:4px; padding:8px; background:#fff; border-top:1px solid #fed7aa; }
+        .mq-zmap-picker[hidden] { display:none !important; }
+        .mq-zmap-pill {
+            display:inline-flex; align-items:center; gap:5px; padding:3px 8px 3px 4px;
+            border:1px solid #e2e8f0; border-radius:8px; background:#f8fafc; cursor:pointer;
+            font-size:11px; line-height:1.2; max-width:100%; box-sizing:border-box;
+        }
+        .mq-zmap-pill.on { border-color:#2563eb; background:#dbeafe; }
+        .mq-zmap-pill input { margin:0; flex:0 0 auto; }
+        .mq-zmap-pill img { width:20px; height:20px; object-fit:contain; display:block; flex:0 0 auto; }
+        .mq-zmap-pill .mq-dz-thumb-text {
+            width:20px; height:20px; min-height:20px; max-height:20px; font-size:8px; padding:0;
+            display:flex; align-items:center; justify-content:center; border-radius:4px; background:#ffe082;
+            overflow:hidden; flex:0 0 auto;
+        }
+        .mq-zmap-pill-id { font-family:ui-monospace,Consolas,monospace; font-weight:700; color:#334155; }
+        .mq-zmap-pill-label {
+            max-width:7.5em; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#64748b; font-size:10px;
         }
         .mq-dz-card.is-dup { border-color:#dc2626; background:#fef2f2; box-shadow:0 0 0 1px #fecaca; }
         .mq-dz-card.is-dup .mq-dz-card-id { color:#b91c1c; font-weight:700; }
@@ -13641,7 +13666,7 @@
             function mqStepZoneMapHTML(gameId, step, stepIndex) {
                 const zoneIds = Array.isArray(step.zoneIds) ? step.zoneIds.map(String) : [];
                 if (!zoneIds.length) {
-                    return '<p style="margin:4px 0 0;font-size:10px;color:#9a3412;">Indiquez d’abord les IDs de zones ci-dessus (badges sur le canvas).</p>';
+                    return '<p class="mq-zmap-hint">Indiquez d’abord les IDs de zones ci-dessus (badges sur le canvas).</p>';
                 }
                 const map = mqInferStepZoneMap(gameId, step);
                 const opts = mqStepDraggableOptions(gameId, step);
@@ -13651,34 +13676,83 @@
                     const id = String(d && d.id != null ? d.id : '');
                     if (id) dragById[id] = d;
                 });
-                return zoneIds.map((zid) => {
+                if (!opts.length) {
+                    return '<p class="mq-zmap-hint">Aucune carte dans le pool — renseignez « Cartes de l’étape » ou ajoutez des images.</p>';
+                }
+                const thumbHtml = (c, label) => {
+                    const safeLabel = mqEscapeHtmlLite(label);
+                    if (c && c.kind === 'text') {
+                        return '<div class="mq-dz-thumb-text" title="' + safeLabel + '">' + safeLabel + '</div>';
+                    }
+                    if (c && c.src && String(c.src).indexOf('idb:') !== 0) {
+                        return '<img src="' + c.src + '" alt="' + safeLabel + '">';
+                    }
+                    return '<div class="mq-dz-thumb-text" style="background:#e2e8f0;" title="' + safeLabel + '">' + safeLabel + '</div>';
+                };
+                const summaryHtml = (accepted) => {
+                    if (!accepted.length) return '<span class="mq-zmap-empty">Aucune carte</span>';
+                    return accepted.map((id) => {
+                        const c = dragById[String(id)];
+                        const label = mqDraggableCardLabel(c || { id: id });
+                        return '<span class="mq-zmap-mini" title="' + mqEscapeHtmlLite(label) + ' (ID ' + mqEscapeHtmlLite(String(id)) + ')">' + mqEscapeHtmlLite(String(id)) + '</span>';
+                    }).join('');
+                };
+                const rows = zoneIds.map((zid, zi) => {
                     const accepted = mqNormalizeZoneMapIds(map[String(zid)]);
-                    const safeZid = String(zid).replace(/"/g, '&quot;').replace(/</g, '&lt;');
-                    const cardsHtml = opts.map((id) => {
+                    const safeZid = mqEscapeHtmlLite(String(zid)).replace(/"/g, '&quot;');
+                    const open = zi === 0;
+                    const pills = opts.map((id) => {
                         const c = dragById[id];
                         const cid = String(id);
                         const on = accepted.indexOf(cid) >= 0;
                         const safeId = mqEscapeHtmlLite(cid);
                         const label = mqDraggableCardLabel(c || { id: cid });
                         const safeLabel = mqEscapeHtmlLite(label);
-                        let thumb;
-                        if (c && c.kind === 'text') {
-                            thumb = '<div class="mq-dz-thumb-text" title="' + safeLabel + '">' + safeLabel + '</div>';
-                        } else if (c && c.src && String(c.src).indexOf('idb:') !== 0) {
-                            thumb = '<img src="' + c.src + '" alt="' + safeLabel + '">';
-                        } else {
-                            thumb = '<div class="mq-dz-thumb-text" style="background:#e2e8f0;">' + safeLabel + '</div>';
-                        }
-                        return '<label class="mq-step-zmap-card' + (on ? ' on' : '') + '" title="' + safeLabel + ' (ID ' + safeId + ')">'
-                            + thumb
-                            + '<input type="checkbox" data-field="zoneMap-' + safeZid + '" data-card="' + safeId + '" ' + (on ? 'checked' : '') + '>'
-                            + '<span style="font-size:9px;">ID ' + safeId + '</span></label>';
+                        return '<label class="mq-zmap-pill' + (on ? ' on' : '') + '" title="' + safeLabel + ' (ID ' + safeId + ')">'
+                            + '<input type="checkbox" data-field="zoneMap-' + safeZid + '" data-card="' + safeId + '"' + (on ? ' checked' : '') + '>'
+                            + thumbHtml(c, label)
+                            + '<span class="mq-zmap-pill-id">' + safeId + '</span>'
+                            + (safeLabel && safeLabel !== safeId ? '<span class="mq-zmap-pill-label">' + safeLabel + '</span>' : '')
+                            + '</label>';
                     }).join('');
-                    return '<div class="mq-step-zmap-row">'
-                        + '<div class="mq-step-zmap-label">Zone <strong>' + safeZid + '</strong> → cartes acceptées</div>'
-                        + '<div class="mq-step-zmap-cards">' + (cardsHtml || '<span style="font-size:10px;color:#999;">Aucune carte dans le pool — renseignez « Cartes de l’étape » ou ajoutez des images.</span>') + '</div>'
+                    const nSel = accepted.length;
+                    return '<div class="mq-zmap-row' + (open ? ' open' : '') + '" data-zmap-zone="' + safeZid + '">'
+                        + '<button type="button" class="mq-zmap-toggle" aria-expanded="' + (open ? 'true' : 'false') + '">'
+                        + '<span class="mq-zmap-toggle-id">Zone ' + safeZid + '</span>'
+                        + '<span class="mq-zmap-summary" data-zmap-summary>' + summaryHtml(accepted) + '</span>'
+                        + '<span class="mq-zmap-count" data-zmap-count>' + (nSel ? (nSel + ' carte' + (nSel > 1 ? 's' : '')) : '') + '</span>'
+                        + '<span class="mq-zmap-chevron" aria-hidden="true">' + (open ? '▾' : '▸') + '</span>'
+                        + '</button>'
+                        + '<div class="mq-zmap-picker"' + (open ? '' : ' hidden') + '>' + pills + '</div>'
                         + '</div>';
                 }).join('');
+                return '<p class="mq-zmap-hint">Une ligne = une zone. Cliquez la zone pour choisir ses cartes (la liste n’est ouverte que pour une zone à la fois).</p>'
+                    + '<div class="mq-zmap">' + rows + '</div>';
+            }
+            function mqSyncZmapRowSummary(row, gameId) {
+                if (!row) return;
+                const g = state.dndGames[gameId];
+                const dragById = {};
+                ((g && g.draggables) || []).forEach((d) => {
+                    const id = String(d && d.id != null ? d.id : '');
+                    if (id) dragById[id] = d;
+                });
+                const checked = Array.from(row.querySelectorAll('input[type="checkbox"][data-card]:checked'));
+                const host = row.querySelector('[data-zmap-summary]');
+                const count = row.querySelector('[data-zmap-count]');
+                if (host) {
+                    if (!checked.length) {
+                        host.innerHTML = '<span class="mq-zmap-empty">Aucune carte</span>';
+                    } else {
+                        host.innerHTML = checked.map((inp) => {
+                            const id = String(inp.getAttribute('data-card') || '');
+                            const c = dragById[id];
+                            const label = mqDraggableCardLabel(c || { id: id });
+                            return '<span class="mq-zmap-mini" title="' + mqEscapeHtmlLite(label) + ' (ID ' + mqEscapeHtmlLite(id) + ')">' + mqEscapeHtmlLite(id) + '</span>';
+                        }).join('');
+                    }
+                }
+                if (count) count.textContent = checked.length ? (checked.length + ' carte' + (checked.length > 1 ? 's' : '')) : '';
             }
             /** Outils Relier (zones SVG, mode, tooltip) : visibles dès que « Jeu par étapes » est coché. */
             function mqSyncLinkingToolsVisibility(n) {
@@ -13880,8 +13954,7 @@
                         + '<div data-ids-preview="goodIds" style="margin:-4px 0 8px 0;">' + mqStepIdChipsHTML(s.goodIds) + '</div>'
                         + '<p style="margin:0 0 8px;font-size:10px;color:#9a3412;">Séparez les IDs par une virgule, un espace ou un retour à la ligne. La saisie reste dans le champ ; les pastilles ci-dessus listent ce qui est reconnu.</p>'
                         + '<div style="margin-top:8px;padding:6px;background:#fff;border:1px dashed #ea580c;border-radius:6px;">'
-                        + '<div style="font-weight:bold;margin-bottom:4px;">Associations zone → cartes (validation verte)</div>'
-                        + '<p style="margin:0 0 4px;font-size:10px;color:#64748b;">Cochez une ou plusieurs cartes acceptées par zone. C’est ce qui fait passer la zone au vert en mode élève.</p>'
+                        + '<div style="font-weight:bold;margin-bottom:4px;">Associations zone → cartes</div>'
                         + '<div data-step-zonemap>' + zoneMapHtml + '</div>'
                         + '</div>'
                         + '</div>'
@@ -13923,8 +13996,10 @@
                                 return;
                             }
                             if (field.indexOf('zoneMap-') === 0) {
-                                const lbl = inp.closest('.mq-step-zmap-card');
-                                if (lbl) lbl.classList.toggle('on', !!inp.checked);
+                                const pill = inp.closest('.mq-zmap-pill');
+                                if (pill) pill.classList.toggle('on', !!inp.checked);
+                                const row = inp.closest('.mq-zmap-row');
+                                if (row) mqSyncZmapRowSummary(row, gameId);
                             }
                             if (field === 'title' || field === 'instructions' || field === 'linkPairs') return;
                             renderDropzonesList(gameId);
@@ -13951,6 +14026,32 @@
                             renderDropzonesList(gameId);
                             renderDndGamesPreview();
                         } catch (err) {}
+                    });
+                    list.addEventListener('click', (e) => {
+                        const btn = e.target && e.target.closest && e.target.closest('.mq-zmap-toggle');
+                        if (!btn || !list.contains(btn)) return;
+                        e.preventDefault();
+                        const wrap = btn.closest('.mq-zmap');
+                        const row = btn.closest('.mq-zmap-row');
+                        if (!wrap || !row) return;
+                        const wasOpen = btn.getAttribute('aria-expanded') === 'true';
+                        wrap.querySelectorAll('.mq-zmap-row').forEach((r) => {
+                            r.classList.remove('open');
+                            const b = r.querySelector('.mq-zmap-toggle');
+                            const p = r.querySelector('.mq-zmap-picker');
+                            const ch = r.querySelector('.mq-zmap-chevron');
+                            if (b) b.setAttribute('aria-expanded', 'false');
+                            if (p) p.hidden = true;
+                            if (ch) ch.textContent = '▸';
+                        });
+                        if (!wasOpen) {
+                            row.classList.add('open');
+                            btn.setAttribute('aria-expanded', 'true');
+                            const p = row.querySelector('.mq-zmap-picker');
+                            const ch = row.querySelector('.mq-zmap-chevron');
+                            if (p) p.hidden = false;
+                            if (ch) ch.textContent = '▾';
+                        }
                     });
                 }
             }

@@ -592,6 +592,9 @@ test('saisie IDs d’étape : textarea + pastilles, pas de rerender à chaque fr
   assert.ok(html.includes('textarea data-field="goodIds"'));
   assert.ok(html.includes('mqStepIdChipsHTML'));
   assert.ok(html.includes('mqRefreshStepZoneMap'));
+  assert.ok(html.includes('mq-zmap-toggle'));
+  assert.ok(html.includes('mq-zmap-pill'));
+  assert.ok(!html.includes('mq-step-zmap-card'));
   assert.ok(html.includes('data-ids-preview="zoneIds"'));
   assert.ok(!/if \(field === 'zoneIds' \|\| field === 'goodIds'\) \{\s*renderStepsList/.test(html));
 });
