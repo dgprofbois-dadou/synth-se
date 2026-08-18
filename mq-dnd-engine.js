@@ -2080,7 +2080,7 @@
     }
 
     function findOrig(id) {
-      return sourceRoot().querySelector('.draggable[data-id="' + cssEscape(id) + '"]');
+      return sourceRoot().querySelector('.draggable[data-id="' + cssEscape(id) + '"]:not(.dnd-placed)');
     }
 
     function cssEscape(id) {
@@ -2183,6 +2183,10 @@
       clone.style.padding = '2px';
       clone.style.pointerEvents = 'auto';
       clone.style.overflow = 'visible';
+      clone.style.opacity = '1';
+      clone.style.filter = 'none';
+      clone.style.mixBlendMode = 'normal';
+      clone.style.webkitFilter = 'none';
       var img = clone.tagName === 'IMG' ? clone : clone.querySelector('img');
       if (img) {
         img.style.position = 'static';
@@ -2194,6 +2198,11 @@
         img.style.maxHeight = '100%';
         img.style.objectFit = 'contain';
         img.style.flexShrink = '0';
+        img.style.opacity = '1';
+        img.style.filter = 'none';
+        img.style.webkitFilter = 'none';
+        img.style.mixBlendMode = 'normal';
+        img.classList.remove('used');
       }
     }
 
@@ -2300,7 +2309,7 @@
 
       var correctHere = isCardAcceptedInZone(game, zcfg, id);
       var clone = orig.cloneNode(true);
-      clone.classList.remove('draggable', 'used', 'dnd-selected', 'dnd-retry-movable');
+      clone.classList.remove('draggable', 'used', 'dnd-selected', 'dnd-retry-movable', 'png-wrap');
       clone.classList.add('dnd-placed');
       clone.classList.add('dnd-link-node');
       clone.removeAttribute('draggable');
