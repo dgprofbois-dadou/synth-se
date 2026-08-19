@@ -3025,6 +3025,119 @@
     };
   }
 
+  /**
+   * Pendant le drag HTML5 d’une carte DnD : si le pointeur approche un bord
+   * du viewport, défile le plan (pan) dans cette direction.
+   * opts.getRect() → DOMRect du viewport visible
+   * opts.panBy(dx, dy) → applique le décalage écran (px)
+   */
+  function attachDragEdgePan(opts) {
+    opts = opts || {};
+    var getRect = opts.getRect;
+    var panBy = opts.panBy;
+    var isCard = opts.isCardDrag;
+    var margin = opts.margin != null ? Number(opts.margin) : 88;
+    var maxSpeed = opts.maxSpeed != null ? Number(opts.maxSpeed) : 18;
+    if (typeof getRect !== 'function' || typeof panBy !== 'function') {
+      return { detach: function () {} };
+    }
+    if (margin < 24) margin = 24;
+    if (maxSpeed < 4) maxSpeed = 4;
+
+    var active = false;
+    var px = 0;
+    var py = 0;
+    var havePos = false;
+    var raf = 0;
+    var lastTs = 0;
+
+    function defaultIsCard(e) {
+      var t = e && e.target;
+      if (!t || !t.closest) return false;
+      return !!t.closest('.drag-game .draggable, .drag-game .dnd-placed, .drag-game .png-wrap, .dnd-game-container .draggable, .dnd-game-container .png-wrap');
+    }
+
+    function edgeDelta(dist) {
+      if (dist >= margin) return 0;
+      if (dist < 0) dist = 0;
+      var u = 1 - dist / margin;
+      return u * u * maxSpeed;
+    }
+
+    function tick(ts) {
+      raf = 0;
+      if (!active) return;
+      if (!lastTs) lastTs = ts;
+      var dt = Math.min(32, ts - lastTs) / 16.67;
+      lastTs = ts;
+      if (havePos) {
+        var rect = getRect();
+        if (rect && rect.width > 8 && rect.height > 8) {
+          var dx = 0;
+          var dy = 0;
+          var left = px - rect.left;
+          var right = rect.right - px;
+          var top = py - rect.top;
+          var bottom = rect.bottom - py;
+          if (left < margin) dx = edgeDelta(left);
+          else if (right < margin) dx = -edgeDelta(right);
+          if (top < margin) dy = edgeDelta(top);
+          else if (bottom < margin) dy = -edgeDelta(bottom);
+          if (dx || dy) panBy(dx * dt, dy * dt);
+        }
+      }
+      raf = requestAnimationFrame(tick);
+    }
+
+    function start(e) {
+      var ok = typeof isCard === 'function' ? isCard(e) : defaultIsCard(e);
+      if (!ok) return;
+      active = true;
+      lastTs = 0;
+      havePos = e.clientX != null && (e.clientX !== 0 || e.clientY !== 0);
+      if (havePos) {
+        px = e.clientX;
+        py = e.clientY;
+      }
+      if (!raf) raf = requestAnimationFrame(tick);
+    }
+
+    function onMove(e) {
+      if (!active) return;
+      if (e.clientX === 0 && e.clientY === 0) return;
+      px = e.clientX;
+      py = e.clientY;
+      havePos = true;
+    }
+
+    function stop() {
+      active = false;
+      havePos = false;
+      lastTs = 0;
+      if (raf) {
+        cancelAnimationFrame(raf);
+        raf = 0;
+      }
+    }
+
+    document.addEventListener('dragstart', start, true);
+    document.addEventListener('dragover', onMove, true);
+    document.addEventListener('drag', onMove, true);
+    document.addEventListener('dragend', stop, true);
+    document.addEventListener('drop', stop, true);
+
+    return {
+      detach: function () {
+        stop();
+        document.removeEventListener('dragstart', start, true);
+        document.removeEventListener('dragover', onMove, true);
+        document.removeEventListener('drag', onMove, true);
+        document.removeEventListener('dragend', stop, true);
+        document.removeEventListener('drop', stop, true);
+      }
+    };
+  }
+
   return {
     MQ_DND_MAX_ZONES: MQ_DND_MAX_ZONES,
     GAME_TYPES: GAME_TYPES,
@@ -3055,6 +3168,7 @@
     initPlayableDndGame: initPlayableDndGame,
     initPlayableLinkingGame: initPlayableLinkingGame,
     attachLinkingFeature: attachLinkingFeature,
+    attachDragEdgePan: attachDragEdgePan,
     collectPlacements: collectPlacements,
     hasLinkingFeature: hasLinkingFeature,
     gameNeedsRelier: gameNeedsRelier,

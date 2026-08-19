@@ -7705,6 +7705,17 @@
             window.addEventListener('dragstart', () => {
                 mqCancelPendingPan();
             }, true);
+
+            if (window.MqDndEngine && MqDndEngine.attachDragEdgePan && viewport) {
+                MqDndEngine.attachDragEdgePan({
+                    getRect: function () { return viewport.getBoundingClientRect(); },
+                    panBy: function (dx, dy) {
+                        state.tx += dx;
+                        state.ty += dy;
+                        applyTransform({ skipChrome: true, skipZoomSlider: true });
+                    }
+                });
+            }
             viewport.addEventListener('pointercancel', () => {
                 mqCancelPendingPan();
                 if (_panRaf) {

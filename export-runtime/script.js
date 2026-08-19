@@ -1000,6 +1000,17 @@
     });
 
     window.__panZoomFit = fit;
+
+    if (window.MqDndEngine && MqDndEngine.attachDragEdgePan) {
+      MqDndEngine.attachDragEdgePan({
+        getRect: function () { return canvasContainer.getBoundingClientRect(); },
+        panBy: function (dx, dy) {
+          offsetX += dx;
+          offsetY += dy;
+          scheduleApply();
+        }
+      });
+    }
   }
 
   // -----------------------

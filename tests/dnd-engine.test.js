@@ -213,6 +213,9 @@ test('mqBuildExportDndGameHtml et PAGE 2 dans placement-inputs.html', () => {
 });
 
 console.log('\n=== Test 9 — tactile (API sélection) ===');
+test('attachDragEdgePan est exposé', () => {
+  assert.strictEqual(typeof Engine.attachDragEdgePan, 'function');
+});
 test('initPlayableDndGame expose selectCard / place', () => {
   assert.strictEqual(typeof Engine.initPlayableDndGame, 'function');
   // Simulation DOM minimale
