@@ -2730,8 +2730,8 @@
         img.style.position = 'static';
         img.style.left = 'auto';
         img.style.top = 'auto';
-        img.style.width = 'auto';
-        img.style.height = 'auto';
+        img.style.width = '100%';
+        img.style.height = '100%';
         img.style.maxWidth = '100%';
         img.style.maxHeight = '100%';
         img.style.objectFit = 'contain';
