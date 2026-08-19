@@ -625,6 +625,19 @@ test('UI Relier uniquement par étape dans placement-inputs.html', () => {
   assert.ok(!html.includes('mq-dnd-global-pairs'));
 });
 
+test('UI étapes repliables dans placement-inputs.html', () => {
+  const html = fs.readFileSync(path.join(__dirname, '..', 'placement-inputs.html'), 'utf8');
+  assert.ok(html.includes('mq-dnd-step-toggle'));
+  assert.ok(html.includes('mq-dnd-step-body'));
+  assert.ok(html.includes('mq-dnd-step-head'));
+  assert.ok(html.includes('Tout replier'));
+  assert.ok(html.includes('Tout déplier'));
+  assert.ok(html.includes('mqToggleStepCard'));
+  assert.ok(html.includes('mqCaptureOpenStepIndices'));
+  assert.ok(html.includes('data-open'));
+  assert.ok(html.includes('step-fold-v1'));
+});
+
 test('saisie IDs d’étape : textarea + pastilles, pas de rerender à chaque frappe', () => {
   const html = fs.readFileSync(path.join(__dirname, '..', 'placement-inputs.html'), 'utf8');
   assert.ok(html.includes('textarea data-field="zoneIds"'));

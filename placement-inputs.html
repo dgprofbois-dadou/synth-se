@@ -1348,6 +1348,79 @@
         .mq-zmap-pill-label {
             max-width:7.5em; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#64748b; font-size:10px;
         }
+        /* Étapes DnD : cartes repliables dans le panneau gauche */
+        .mq-dnd-step-card {
+            border: 1px solid #cfd6df;
+            border-radius: 8px;
+            margin-bottom: 8px;
+            background: #f8fafc;
+            overflow: hidden;
+        }
+        .mq-dnd-step-card[data-open="1"] {
+            border-color: #93c5fd;
+            background: #f8fbff;
+        }
+        .mq-dnd-step-head {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+            padding: 6px 8px;
+            cursor: pointer;
+        }
+        .mq-dnd-step-toggle {
+            flex: 0 0 auto;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            border: none;
+            background: transparent;
+            cursor: pointer;
+            padding: 2px 4px 2px 0;
+            font-size: 12px;
+            color: #334155;
+            min-width: 0;
+        }
+        .mq-dnd-step-toggle:hover { color: #1d4ed8; }
+        .mq-dnd-step-chevron { flex: 0 0 auto; color: #64748b; font-size: 11px; width: 10px; }
+        .mq-dnd-step-kind {
+            font-size: 10px;
+            padding: 2px 6px;
+            border-radius: 999px;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+        .mq-dnd-step-kind.is-dnd { background: #ffedd5; color: #9a3412; }
+        .mq-dnd-step-kind.is-link { background: #dbeafe; color: #1e40af; }
+        .mq-dnd-step-kind.is-both { background: #ede9fe; color: #5b21b6; }
+        .mq-dnd-step-body { display: none; padding: 0 8px 8px; }
+        .mq-dnd-step-card[data-open="1"] .mq-dnd-step-body { display: block; }
+        .mq-dnd-steps-fold-btn {
+            font-size: 10px !important;
+            padding: 3px 8px !important;
+            border: 1px solid #cbd5e1 !important;
+            border-radius: 6px !important;
+            background: #fff !important;
+            color: #475569 !important;
+            cursor: pointer;
+            width: auto !important;
+        }
+        .mq-dnd-steps-fold-btn:hover {
+            background: #f1f5f9 !important;
+            border-color: #94a3b8 !important;
+        }
+        #left .mq-dnd-step-head input[data-field="title"] {
+            width: auto !important;
+            flex: 1 1 auto !important;
+            min-width: 0 !important;
+            height: 28px !important;
+            font-size: 12px !important;
+            padding: 0 8px !important;
+        }
+        #left .mq-dnd-step-head button[title],
+        #left .mq-dnd-step-head button:not(.mq-dnd-step-toggle) {
+            flex: 0 0 auto;
+            width: auto;
+        }
         .mq-dz-card.is-dup { border-color:#dc2626; background:#fef2f2; box-shadow:0 0 0 1px #fecaca; }
         .mq-dz-card.is-dup .mq-dz-card-id { color:#b91c1c; font-weight:700; }
         .mq-dz-dup-banner {
@@ -13839,15 +13912,19 @@
                 const es = document.getElementById('dndGame' + n + 'EnableSteps');
                 if (es) es.checked = true;
                 mqToggleStepsUI(n, true);
-                renderStepsList(gameId);
+                renderStepsList(gameId, { openIndex: g.steps.length - 1, exclusive: true });
                 scheduleSaveLocal();
             };
             window.removeDndStep = function (gameId, index) {
                 const g = state.dndGames[gameId];
                 if (!g || !g.steps) return;
                 if (!confirm('Supprimer cette étape ?')) return;
+                const n = mqGameNum(gameId);
+                const list = document.getElementById('dndGame' + n + 'StepsList');
+                const captured = mqCaptureOpenStepIndices(list) || [];
                 g.steps.splice(index, 1);
-                renderStepsList(gameId);
+                const remapped = captured.filter((i) => i !== index).map((i) => (i > index ? i - 1 : i));
+                renderStepsList(gameId, { openIndices: remapped });
                 scheduleSaveLocal();
             };
             window.moveDndStep = function (gameId, index, dir) {
@@ -13855,11 +13932,25 @@
                 if (!g || !g.steps) return;
                 const j = index + dir;
                 if (j < 0 || j >= g.steps.length) return;
+                const n = mqGameNum(gameId);
+                const list = document.getElementById('dndGame' + n + 'StepsList');
+                const captured = mqCaptureOpenStepIndices(list) || [];
                 const tmp = g.steps[index];
                 g.steps[index] = g.steps[j];
                 g.steps[j] = tmp;
-                renderStepsList(gameId);
+                const remapped = captured.map((i) => {
+                    if (i === index) return j;
+                    if (i === j) return index;
+                    return i;
+                });
+                renderStepsList(gameId, { openIndices: remapped });
                 scheduleSaveLocal();
+            };
+            window.mqSetAllDndStepsOpen = function (gameId, open) {
+                const n = mqGameNum(gameId);
+                const list = document.getElementById('dndGame' + n + 'StepsList');
+                if (!list) return;
+                mqApplyStepOpenState(list, !!open);
             };
             function mqParseStepIdList(raw) {
                 return String(raw || '').split(/[,;\s]+/).map((s) => s.trim()).filter(Boolean);
@@ -13891,7 +13982,59 @@
                 if (!step) return;
                 host.innerHTML = mqStepZoneMapHTML(gameId, step, idx);
             }
-            function renderStepsList(gameId) {
+            function mqCaptureOpenStepIndices(list) {
+                if (!list) return null;
+                const cards = list.querySelectorAll('.mq-dnd-step-card[data-step-idx]');
+                if (!cards.length) return null;
+                const open = [];
+                cards.forEach((card) => {
+                    if (card.getAttribute('data-open') === '1') {
+                        const i = parseInt(card.getAttribute('data-step-idx'), 10);
+                        if (!isNaN(i)) open.push(i);
+                    }
+                });
+                return open;
+            }
+            function mqStepCardShouldOpen(index, opts, captured) {
+                if (opts && opts.exclusive && typeof opts.openIndex === 'number') {
+                    return index === opts.openIndex;
+                }
+                if (opts && opts.openIndices) {
+                    const arr = Array.from(opts.openIndices);
+                    if (typeof opts.openIndex === 'number' && arr.indexOf(opts.openIndex) < 0) arr.push(opts.openIndex);
+                    return arr.indexOf(index) >= 0;
+                }
+                if (captured) return captured.indexOf(index) >= 0;
+                if (opts && typeof opts.openIndex === 'number') return index === opts.openIndex;
+                return index === 0;
+            }
+            function mqStepActivityMeta(activity) {
+                if (activity === 'linking') return { label: '🔗 Relier', kind: 'is-link' };
+                if (activity === 'both') return { label: '📦🔗 Mixte', kind: 'is-both' };
+                return { label: '📦 Déposer', kind: 'is-dnd' };
+            }
+            function mqApplyStepOpenState(list, openAll) {
+                if (!list) return;
+                const force = arguments.length > 1;
+                list.querySelectorAll('.mq-dnd-step-card').forEach((card) => {
+                    const open = force ? !!openAll : card.getAttribute('data-open') === '1';
+                    card.setAttribute('data-open', open ? '1' : '0');
+                    const toggle = card.querySelector('.mq-dnd-step-toggle');
+                    const ch = card.querySelector('.mq-dnd-step-chevron');
+                    if (toggle) toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+                    if (ch) ch.textContent = open ? '▾' : '▸';
+                });
+            }
+            function mqToggleStepCard(card) {
+                if (!card) return;
+                const open = card.getAttribute('data-open') === '1';
+                card.setAttribute('data-open', open ? '0' : '1');
+                const toggle = card.querySelector('.mq-dnd-step-toggle');
+                const ch = card.querySelector('.mq-dnd-step-chevron');
+                if (toggle) toggle.setAttribute('aria-expanded', open ? 'false' : 'true');
+                if (ch) ch.textContent = open ? '▸' : '▾';
+            }
+            function renderStepsList(gameId, opts) {
                 const n = mqGameNum(gameId);
                 const list = document.getElementById('dndGame' + n + 'StepsList');
                 if (!list) return;
@@ -13902,6 +14045,9 @@
                     list.innerHTML = '<div style="font-size:11px;color:#999;text-align:center;padding:8px;">Aucune étape — cliquez « Ajouter une étape ».</div>';
                     return;
                 }
+                const captured = (opts && (opts.openIndices || opts.exclusive))
+                    ? null
+                    : mqCaptureOpenStepIndices(list);
                 const linksToText = (pairs) => {
                     if (window.MqDndEngine && MqDndEngine.allowedLinksToText) return MqDndEngine.allowedLinksToText(pairs || []);
                     return (pairs || []).map(p => p.from + '>' + p.to).join('\n');
@@ -13923,15 +14069,22 @@
                     const gtExact = stepGt === 'exact' ? ' selected' : '';
                     const gtClass = stepGt === 'classification' ? ' selected' : '';
                     const zoneMapHtml = showDnd ? mqStepZoneMapHTML(gameId, s, index) : '';
+                    const isOpen = mqStepCardShouldOpen(index, opts, captured);
+                    const actMeta = mqStepActivityMeta(activity);
                     return ''
-                        + '<div data-step-idx="' + index + '" class="mq-dnd-step-card" style="border:1px solid #cfd6df;border-radius:8px;padding:8px;margin-bottom:8px;background:#f8fafc;">'
-                        + '<div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;">'
-                        + '<strong style="font-size:12px;">#' + (index + 1) + '</strong>'
+                        + '<div data-step-idx="' + index + '" class="mq-dnd-step-card" data-open="' + (isOpen ? '1' : '0') + '">'
+                        + '<div class="mq-dnd-step-head">'
+                        + '<button type="button" class="mq-dnd-step-toggle" aria-expanded="' + (isOpen ? 'true' : 'false') + '" title="Replier / déplier cette étape">'
+                        + '<span class="mq-dnd-step-chevron">' + (isOpen ? '▾' : '▸') + '</span>'
+                        + '<strong>#' + (index + 1) + '</strong>'
+                        + '<span class="mq-dnd-step-kind ' + actMeta.kind + '">' + actMeta.label + '</span>'
+                        + '</button>'
                         + '<input data-field="title" type="text" value="' + String(s.title || '').replace(/"/g, '&quot;') + '" placeholder="Titre de l’étape" style="flex:1;font-size:12px;padding:4px;">'
                         + '<button type="button" title="Monter" onclick="window.moveDndStep(\'' + gameId + '\',' + index + ',-1)" style="font-size:11px;">↑</button>'
                         + '<button type="button" title="Descendre" onclick="window.moveDndStep(\'' + gameId + '\',' + index + ',1)" style="font-size:11px;">↓</button>'
                         + '<button type="button" onclick="window.removeDndStep(\'' + gameId + '\',' + index + ')" style="font-size:11px;color:#fff;background:#ff4444;border:none;border-radius:4px;padding:2px 6px;">✕</button>'
                         + '</div>'
+                        + '<div class="mq-dnd-step-body">'
                         + '<label style="font-size:11px;font-weight:bold;display:block;">Consigne (affichée pendant cette étape)</label>'
                         + '<textarea data-field="instructions" rows="2" placeholder="Texte affiché pendant cette étape…" style="width:100%;font-size:12px;padding:6px;box-sizing:border-box;resize:vertical;">' + String(s.instructions || '').replace(/</g, '&lt;') + '</textarea>'
                         + '<div style="margin-top:8px;padding:8px;background:#eef2ff;border:1px solid #c7d2fe;border-radius:8px;">'
@@ -13971,6 +14124,7 @@
                         + '</div>'
                         + '<label data-step-link-fields style="font-size:11px;display:' + (showLink ? 'block' : 'none') + ';margin-top:8px;">Flèches à valider (id&gt;id) — fin d’étape Relier'
                         + '<textarea data-field="linkPairs" rows="2" placeholder="Ex: 1&gt;3" style="width:100%;font-size:11px;padding:4px;box-sizing:border-box;font-family:monospace;">' + linksToText(s.linkPairs).replace(/</g, '&lt;') + '</textarea></label>'
+                        + '</div>'
                         + '</div>';
                 }).join('');
                 const persist = () => {
@@ -14039,6 +14193,13 @@
                         } catch (err) {}
                     });
                     list.addEventListener('click', (e) => {
+                        const head = e.target && e.target.closest && e.target.closest('.mq-dnd-step-head');
+                        if (head && list.contains(head)
+                            && !e.target.closest('input, textarea, select, button:not(.mq-dnd-step-toggle)')) {
+                            e.preventDefault();
+                            mqToggleStepCard(head.closest('.mq-dnd-step-card'));
+                            return;
+                        }
                         const btn = e.target && e.target.closest && e.target.closest('.mq-zmap-toggle');
                         if (!btn || !list.contains(btn)) return;
                         e.preventDefault();
@@ -14986,9 +15147,9 @@
                     const n = mqGameNum(gid);
                     const host = document.getElementById('dndGame' + n + 'AdvancedHost');
                     if (!host) return;
-                    if (!host.dataset.ready || host.dataset.ready !== 'relier-step-only-v1') {
+                    if (!host.dataset.ready || host.dataset.ready !== 'step-fold-v1') {
                         host.innerHTML = mqDndTypeControlsHTML(n);
-                        host.dataset.ready = 'relier-step-only-v1';
+                        host.dataset.ready = 'step-fold-v1';
                         const btn = document.getElementById('btnGenGridGame' + n);
                         if (btn) {
                             btn.addEventListener('click', () => mqGenerateDndGrid(gid, n));
@@ -15036,6 +15197,10 @@
                                 window.addDndStep(gid);
                             });
                         }
+                        const foldBtn = document.getElementById('btnFoldStepsGame' + n);
+                        const unfoldBtn = document.getElementById('btnUnfoldStepsGame' + n);
+                        if (foldBtn) foldBtn.addEventListener('click', () => window.mqSetAllDndStepsOpen(gid, false));
+                        if (unfoldBtn) unfoldBtn.addEventListener('click', () => window.mqSetAllDndStepsOpen(gid, true));
                         host.querySelectorAll('select,input,textarea').forEach((inp) => {
                             const sync = () => {
                                 try { syncDndGamesFromUI(); renderDropzonesList(gid); renderDndGamesPreview(); scheduleSaveLocal(); } catch (e) {}
@@ -17173,8 +17338,14 @@
                     + '<p style="margin:0;font-size:10px;color:#64748b;">Visible jusqu’à la réussite. Pour plusieurs consignes, activez « Jeu par étapes ».</p>'
                     + '</div>'
                     + '<div class="row mq-dnd-steps-only" style="display:none;flex-direction:column;align-items:stretch;gap:6px;">'
-                    + '<label style="width:auto;font-size:12px;font-weight:bold;">Étapes & consignes</label>'
-                    + '<p style="margin:0;font-size:10px;color:#64748b;">Chaque étape a : une consigne, un <strong>type d’activité</strong> (Déposer / Relier / Les deux) et des critères de <strong>fin d’étape</strong>. Relier se règle uniquement ici (plus de type de jeu Relier global). Étape Relier : mode flèche automatique, DnD bloqué. Ex. : étape 1 = Déposer → étape 2 = Relier (clic droit) → étape 3 = Déposer…</p>'
+                    + '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">'
+                    + '<label style="width:auto;font-size:12px;font-weight:bold;margin:0;">Étapes &amp; consignes</label>'
+                    + '<span style="margin-left:auto;display:flex;gap:4px;">'
+                    + '<button type="button" id="btnFoldStepsGame' + n + '" class="mq-dnd-steps-fold-btn">Tout replier</button>'
+                    + '<button type="button" id="btnUnfoldStepsGame' + n + '" class="mq-dnd-steps-fold-btn">Tout déplier</button>'
+                    + '</span>'
+                    + '</div>'
+                    + '<p style="margin:0;font-size:10px;color:#64748b;">Chaque étape se replie : cliquez le chevron (ou l’en-tête) pour n’ouvrir que celle à régler. Titre et type restent visibles une fois repliée. Relier se règle uniquement ici. Ex. : étape 1 = Déposer → étape 2 = Relier → étape 3 = Déposer…</p>'
                     + '<div id="dndGame' + n + 'StepsList"></div>'
                     + '<button type="button" id="btnAddStepGame' + n + '" style="width:100%;font-weight:bold;">+ Ajouter une étape</button>'
                     + '</div>'
