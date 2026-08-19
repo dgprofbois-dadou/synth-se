@@ -524,19 +524,30 @@ test('linkSplinePath produit un tracé SVG lissé', () => {
 
 test('linkAnchorPoint décale les arrivées sur grandes zones', () => {
   const bbox = { x: 100, y: 50, width: 120, height: 80 };
-  const edge = Engine.linkAnchorPoint(0, 90, bbox, 0, 1);
-  assert.ok(Math.abs(edge.x - 100) < 2, 'accrochage sur le bord face à la source');
-  assert.ok(Math.abs(edge.y - 90) < 2);
+  const single = Engine.linkAnchorPoint(0, 90, bbox, 0, 1);
+  assert.ok(Math.abs(single.x - 160) < 2, 'lien unique → centre');
+  assert.ok(Math.abs(single.y - 90) < 2);
   const a0 = Engine.linkAnchorPoint(0, 90, bbox, 0, 3);
   const a2 = Engine.linkAnchorPoint(0, 90, bbox, 2, 3);
   assert.notStrictEqual(Math.round(a0.y), Math.round(a2.y));
 });
 
-test('generateLinkRouteCandidates inclut des zig-zag larges (5+ points)', () => {
-  const cands = Engine.generateLinkRouteCandidates(0, 0, 300, 0, { sign: 1, rank: 1 });
-  assert.ok(cands.length >= 10);
-  const wide = cands.filter((p) => p.length >= 6);
-  assert.ok(wide.length >= 2, 'au moins 2 tracés zig-zag larges');
+test('generateLinkRouteCandidates privilégie des courbes en S parallèles', () => {
+  const cands = Engine.generateLinkRouteCandidates(400, 100, 80, 140, { sign: 1, rank: 1 });
+  assert.ok(cands.length >= 8);
+  const sCurves = cands.filter((p) => p.length === 4);
+  assert.ok(sCurves.length >= 4, 'courbes cubiques parallèles');
+  const wiggly = sCurves.filter((p) => {
+    const dx = p[3].x - p[0].x;
+    const dy = p[3].y - p[0].y;
+    const len = Math.hypot(dx, dy) || 1;
+    const px = -dy / len;
+    const py = dx / len;
+    const s1 = (p[1].x - p[0].x) * px + (p[1].y - p[0].y) * py;
+    const s2 = (p[2].x - p[0].x) * px + (p[2].y - p[0].y) * py;
+    return s1 * s2 < 0;
+  });
+  assert.strictEqual(wiggly.length, 0, 'pas de zig-zag opposé');
 });
 
 test('layoutLinkRoutes reste rapide et minimise les croisements', () => {

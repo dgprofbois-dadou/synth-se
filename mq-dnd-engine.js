@@ -154,9 +154,7 @@
     var cx = bbox.x + bbox.width / 2;
     var cy = bbox.y + bbox.height / 2;
     var area = Math.max(1, bbox.width) * Math.max(1, bbox.height);
-    var minDim = Math.min(bbox.width, bbox.height);
-    var spreadable = total > 1 || area >= 2200 || minDim >= 42;
-    if (!spreadable) return { x: cx, y: cy };
+    if (total <= 1) return { x: cx, y: cy };
 
     var dx = cx - fromX;
     var dy = cy - fromY;
@@ -313,7 +311,48 @@
     return out;
   }
 
-  /** Génère des tracés candidats : spline 1 à 5 points, arcs larges et zig-zag. */
+  function polylineBacktrack(poly) {
+    if (!poly || poly.length < 3) return 0;
+    var x1 = poly[0].x;
+    var y1 = poly[0].y;
+    var x2 = poly[poly.length - 1].x;
+    var y2 = poly[poly.length - 1].y;
+    var dx = x2 - x1;
+    var dy = y2 - y1;
+    var len2 = dx * dx + dy * dy + 1e-9;
+    var back = 0;
+    for (var i = 1; i < poly.length - 1; i++) {
+      var proj = ((poly[i].x - x1) * dx + (poly[i].y - y1) * dy) / len2;
+      if (proj < 0) back += -proj;
+      if (proj > 1) back += proj - 1;
+    }
+    return back;
+  }
+
+  /** Pénalise les tracés en « W » (points de contrôle de côtés opposés). */
+  function polylineOppositeBulge(poly) {
+    if (!poly || poly.length < 4) return 0;
+    var x1 = poly[0].x;
+    var y1 = poly[0].y;
+    var x2 = poly[poly.length - 1].x;
+    var y2 = poly[poly.length - 1].y;
+    var dx = x2 - x1;
+    var dy = y2 - y1;
+    var len = Math.hypot(dx, dy) || 1;
+    var px = -dy / len;
+    var py = dx / len;
+    var sides = [];
+    for (var i = 1; i < poly.length - 1; i++) {
+      var side = (poly[i].x - x1) * px + (poly[i].y - y1) * py;
+      if (Math.abs(side) > len * 0.03) sides.push(side > 0 ? 1 : -1);
+    }
+    for (var j = 1; j < sides.length; j++) {
+      if (sides[j] !== sides[j - 1]) return 1;
+    }
+    return 0;
+  }
+
+  /** Génère des tracés candidats lisibles : arc simple, courbe en S parallèle, couloir doux. */
   function generateLinkRouteCandidates(x1, y1, x2, y2, opts) {
     opts = opts || {};
     x1 = Number(x1); y1 = Number(y1); x2 = Number(x2); y2 = Number(y2);
@@ -329,90 +368,58 @@
     var py = dx / len;
     var rank = Math.max(0, parseInt(opts.rank, 10) || 0);
     var sign = opts.sign < 0 ? -1 : 1;
-    var base = Math.max(24, Math.min(110, len * 0.28)) * (1 + rank * 0.35);
+    var base = Math.max(18, Math.min(72, len * 0.2)) * (1 + rank * 0.4);
+    var primary = sign * base * (0.5 + rank * 0.45);
     var list = [[{ x: x1, y: y1 }, { x: x2, y: y2 }]];
 
-    var offsets = [
-      sign * base * 0.5, -sign * base * 0.5,
-      sign * base, -sign * base,
-      sign * base * 1.6, -sign * base * 1.6,
-      sign * base * 2.4, -sign * base * 2.4,
-      sign * base * 3.2, -sign * base * 3.2
+    var laneOffsets = [
+      primary,
+      primary * 0.55,
+      -primary * 0.55,
+      primary * 1.25,
+      -primary * 1.25,
+      0
     ];
 
-    offsets.forEach(function (off) {
+    laneOffsets.forEach(function (off) {
       list.push([
         { x: x1, y: y1 },
         { x: mx + px * off, y: my + py * off },
         { x: x2, y: y2 }
       ]);
-    });
-
-    offsets.slice(0, 8).forEach(function (off) {
       list.push([
         { x: x1, y: y1 },
-        { x: x1 + dx * 0.33 + px * off, y: y1 + dy * 0.33 + py * off },
-        { x: x1 + dx * 0.67 + px * off, y: y1 + dy * 0.67 + py * off },
+        { x: x1 + dx * 0.28 + px * off, y: y1 + dy * 0.28 + py * off },
+        { x: x1 + dx * 0.72 + px * off, y: y1 + dy * 0.72 + py * off },
         { x: x2, y: y2 }
       ]);
     });
 
-    offsets.slice(0, 6).forEach(function (off) {
-      list.push([
-        { x: x1, y: y1 },
-        { x: x1 + dx * 0.2 + px * off * 0.75, y: y1 + dy * 0.2 + py * off * 0.75 },
-        { x: mx + px * off * 1.15, y: my + py * off * 1.15 },
-        { x: x1 + dx * 0.8 + px * off * 0.75, y: y1 + dy * 0.8 + py * off * 0.75 },
-        { x: x2, y: y2 }
-      ]);
-    });
-
-    offsets.slice(0, 6).forEach(function (off) {
-      list.push([
-        { x: x1, y: y1 },
-        { x: x1 + px * off * 0.85, y: y1 + py * off * 0.85 },
-        { x: mx + px * off, y: my + py * off },
-        { x: x2 - px * off * 0.35, y: y2 - py * off * 0.35 },
-        { x: x2, y: y2 }
-      ]);
-    });
-
-    [sign * base * 1.2, -sign * base * 1.2, sign * base * 2.6, -sign * base * 2.6].forEach(function (off) {
-      list.push([
-        { x: x1, y: y1 },
-        { x: x1 + dx * 0.12 + px * off, y: y1 + dy * 0.12 + py * off },
-        { x: x1 + dx * 0.38 - px * off * 0.55, y: y1 + dy * 0.38 - py * off * 0.55 },
-        { x: x1 + dx * 0.62 + px * off * 0.55, y: y1 + dy * 0.62 + py * off * 0.55 },
-        { x: x1 + dx * 0.88 - px * off * 0.25, y: y1 + dy * 0.88 - py * off * 0.25 },
-        { x: x2, y: y2 }
-      ]);
-    });
-
-    [sign * base * 2, -sign * base * 2].forEach(function (off) {
-      if (Math.abs(dx) >= Math.abs(dy)) {
-        var midX = mx + px * off;
+    if (Math.abs(dx) >= Math.abs(dy) * 0.5) {
+      [primary, -primary, primary * 1.15, -primary * 1.15].forEach(function (off) {
+        var corridor = x1 + dx * 0.36;
         list.push([
           { x: x1, y: y1 },
-          { x: x1 + dx * 0.2, y: y1 + py * off * 0.4 },
-          { x: midX, y: y1 + py * off * 0.15 },
-          { x: midX, y: y2 - py * off * 0.15 },
-          { x: x2 - dx * 0.2, y: y2 },
+          { x: corridor, y: y1 + off * 0.5 },
+          { x: corridor, y: y2 + off * 0.5 },
           { x: x2, y: y2 }
         ]);
-      } else {
-        var midY = my + py * off;
+      });
+    }
+
+    if (Math.abs(dy) >= Math.abs(dx) * 0.5) {
+      [primary, -primary].forEach(function (off) {
+        var corridor = y1 + dy * 0.36;
         list.push([
           { x: x1, y: y1 },
-          { x: x1 + px * off * 0.4, y: y1 + dy * 0.2 },
-          { x: x1 + px * off * 0.15, y: midY },
-          { x: x2 - px * off * 0.15, y: midY },
-          { x: x2, y: y2 - dy * 0.2 },
+          { x: x1 + off * 0.5, y: corridor },
+          { x: x2 + off * 0.5, y: corridor },
           { x: x2, y: y2 }
         ]);
-      }
-    });
+      });
+    }
 
-    return dedupePolylines(list).slice(0, 36);
+    return dedupePolylines(list).slice(0, 20);
   }
 
   function scoreRouteCandidate(poly, others) {
@@ -421,9 +428,11 @@
     (others || []).forEach(function (other) {
       if (other) crossings += countPolylineCrossings(poly, other);
     });
-    score += crossings * 35;
-    score += Math.max(0, poly.length - 2) * 2;
-    score += polylineDeviation(poly) * 0.03;
+    score += crossings * 50;
+    score += Math.max(0, poly.length - 3) * 10;
+    score += polylineDeviation(poly) * 0.28;
+    score += polylineBacktrack(poly) * 120;
+    score += polylineOppositeBulge(poly) * 90;
     return score;
   }
 
@@ -509,6 +518,12 @@
       return 'M ' + round1(poly[0].x) + ',' + round1(poly[0].y)
         + ' Q ' + round1(poly[1].x) + ',' + round1(poly[1].y)
         + ' ' + round1(poly[2].x) + ',' + round1(poly[2].y);
+    }
+    if (poly.length === 4) {
+      return 'M ' + round1(poly[0].x) + ',' + round1(poly[0].y)
+        + ' C ' + round1(poly[1].x) + ',' + round1(poly[1].y)
+        + ' ' + round1(poly[2].x) + ',' + round1(poly[2].y)
+        + ' ' + round1(poly[3].x) + ',' + round1(poly[3].y);
     }
     var d = 'M ' + round1(poly[0].x) + ',' + round1(poly[0].y);
     for (var i = 0; i < poly.length - 1; i++) {
@@ -2112,7 +2127,8 @@
       });
       var pos = siblings.indexOf(idx);
       if (pos < 0) pos = 0;
-      return { sign: pos % 2 === 0 ? 1 : -1, rank: Math.floor(pos / 2) };
+      var lane = pos - (siblings.length - 1) / 2;
+      return { sign: lane >= 0 ? 1 : -1, rank: Math.abs(lane) };
     }
 
     function makeSplineEl(tagClass, d, extra) {
