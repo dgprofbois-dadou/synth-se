@@ -117,6 +117,129 @@
     return Math.round(Number(n) * 10) / 10;
   }
 
+  /** Intersection rayon → bord d'un rectangle (t > 0). */
+  function rayRectIntersect(x0, y0, dx, dy, rect) {
+    if (!rect || !isFinite(rect.width) || !isFinite(rect.height)) return null;
+    var rx1 = rect.x;
+    var ry1 = rect.y;
+    var rx2 = rect.x + rect.width;
+    var ry2 = rect.y + rect.height;
+    var bestT = Infinity;
+    var best = null;
+    function tryHit(t, x, y) {
+      if (t <= 1e-6 || t >= bestT) return;
+      if (x >= rx1 - 1e-6 && x <= rx2 + 1e-6 && y >= ry1 - 1e-6 && y <= ry2 + 1e-6) {
+        bestT = t;
+        best = { x: x, y: y };
+      }
+    }
+    if (Math.abs(dx) > 1e-9) {
+      tryHit((rx1 - x0) / dx, rx1, y0 + dy * ((rx1 - x0) / dx));
+      tryHit((rx2 - x0) / dx, rx2, y0 + dy * ((rx2 - x0) / dx));
+    }
+    if (Math.abs(dy) > 1e-9) {
+      tryHit((ry1 - y0) / dy, x0 + dx * ((ry1 - y0) / dy), ry1);
+      tryHit((ry2 - y0) / dy, x0 + dx * ((ry2 - y0) / dy), ry2);
+    }
+    return best;
+  }
+
+  /** Point d'ancrage sur une zone : centre ou bord décalé si la surface le permet. */
+  function linkAnchorPoint(fromX, fromY, bbox, slot, total) {
+    slot = Math.max(0, parseInt(slot, 10) || 0);
+    total = Math.max(1, parseInt(total, 10) || 1);
+    if (!bbox || !isFinite(bbox.width) || !isFinite(bbox.height)) {
+      return { x: fromX, y: fromY };
+    }
+    var cx = bbox.x + bbox.width / 2;
+    var cy = bbox.y + bbox.height / 2;
+    var area = Math.max(1, bbox.width) * Math.max(1, bbox.height);
+    var minDim = Math.min(bbox.width, bbox.height);
+    var spreadable = total > 1 || area >= 2200 || minDim >= 42;
+    if (!spreadable) return { x: cx, y: cy };
+
+    var dx = cx - fromX;
+    var dy = cy - fromY;
+    var len = Math.hypot(dx, dy);
+    if (len < 4) return { x: cx, y: cy };
+    var ux = dx / len;
+    var uy = dy / len;
+    var tx = -uy;
+    var ty = ux;
+
+    var hit = rayRectIntersect(fromX, fromY, ux, uy, bbox);
+    var ax = hit ? hit.x : cx;
+    var ay = hit ? hit.y : cy;
+
+    if (total > 1) {
+      var spread = Math.max(14, Math.min(bbox.width, bbox.height) * 0.38);
+      var step = total > 1 ? spread / (total - 1) : 0;
+      var off = (slot - (total - 1) / 2) * step;
+      ax += tx * off;
+      ay += ty * off;
+      ax = Math.max(bbox.x + 2, Math.min(bbox.x + bbox.width - 2, ax));
+      ay = Math.max(bbox.y + 2, Math.min(bbox.y + bbox.height - 2, ay));
+    }
+    return { x: ax, y: ay };
+  }
+
+  function computeLinkAnchorSlots(links, getPeerCenter) {
+    var slots = new Array(links.length);
+    var groups = { from: {}, to: {} };
+    links.forEach(function (l, i) {
+      slots[i] = { fromSlot: 0, fromTotal: 1, toSlot: 0, toTotal: 1 };
+      var f = String(l.from);
+      var t = String(l.to);
+      if (!groups.from[f]) groups.from[f] = [];
+      if (!groups.to[t]) groups.to[t] = [];
+      groups.from[f].push(i);
+      groups.to[t].push(i);
+    });
+    function assign(group, key, slotKey, totalKey, peerKey) {
+      Object.keys(group).forEach(function (nodeId) {
+        var indices = group[nodeId];
+        if (indices.length <= 1) return;
+        indices.sort(function (ia, ib) {
+          var pa = getPeerCenter(links[ia][peerKey]);
+          var pb = getPeerCenter(links[ib][peerKey]);
+          var ca = getPeerCenter(nodeId);
+          if (!pa || !pb || !ca) return ia - ib;
+          return Math.atan2(pa.y - ca.y, pa.x - ca.x) - Math.atan2(pb.y - ca.y, pb.x - ca.x);
+        });
+        indices.forEach(function (idx, pos) {
+          slots[idx][slotKey] = pos;
+          slots[idx][totalKey] = indices.length;
+        });
+      });
+    }
+    assign(groups.from, 'from', 'fromSlot', 'fromTotal', 'to');
+    assign(groups.to, 'to', 'toSlot', 'toTotal', 'from');
+    return slots;
+  }
+
+  function polygonCentroidFromPointsAttr(pointsAttr) {
+    if (!pointsAttr) return null;
+    var nums = String(pointsAttr).trim().split(/[\s,]+/).map(Number).filter(function (n) { return isFinite(n); });
+    if (nums.length < 6) return null;
+    var area = 0;
+    var cx = 0;
+    var cy = 0;
+    var n = Math.floor(nums.length / 2);
+    for (var i = 0; i < n; i++) {
+      var x0 = nums[i * 2];
+      var y0 = nums[i * 2 + 1];
+      var x1 = nums[((i + 1) % n) * 2];
+      var y1 = nums[((i + 1) % n) * 2 + 1];
+      var cross = x0 * y1 - x1 * y0;
+      area += cross;
+      cx += (x0 + x1) * cross;
+      cy += (y0 + y1) * cross;
+    }
+    area *= 0.5;
+    if (Math.abs(area) < 1e-6) return null;
+    return { x: cx / (6 * area), y: cy / (6 * area) };
+  }
+
   function orient(ax, ay, bx, by, cx, cy) {
     var v = (by - ay) * (cx - bx) - (bx - ax) * (cy - by);
     if (Math.abs(v) < 1e-9) return 0;
@@ -190,7 +313,7 @@
     return out;
   }
 
-  /** Génère des tracés candidats compacts : spline 0 à 4 points (max ~12 variantes). */
+  /** Génère des tracés candidats : spline 1 à 5 points, arcs larges et zig-zag. */
   function generateLinkRouteCandidates(x1, y1, x2, y2, opts) {
     opts = opts || {};
     x1 = Number(x1); y1 = Number(y1); x2 = Number(x2); y2 = Number(y2);
@@ -206,14 +329,15 @@
     var py = dx / len;
     var rank = Math.max(0, parseInt(opts.rank, 10) || 0);
     var sign = opts.sign < 0 ? -1 : 1;
-    var base = Math.max(22, Math.min(90, len * 0.25)) * (1 + rank * 0.3);
+    var base = Math.max(24, Math.min(110, len * 0.28)) * (1 + rank * 0.35);
     var list = [[{ x: x1, y: y1 }, { x: x2, y: y2 }]];
 
     var offsets = [
-      sign * base * 0.6, -sign * base * 0.6,
+      sign * base * 0.5, -sign * base * 0.5,
       sign * base, -sign * base,
-      sign * base * 1.5, -sign * base * 1.5,
-      sign * base * 2.2, -sign * base * 2.2
+      sign * base * 1.6, -sign * base * 1.6,
+      sign * base * 2.4, -sign * base * 2.4,
+      sign * base * 3.2, -sign * base * 3.2
     ];
 
     offsets.forEach(function (off) {
@@ -224,7 +348,7 @@
       ]);
     });
 
-    offsets.slice(0, 6).forEach(function (off) {
+    offsets.slice(0, 8).forEach(function (off) {
       list.push([
         { x: x1, y: y1 },
         { x: x1 + dx * 0.33 + px * off, y: y1 + dy * 0.33 + py * off },
@@ -233,27 +357,62 @@
       ]);
     });
 
-    offsets.slice(0, 4).forEach(function (off) {
+    offsets.slice(0, 6).forEach(function (off) {
       list.push([
         { x: x1, y: y1 },
-        { x: x1 + dx * 0.2 + px * off * 0.7, y: y1 + dy * 0.2 + py * off * 0.7 },
-        { x: mx + px * off * 1.1, y: my + py * off * 1.1 },
-        { x: x1 + dx * 0.8 + px * off * 0.7, y: y1 + dy * 0.8 + py * off * 0.7 },
+        { x: x1 + dx * 0.2 + px * off * 0.75, y: y1 + dy * 0.2 + py * off * 0.75 },
+        { x: mx + px * off * 1.15, y: my + py * off * 1.15 },
+        { x: x1 + dx * 0.8 + px * off * 0.75, y: y1 + dy * 0.8 + py * off * 0.75 },
         { x: x2, y: y2 }
       ]);
     });
 
-    offsets.slice(0, 4).forEach(function (off) {
+    offsets.slice(0, 6).forEach(function (off) {
       list.push([
         { x: x1, y: y1 },
-        { x: x1 + px * off * 0.9, y: y1 + py * off * 0.9 },
+        { x: x1 + px * off * 0.85, y: y1 + py * off * 0.85 },
         { x: mx + px * off, y: my + py * off },
-        { x: x2 - px * off * 0.3, y: y2 - py * off * 0.3 },
+        { x: x2 - px * off * 0.35, y: y2 - py * off * 0.35 },
         { x: x2, y: y2 }
       ]);
     });
 
-    return dedupePolylines(list).slice(0, 18);
+    [sign * base * 1.2, -sign * base * 1.2, sign * base * 2.6, -sign * base * 2.6].forEach(function (off) {
+      list.push([
+        { x: x1, y: y1 },
+        { x: x1 + dx * 0.12 + px * off, y: y1 + dy * 0.12 + py * off },
+        { x: x1 + dx * 0.38 - px * off * 0.55, y: y1 + dy * 0.38 - py * off * 0.55 },
+        { x: x1 + dx * 0.62 + px * off * 0.55, y: y1 + dy * 0.62 + py * off * 0.55 },
+        { x: x1 + dx * 0.88 - px * off * 0.25, y: y1 + dy * 0.88 - py * off * 0.25 },
+        { x: x2, y: y2 }
+      ]);
+    });
+
+    [sign * base * 2, -sign * base * 2].forEach(function (off) {
+      if (Math.abs(dx) >= Math.abs(dy)) {
+        var midX = mx + px * off;
+        list.push([
+          { x: x1, y: y1 },
+          { x: x1 + dx * 0.2, y: y1 + py * off * 0.4 },
+          { x: midX, y: y1 + py * off * 0.15 },
+          { x: midX, y: y2 - py * off * 0.15 },
+          { x: x2 - dx * 0.2, y: y2 },
+          { x: x2, y: y2 }
+        ]);
+      } else {
+        var midY = my + py * off;
+        list.push([
+          { x: x1, y: y1 },
+          { x: x1 + px * off * 0.4, y: y1 + dy * 0.2 },
+          { x: x1 + px * off * 0.15, y: midY },
+          { x: x2 - px * off * 0.15, y: midY },
+          { x: x2, y: y2 - dy * 0.2 },
+          { x: x2, y: y2 }
+        ]);
+      }
+    });
+
+    return dedupePolylines(list).slice(0, 36);
   }
 
   function scoreRouteCandidate(poly, others) {
@@ -1445,11 +1604,15 @@
       if (nid && dragCenterOverrides[nid]) {
         return { x: dragCenterOverrides[nid].x, y: dragCenterOverrides[nid].y };
       }
-      // Zones SVG Relier (<g> / <polygon>)
+      // Zones SVG Relier (<g> / <polygon>) — centroïde si possible
       try {
         var geo = el;
         if (el.tagName === 'g') {
           geo = el.querySelector('polygon, path, polyline') || el;
+        }
+        if (geo && geo.tagName === 'polygon' && geo.getAttribute('points')) {
+          var cent = polygonCentroidFromPointsAttr(geo.getAttribute('points'));
+          if (cent) return cent;
         }
         if (geo && typeof geo.getBBox === 'function' && (geo.ownerSVGElement || geo.tagName === 'svg')) {
           var bb = geo.getBBox();
@@ -1484,6 +1647,53 @@
       // Dernier recours : projection écran
       var er = el.getBoundingClientRect();
       return clientToLocal(er.left + er.width / 2, er.top + er.height / 2);
+    }
+    function nodeBBoxForLink(el) {
+      if (!el) return null;
+      try {
+        var geo = el;
+        if (el.tagName === 'g') geo = el.querySelector('polygon, path, polyline') || el;
+        if (geo && typeof geo.getBBox === 'function' && (geo.ownerSVGElement || geo.tagName === 'svg')) {
+          var bb = geo.getBBox();
+          if (bb && isFinite(bb.width) && isFinite(bb.height)) {
+            return { x: bb.x, y: bb.y, width: bb.width, height: bb.height };
+          }
+        }
+      } catch (errA) { /* ignore */ }
+      var left = parseFloat(el.style.left);
+      var top = parseFloat(el.style.top);
+      var w = el.offsetWidth || parseFloat(el.style.width) || 0;
+      var h = el.offsetHeight || parseFloat(el.style.height) || 0;
+      if (!isNaN(left) && !isNaN(top) && (w > 0 || h > 0)) {
+        return { x: left, y: top, width: w, height: h };
+      }
+      try {
+        var r = el.getBoundingClientRect();
+        var cr = gameContainer.getBoundingClientRect();
+        var gw = gameContainer.clientWidth || 1;
+        var gh = gameContainer.clientHeight || 1;
+        var rw = cr.width || 1;
+        var rh = cr.height || 1;
+        return {
+          x: ((r.left - cr.left) / rw) * gw,
+          y: ((r.top - cr.top) / rh) * gh,
+          width: (r.width / rw) * gw,
+          height: (r.height / rh) * gh
+        };
+      } catch (errB) {
+        return null;
+      }
+    }
+    /** Point d'accroche aimanté : centre ou bord décalé si la zone est grande / plusieurs liens. */
+    function linkEndpointForNode(el, peerX, peerY, slot, total) {
+      if (!el) return { x: peerX, y: peerY };
+      var nid = el.getAttribute && el.getAttribute('data-id');
+      if (nid && dragCenterOverrides[nid]) {
+        return { x: dragCenterOverrides[nid].x, y: dragCenterOverrides[nid].y };
+      }
+      var bbox = nodeBBoxForLink(el);
+      if (!bbox) return nodeCenter(el);
+      return linkAnchorPoint(peerX, peerY, bbox, slot, total);
     }
     function nodeFromPoint(clientX, clientY) {
       return pickBestLinkAt(clientX, clientY);
@@ -1919,17 +2129,47 @@
     }
 
     function buildLinkRouteEntries(extra) {
+      var peerCenterCache = {};
+      function peerCenter(nodeId) {
+        var key = String(nodeId);
+        if (peerCenterCache[key]) return peerCenterCache[key];
+        var n = findNode(key);
+        peerCenterCache[key] = n ? nodeCenter(n) : null;
+        return peerCenterCache[key];
+      }
+      var anchorSlots = computeLinkAnchorSlots(links, peerCenter);
       var entries = links.map(function (l, idx) {
         var a = findNode(l.from);
         var b = findNode(l.to);
         if (!a || !b) return null;
-        var ca = nodeCenter(a);
-        var cb = nodeCenter(b);
+        var slot = anchorSlots[idx] || { fromSlot: 0, fromTotal: 1, toSlot: 0, toTotal: 1 };
+        var cb0 = nodeCenter(b);
+        var ca0 = nodeCenter(a);
+        var ca = linkEndpointForNode(a, cb0.x, cb0.y, slot.fromSlot, slot.fromTotal);
+        var cb = linkEndpointForNode(b, ca0.x, ca0.y, slot.toSlot, slot.toTotal);
         var o = splineOptsForIndex(idx);
         return { x1: ca.x, y1: ca.y, x2: cb.x, y2: cb.y, rank: o.rank, sign: o.sign };
       });
       if (extra) entries.push(extra);
       return entries;
+    }
+
+    function previewEndpoints(fromEl, targetEl) {
+      var ca0 = nodeCenter(fromEl);
+      if (!targetEl || targetEl === fromEl) {
+        return { from: ca0, to: ca0 };
+      }
+      var cb0 = nodeCenter(targetEl);
+      var toId = targetEl.getAttribute('data-id');
+      var existingTo = 0;
+      if (toId) {
+        links.forEach(function (l) {
+          if (String(l.to) === String(toId)) existingTo++;
+        });
+      }
+      var fromPt = linkEndpointForNode(fromEl, cb0.x, cb0.y, 0, 1);
+      var toPt = linkEndpointForNode(targetEl, ca0.x, ca0.y, existingTo, existingTo + 1);
+      return { from: fromPt, to: toPt };
     }
 
     var linkPolylines = [];
@@ -2024,7 +2264,6 @@
     function moveDrag(clientX, clientY) {
       if (!dragState || !dragState.line) return;
       var pt = localPoint(clientX, clientY);
-      // Survol visuel uniquement — pas d'accrochage magnétique au centre de la zone
       var target = pickBestLinkAt(clientX, clientY);
       if (target && target !== dragState.fromEl) {
         if (dragState.hoverEl && dragState.hoverEl !== target && dragState.hoverEl !== dragState.fromEl) {
@@ -2038,8 +2277,9 @@
         }
         dragState.hoverEl = null;
       }
-      var c0 = nodeCenter(dragState.fromEl);
-      var end = target && target !== dragState.fromEl ? nodeCenter(target) : pt;
+      var ends = previewEndpoints(dragState.fromEl, target && target !== dragState.fromEl ? target : null);
+      var end = target && target !== dragState.fromEl ? ends.to : pt;
+      var c0 = ends.from;
       dragState.line.setAttribute('d', linkPolylineToPath(previewRoutePath(c0.x, c0.y, end.x, end.y)));
       showTip(DRAW_LINK_TIP, pt.x, pt.y);
     }
@@ -2053,10 +2293,9 @@
       if (target === fromEl) target = null;
       var toId = target ? target.getAttribute('data-id') : null;
       if (toId && String(toId) !== String(fromId)) {
-        var ca = nodeCenter(fromEl);
-        var cb = nodeCenter(target);
+        var ends = previewEndpoints(fromEl, target);
         if (dragState.line) {
-          dragState.line.setAttribute('d', linkPolylineToPath(previewRoutePath(ca.x, ca.y, cb.x, cb.y)));
+          dragState.line.setAttribute('d', linkPolylineToPath(previewRoutePath(ends.from.x, ends.from.y, ends.to.x, ends.to.y)));
         }
         cancelDrag();
         addLink(fromId, toId);
@@ -3399,6 +3638,9 @@
     layoutLinkRoutes: layoutLinkRoutes,
     countPolylineCrossings: countPolylineCrossings,
     generateLinkRouteCandidates: generateLinkRouteCandidates,
+    linkAnchorPoint: linkAnchorPoint,
+    computeLinkAnchorSlots: computeLinkAnchorSlots,
+    polygonCentroidFromPointsAttr: polygonCentroidFromPointsAttr,
     isSingleUse: isSingleUse,
     normalizeDropzone: normalizeDropzone,
     applyGameDefaults: applyGameDefaults,

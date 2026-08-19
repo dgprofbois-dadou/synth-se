@@ -522,6 +522,23 @@ test('linkSplinePath produit un tracé SVG lissé', () => {
   assert.ok(curved.indexOf('Q') >= 0);
 });
 
+test('linkAnchorPoint décale les arrivées sur grandes zones', () => {
+  const bbox = { x: 100, y: 50, width: 120, height: 80 };
+  const edge = Engine.linkAnchorPoint(0, 90, bbox, 0, 1);
+  assert.ok(Math.abs(edge.x - 100) < 2, 'accrochage sur le bord face à la source');
+  assert.ok(Math.abs(edge.y - 90) < 2);
+  const a0 = Engine.linkAnchorPoint(0, 90, bbox, 0, 3);
+  const a2 = Engine.linkAnchorPoint(0, 90, bbox, 2, 3);
+  assert.notStrictEqual(Math.round(a0.y), Math.round(a2.y));
+});
+
+test('generateLinkRouteCandidates inclut des zig-zag larges (5+ points)', () => {
+  const cands = Engine.generateLinkRouteCandidates(0, 0, 300, 0, { sign: 1, rank: 1 });
+  assert.ok(cands.length >= 10);
+  const wide = cands.filter((p) => p.length >= 6);
+  assert.ok(wide.length >= 2, 'au moins 2 tracés zig-zag larges');
+});
+
 test('layoutLinkRoutes reste rapide et minimise les croisements', () => {
   const t0 = Date.now();
   const many = [];
