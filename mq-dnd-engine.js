@@ -206,11 +206,17 @@
     var py = dx / len;
     var rank = Math.max(0, parseInt(opts.rank, 10) || 0);
     var sign = opts.sign < 0 ? -1 : 1;
-    var base = Math.max(18, Math.min(72, len * 0.2)) * (1 + rank * 0.22);
+    var base = Math.max(22, Math.min(90, len * 0.25)) * (1 + rank * 0.3);
     var list = [[{ x: x1, y: y1 }, { x: x2, y: y2 }]];
-    var lanes = [sign * base, -sign * base, sign * base * 1.6, -sign * base * 1.6];
 
-    lanes.forEach(function (off) {
+    var offsets = [
+      sign * base * 0.6, -sign * base * 0.6,
+      sign * base, -sign * base,
+      sign * base * 1.5, -sign * base * 1.5,
+      sign * base * 2.2, -sign * base * 2.2
+    ];
+
+    offsets.forEach(function (off) {
       list.push([
         { x: x1, y: y1 },
         { x: mx + px * off, y: my + py * off },
@@ -218,50 +224,36 @@
       ]);
     });
 
-    lanes.slice(0, 2).forEach(function (off) {
+    offsets.slice(0, 6).forEach(function (off) {
       list.push([
         { x: x1, y: y1 },
-        { x: x1 + dx * 0.3 + px * off, y: y1 + dy * 0.3 + py * off },
-        { x: x1 + dx * 0.7 + px * off, y: y1 + dy * 0.7 + py * off },
+        { x: x1 + dx * 0.33 + px * off, y: y1 + dy * 0.33 + py * off },
+        { x: x1 + dx * 0.67 + px * off, y: y1 + dy * 0.67 + py * off },
         { x: x2, y: y2 }
       ]);
-      if (Math.abs(dx) >= Math.abs(dy)) {
-        var midX = mx + px * off * 0.55;
-        list.push([
-          { x: x1, y: y1 },
-          { x: midX, y: y1 },
-          { x: midX, y: y2 },
-          { x: x2, y: y2 }
-        ]);
-      } else {
-        var midY = my + py * off * 0.55;
-        list.push([
-          { x: x1, y: y1 },
-          { x: x1, y: midY },
-          { x: x2, y: midY },
-          { x: x2, y: y2 }
-        ]);
-      }
     });
 
-    [sign * base, -sign * base].forEach(function (off) {
+    offsets.slice(0, 4).forEach(function (off) {
       list.push([
         { x: x1, y: y1 },
-        { x: x1 + dx * 0.2 + px * off, y: y1 + dy * 0.2 + py * off },
-        { x: x1 + dx * 0.5 + px * off * 1.15, y: y1 + dy * 0.5 + py * off * 1.15 },
-        { x: x1 + dx * 0.8 + px * off, y: y1 + dy * 0.8 + py * off },
+        { x: x1 + dx * 0.2 + px * off * 0.7, y: y1 + dy * 0.2 + py * off * 0.7 },
+        { x: mx + px * off * 1.1, y: my + py * off * 1.1 },
+        { x: x1 + dx * 0.8 + px * off * 0.7, y: y1 + dy * 0.8 + py * off * 0.7 },
         { x: x2, y: y2 }
       ]);
+    });
+
+    offsets.slice(0, 4).forEach(function (off) {
       list.push([
         { x: x1, y: y1 },
-        { x: x1 + px * off * 1.1, y: y1 + py * off * 1.1 },
+        { x: x1 + px * off * 0.9, y: y1 + py * off * 0.9 },
         { x: mx + px * off, y: my + py * off },
-        { x: x2 - px * off * 0.35, y: y2 - py * off * 0.35 },
+        { x: x2 - px * off * 0.3, y: y2 - py * off * 0.3 },
         { x: x2, y: y2 }
       ]);
     });
 
-    return dedupePolylines(list).slice(0, 12);
+    return dedupePolylines(list).slice(0, 18);
   }
 
   function scoreRouteCandidate(poly, others) {
