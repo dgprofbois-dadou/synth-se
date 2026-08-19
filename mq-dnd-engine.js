@@ -1428,8 +1428,10 @@
       }
     }
     function endCardDrag(id, el) {
-      // Reposition libre si le drop n’est pas allé dans une zone
-      if (htmlDragId && htmlDragLast && !htmlDragDropped && el && el.classList.contains('draggable')) {
+      // Jeu DnD (hybrid) : hors zone de dépôt → la carte reste à sa place d’origine.
+      // Relier pur : reposition libre autorisé pour que la flèche suive.
+      if (!hybrid && htmlDragId && htmlDragLast && !htmlDragDropped
+          && el && el.classList.contains('draggable') && !el.classList.contains('dnd-placed')) {
         applyFreeMoveToEl(el, htmlDragLast);
       }
       htmlDragId = null;
@@ -1454,8 +1456,9 @@
     });
     gameContainer.addEventListener('drop', function (e) {
       if (!htmlDragId) return;
-      // Les dropzones gèrent leur propre drop ; ici = dépôt libre sur le plateau
+      // Dropzone : le DnD principal place la carte. Hors zone : pas de dépôt libre en hybrid.
       if (e.target && e.target.closest && e.target.closest('.dropzone')) return;
+      if (hybrid) return;
       e.preventDefault();
       e.stopPropagation();
       if (e.clientX || e.clientY) {
