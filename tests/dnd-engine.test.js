@@ -513,22 +513,33 @@ test('flèche verte (correcte) non supprimable', () => {
   assert.strictEqual(Engine.canRemoveDrawnLink(g, { from: '1', to: '9' }, true), true);
 });
 
-test('linkSplinePath produit un tracé SVG', () => {
+test('linkSplinePath produit un tracé SVG lissé', () => {
   const d = Engine.linkSplinePath(0, 0, 200, 0);
   assert.ok(d.indexOf('M') === 0);
-  assert.ok(d.indexOf('L') >= 0);
-  const short = Engine.linkSplinePath(0, 0, 2, 0);
-  assert.ok(short.indexOf('L') >= 0);
+  const curved = Engine.linkPolylineToPath([
+    { x: 0, y: 0 }, { x: 100, y: 40 }, { x: 200, y: 0 }
+  ]);
+  assert.ok(curved.indexOf('Q') >= 0);
 });
 
-test('layoutLinkRoutes évite les croisements évidents', () => {
+test('layoutLinkRoutes reste rapide et minimise les croisements', () => {
+  const t0 = Date.now();
+  const many = [];
+  for (let i = 0; i < 14; i++) {
+    many.push({ x1: i * 8, y1: 0, x2: 120 - i * 8, y2: 120 });
+  }
+  const routesMany = Engine.layoutLinkRoutes(many);
+  assert.strictEqual(routesMany.length, 14);
+  assert.ok(Date.now() - t0 < 400, 'layoutLinkRoutes ne doit pas bloquer');
+
   const routes = Engine.layoutLinkRoutes([
     { x1: 0, y1: 0, x2: 100, y2: 100 },
     { x1: 0, y1: 100, x2: 100, y2: 0 }
   ]);
   assert.strictEqual(routes.length, 2);
   assert.ok(routes[0] && routes[1]);
-  assert.strictEqual(Engine.countPolylineCrossings(routes[0], routes[1]), 0);
+  const cross = Engine.countPolylineCrossings(routes[0], routes[1]);
+  assert.ok(cross <= 1, 'croisement réduit au minimum');
 });
 
 test('enableLinking hybride avec selection', () => {

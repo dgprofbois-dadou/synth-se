@@ -190,7 +190,7 @@
     return out;
   }
 
-  /** Génère des tracés candidats : segment, 1 point ou 2 points intermédiaires. */
+  /** Génère des tracés candidats compacts : spline 0 à 4 points (max ~12 variantes). */
   function generateLinkRouteCandidates(x1, y1, x2, y2, opts) {
     opts = opts || {};
     x1 = Number(x1); y1 = Number(y1); x2 = Number(x2); y2 = Number(y2);
@@ -206,26 +206,27 @@
     var py = dx / len;
     var rank = Math.max(0, parseInt(opts.rank, 10) || 0);
     var sign = opts.sign < 0 ? -1 : 1;
-    var base = Math.max(20, Math.min(95, len * 0.22)) * (1 + rank * 0.28);
+    var base = Math.max(18, Math.min(72, len * 0.2)) * (1 + rank * 0.22);
     var list = [[{ x: x1, y: y1 }, { x: x2, y: y2 }]];
-    var oneOffsets = [base * sign, -base * sign, base * 1.55 * sign, -base * 1.55 * sign];
-    oneOffsets.forEach(function (off) {
+    var lanes = [sign * base, -sign * base, sign * base * 1.6, -sign * base * 1.6];
+
+    lanes.forEach(function (off) {
       list.push([
         { x: x1, y: y1 },
         { x: mx + px * off, y: my + py * off },
         { x: x2, y: y2 }
       ]);
     });
-    var twoOffsets = [base * sign, -base * sign, base * 2.1 * sign, -base * 2.1 * sign, base * 3.2 * sign, -base * 3.2 * sign];
-    twoOffsets.forEach(function (off) {
+
+    lanes.slice(0, 2).forEach(function (off) {
       list.push([
         { x: x1, y: y1 },
-        { x: x1 + dx * 0.28 + px * off, y: y1 + dy * 0.28 + py * off },
-        { x: x1 + dx * 0.72 + px * off, y: y1 + dy * 0.72 + py * off },
+        { x: x1 + dx * 0.3 + px * off, y: y1 + dy * 0.3 + py * off },
+        { x: x1 + dx * 0.7 + px * off, y: y1 + dy * 0.7 + py * off },
         { x: x2, y: y2 }
       ]);
       if (Math.abs(dx) >= Math.abs(dy)) {
-        var midX = mx + px * off * 0.65;
+        var midX = mx + px * off * 0.55;
         list.push([
           { x: x1, y: y1 },
           { x: midX, y: y1 },
@@ -233,7 +234,7 @@
           { x: x2, y: y2 }
         ]);
       } else {
-        var midY = my + py * off * 0.65;
+        var midY = my + py * off * 0.55;
         list.push([
           { x: x1, y: y1 },
           { x: x1, y: midY },
@@ -242,25 +243,51 @@
         ]);
       }
     });
-    return dedupePolylines(list);
+
+    [sign * base, -sign * base].forEach(function (off) {
+      list.push([
+        { x: x1, y: y1 },
+        { x: x1 + dx * 0.2 + px * off, y: y1 + dy * 0.2 + py * off },
+        { x: x1 + dx * 0.5 + px * off * 1.15, y: y1 + dy * 0.5 + py * off * 1.15 },
+        { x: x1 + dx * 0.8 + px * off, y: y1 + dy * 0.8 + py * off },
+        { x: x2, y: y2 }
+      ]);
+      list.push([
+        { x: x1, y: y1 },
+        { x: x1 + px * off * 1.1, y: y1 + py * off * 1.1 },
+        { x: mx + px * off, y: my + py * off },
+        { x: x2 - px * off * 0.35, y: y2 - py * off * 0.35 },
+        { x: x2, y: y2 }
+      ]);
+    });
+
+    return dedupePolylines(list).slice(0, 12);
   }
 
   function scoreRouteCandidate(poly, others) {
     var score = 0;
+    var crossings = 0;
     (others || []).forEach(function (other) {
-      if (other) score += countPolylineCrossings(poly, other) * 120;
+      if (other) crossings += countPolylineCrossings(poly, other);
     });
-    score += Math.max(0, poly.length - 2) * 3;
-    score += polylineDeviation(poly) * 0.04;
+    score += crossings * 35;
+    score += Math.max(0, poly.length - 2) * 2;
+    score += polylineDeviation(poly) * 0.03;
     return score;
   }
 
   function pickBestRouteCandidate(candidates, others) {
     var best = candidates[0];
     var bestScore = Infinity;
+    var bestCross = Infinity;
     candidates.forEach(function (poly) {
+      var cross = 0;
+      (others || []).forEach(function (other) {
+        if (other) cross += countPolylineCrossings(poly, other);
+      });
       var s = scoreRouteCandidate(poly, others);
-      if (s < bestScore) {
+      if (cross < bestCross || (cross === bestCross && s < bestScore)) {
+        bestCross = cross;
         bestScore = s;
         best = poly;
       }
@@ -268,51 +295,8 @@
     return best;
   }
 
-  function layoutLinkRoutesExhaustive(valid, candidateSets, n) {
-    var assigned = new Array(n);
-    var bestOverall = null;
-    var bestScore = Infinity;
-    var current = new Array(valid.length);
-
-    function totalScore() {
-      var score = 0;
-      for (var i = 0; i < valid.length; i++) {
-        for (var j = i + 1; j < valid.length; j++) {
-          score += countPolylineCrossings(current[i], current[j]) * 120;
-        }
-        score += Math.max(0, current[i].length - 2) * 3;
-        score += polylineDeviation(current[i]) * 0.04;
-      }
-      return score;
-    }
-
-    function search(pos) {
-      if (pos >= valid.length) {
-        var score = totalScore();
-        if (score < bestScore) {
-          bestScore = score;
-          bestOverall = current.slice();
-        }
-        return;
-      }
-      var cands = candidateSets[pos];
-      for (var c = 0; c < cands.length; c++) {
-        current[pos] = cands[c];
-        search(pos + 1);
-      }
-    }
-
-    search(0);
-    if (!bestOverall) return assigned;
-    valid.forEach(function (entryIdx, pos) {
-      assigned[entryIdx] = bestOverall[pos];
-    });
-    return assigned;
-  }
-
   /**
-   * Choisit pour chaque lien un tracé à 0, 1 ou 2 points évitant les croisements.
-   * entries: [{ x1, y1, x2, y2, rank?, sign? }] — null/empty ignorés.
+   * Disposition rapide (greedy) : spline 1–4 points, croisements minimisés mais acceptés si inévitables.
    */
   function layoutLinkRoutes(entries) {
     var n = entries.length;
@@ -324,15 +308,6 @@
     });
     if (!valid.length) return assigned;
 
-    var candidateSets = valid.map(function (i) {
-      var e = entries[i];
-      return generateLinkRouteCandidates(e.x1, e.y1, e.x2, e.y2, e);
-    });
-
-    if (valid.length <= 8) {
-      return layoutLinkRoutesExhaustive(valid, candidateSets, n);
-    }
-
     valid.sort(function (ia, ib) {
       var ea = entries[ia];
       var eb = entries[ib];
@@ -340,11 +315,13 @@
       var lb = Math.hypot(eb.x2 - eb.x1, eb.y2 - eb.y1);
       return lb - la;
     });
+
     var candidateMap = {};
     valid.forEach(function (i) {
       var e = entries[i];
       candidateMap[i] = generateLinkRouteCandidates(e.x1, e.y1, e.x2, e.y2, e);
     });
+
     valid.forEach(function (i) {
       var others = [];
       valid.forEach(function (j) {
@@ -352,26 +329,49 @@
       });
       assigned[i] = pickBestRouteCandidate(candidateMap[i], others);
     });
-    for (var pass = 0; pass < 2; pass++) {
-      valid.forEach(function (i) {
-        var others = [];
-        valid.forEach(function (j) {
-          if (j !== i && assigned[j]) others.push(assigned[j]);
-        });
-        assigned[i] = pickBestRouteCandidate(candidateMap[i], others);
+
+    valid.forEach(function (i) {
+      var others = [];
+      valid.forEach(function (j) {
+        if (j !== i && assigned[j]) others.push(assigned[j]);
       });
-    }
+      var improved = pickBestRouteCandidate(candidateMap[i], others);
+      if (scoreRouteCandidate(improved, others) < scoreRouteCandidate(assigned[i], others)) {
+        assigned[i] = improved;
+      }
+    });
+
     return assigned;
   }
 
+  /** Points de contrôle → tracé SVG lissé (Q ou Catmull-Rom cubique). */
   function linkPolylineToPath(poly) {
     if (!poly || !poly.length) return '';
     if (poly.length === 1) {
       return 'M ' + round1(poly[0].x) + ',' + round1(poly[0].y);
     }
+    if (poly.length === 2) {
+      return 'M ' + round1(poly[0].x) + ',' + round1(poly[0].y)
+        + ' L ' + round1(poly[1].x) + ',' + round1(poly[1].y);
+    }
+    if (poly.length === 3) {
+      return 'M ' + round1(poly[0].x) + ',' + round1(poly[0].y)
+        + ' Q ' + round1(poly[1].x) + ',' + round1(poly[1].y)
+        + ' ' + round1(poly[2].x) + ',' + round1(poly[2].y);
+    }
     var d = 'M ' + round1(poly[0].x) + ',' + round1(poly[0].y);
-    for (var i = 1; i < poly.length; i++) {
-      d += ' L ' + round1(poly[i].x) + ',' + round1(poly[i].y);
+    for (var i = 0; i < poly.length - 1; i++) {
+      var p0 = poly[i === 0 ? 0 : i - 1];
+      var p1 = poly[i];
+      var p2 = poly[i + 1];
+      var p3 = poly[i + 2 >= poly.length ? poly.length - 1 : i + 2];
+      var cp1x = p1.x + (p2.x - p0.x) / 6;
+      var cp1y = p1.y + (p2.y - p0.y) / 6;
+      var cp2x = p2.x - (p3.x - p1.x) / 6;
+      var cp2y = p2.y - (p3.y - p1.y) / 6;
+      d += ' C ' + round1(cp1x) + ',' + round1(cp1y)
+        + ' ' + round1(cp2x) + ',' + round1(cp2y)
+        + ' ' + round1(p2.x) + ',' + round1(p2.y);
     }
     return d;
   }
