@@ -513,14 +513,22 @@ test('flèche verte (correcte) non supprimable', () => {
   assert.strictEqual(Engine.canRemoveDrawnLink(g, { from: '1', to: '9' }, true), true);
 });
 
-test('linkSplinePath produit une courbe cubique', () => {
+test('linkSplinePath produit un tracé SVG', () => {
   const d = Engine.linkSplinePath(0, 0, 200, 0);
-  assert.ok(d.indexOf('C') >= 0);
-  assert.ok(d.charAt(0) === 'M');
+  assert.ok(d.indexOf('M') === 0);
+  assert.ok(d.indexOf('L') >= 0);
   const short = Engine.linkSplinePath(0, 0, 2, 0);
   assert.ok(short.indexOf('L') >= 0);
-  const other = Engine.linkSplinePath(0, 0, 200, 0, { sign: -1 });
-  assert.notStrictEqual(d, other);
+});
+
+test('layoutLinkRoutes évite les croisements évidents', () => {
+  const routes = Engine.layoutLinkRoutes([
+    { x1: 0, y1: 0, x2: 100, y2: 100 },
+    { x1: 0, y1: 100, x2: 100, y2: 0 }
+  ]);
+  assert.strictEqual(routes.length, 2);
+  assert.ok(routes[0] && routes[1]);
+  assert.strictEqual(Engine.countPolylineCrossings(routes[0], routes[1]), 0);
 });
 
 test('enableLinking hybride avec selection', () => {

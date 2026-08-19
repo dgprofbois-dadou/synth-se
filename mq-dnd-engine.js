@@ -117,40 +117,269 @@
     return Math.round(Number(n) * 10) / 10;
   }
 
-  /**
-   * Courbe spline (cubique) entre deux points — plus lisible que le segment droit.
-   * opts.sign : 1 | -1 (côté du bombé)
-   * opts.rank : 0,1,2… (écart supplémentaire si plusieurs flèches du même départ)
-   */
-  function linkSplinePath(x1, y1, x2, y2, opts) {
+  function orient(ax, ay, bx, by, cx, cy) {
+    var v = (by - ay) * (cx - bx) - (bx - ax) * (cy - by);
+    if (Math.abs(v) < 1e-9) return 0;
+    return v > 0 ? 1 : 2;
+  }
+
+  function onSegment(ax, ay, bx, by, cx, cy) {
+    return cx >= Math.min(ax, bx) - 1e-9 && cx <= Math.max(ax, bx) + 1e-9
+      && cy >= Math.min(ay, by) - 1e-9 && cy <= Math.max(ay, by) + 1e-9;
+  }
+
+  function segmentsIntersect(ax, ay, bx, by, cx, cy, dx, dy) {
+    var o1 = orient(ax, ay, bx, by, cx, cy);
+    var o2 = orient(ax, ay, bx, by, dx, dy);
+    var o3 = orient(cx, cy, dx, dy, ax, ay);
+    var o4 = orient(cx, cy, dx, dy, bx, by);
+    if (o1 !== o2 && o3 !== o4) return true;
+    if (o1 === 0 && onSegment(ax, ay, bx, by, cx, cy)) return true;
+    if (o2 === 0 && onSegment(ax, ay, bx, by, dx, dy)) return true;
+    if (o3 === 0 && onSegment(cx, cy, dx, dy, ax, ay)) return true;
+    if (o4 === 0 && onSegment(cx, cy, dx, dy, bx, by)) return true;
+    return false;
+  }
+
+  function countPolylineCrossings(polyA, polyB) {
+    if (!polyA || !polyB || polyA.length < 2 || polyB.length < 2) return 0;
+    var n = 0;
+    for (var i = 0; i < polyA.length - 1; i++) {
+      for (var j = 0; j < polyB.length - 1; j++) {
+        if (segmentsIntersect(
+          polyA[i].x, polyA[i].y, polyA[i + 1].x, polyA[i + 1].y,
+          polyB[j].x, polyB[j].y, polyB[j + 1].x, polyB[j + 1].y
+        )) n++;
+      }
+    }
+    return n;
+  }
+
+  function polylineDeviation(poly) {
+    if (!poly || poly.length < 3) return 0;
+    var x1 = poly[0].x;
+    var y1 = poly[0].y;
+    var x2 = poly[poly.length - 1].x;
+    var y2 = poly[poly.length - 1].y;
+    var dx = x2 - x1;
+    var dy = y2 - y1;
+    var len = Math.sqrt(dx * dx + dy * dy) || 1;
+    var dev = 0;
+    for (var i = 1; i < poly.length - 1; i++) {
+      var t = ((poly[i].x - x1) * dx + (poly[i].y - y1) * dy) / (len * len);
+      var px = x1 + dx * t;
+      var py = y1 + dy * t;
+      dev += Math.abs(poly[i].x - px) + Math.abs(poly[i].y - py);
+    }
+    return dev;
+  }
+
+  function polylineKey(poly) {
+    return poly.map(function (p) { return round1(p.x) + ',' + round1(p.y); }).join('|');
+  }
+
+  function dedupePolylines(list) {
+    var seen = {};
+    var out = [];
+    list.forEach(function (poly) {
+      var k = polylineKey(poly);
+      if (seen[k]) return;
+      seen[k] = true;
+      out.push(poly);
+    });
+    return out;
+  }
+
+  /** Génère des tracés candidats : segment, 1 point ou 2 points intermédiaires. */
+  function generateLinkRouteCandidates(x1, y1, x2, y2, opts) {
     opts = opts || {};
     x1 = Number(x1); y1 = Number(y1); x2 = Number(x2); y2 = Number(y2);
     var dx = x2 - x1;
     var dy = y2 - y1;
     var len = Math.sqrt(dx * dx + dy * dy);
-    if (!isFinite(len) || len < 6) {
-      return 'M ' + round1(x1) + ',' + round1(y1) + ' L ' + round1(x2) + ',' + round1(y2);
+    if (!isFinite(len) || len < 4) {
+      return [[{ x: x1, y: y1 }, { x: x2, y: y2 }]];
     }
-    var ux = dx / len;
-    var uy = dy / len;
-    var px = -uy;
-    var py = ux;
-    var sign = opts.sign < 0 ? -1 : 1;
+    var mx = (x1 + x2) / 2;
+    var my = (y1 + y2) / 2;
+    var px = -dy / len;
+    var py = dx / len;
     var rank = Math.max(0, parseInt(opts.rank, 10) || 0);
-    var bulge = Math.max(22, Math.min(120, len * 0.26)) * (1 + rank * 0.34);
-    var inset = Math.min(16, len * 0.1);
-    var sx = x1 + ux * inset;
-    var sy = y1 + uy * inset;
-    var ex = x2 - ux * inset;
-    var ey = y2 - uy * inset;
-    var c1x = sx + (ex - sx) / 3 + px * bulge * sign;
-    var c1y = sy + (ey - sy) / 3 + py * bulge * sign;
-    var c2x = sx + 2 * (ex - sx) / 3 + px * bulge * sign;
-    var c2y = sy + 2 * (ey - sy) / 3 + py * bulge * sign;
-    return 'M ' + round1(sx) + ',' + round1(sy)
-      + ' C ' + round1(c1x) + ',' + round1(c1y)
-      + ' ' + round1(c2x) + ',' + round1(c2y)
-      + ' ' + round1(ex) + ',' + round1(ey);
+    var sign = opts.sign < 0 ? -1 : 1;
+    var base = Math.max(20, Math.min(95, len * 0.22)) * (1 + rank * 0.28);
+    var list = [[{ x: x1, y: y1 }, { x: x2, y: y2 }]];
+    var oneOffsets = [base * sign, -base * sign, base * 1.55 * sign, -base * 1.55 * sign];
+    oneOffsets.forEach(function (off) {
+      list.push([
+        { x: x1, y: y1 },
+        { x: mx + px * off, y: my + py * off },
+        { x: x2, y: y2 }
+      ]);
+    });
+    var twoOffsets = [base * sign, -base * sign, base * 2.1 * sign, -base * 2.1 * sign, base * 3.2 * sign, -base * 3.2 * sign];
+    twoOffsets.forEach(function (off) {
+      list.push([
+        { x: x1, y: y1 },
+        { x: x1 + dx * 0.28 + px * off, y: y1 + dy * 0.28 + py * off },
+        { x: x1 + dx * 0.72 + px * off, y: y1 + dy * 0.72 + py * off },
+        { x: x2, y: y2 }
+      ]);
+      if (Math.abs(dx) >= Math.abs(dy)) {
+        var midX = mx + px * off * 0.65;
+        list.push([
+          { x: x1, y: y1 },
+          { x: midX, y: y1 },
+          { x: midX, y: y2 },
+          { x: x2, y: y2 }
+        ]);
+      } else {
+        var midY = my + py * off * 0.65;
+        list.push([
+          { x: x1, y: y1 },
+          { x: x1, y: midY },
+          { x: x2, y: midY },
+          { x: x2, y: y2 }
+        ]);
+      }
+    });
+    return dedupePolylines(list);
+  }
+
+  function scoreRouteCandidate(poly, others) {
+    var score = 0;
+    (others || []).forEach(function (other) {
+      if (other) score += countPolylineCrossings(poly, other) * 120;
+    });
+    score += Math.max(0, poly.length - 2) * 3;
+    score += polylineDeviation(poly) * 0.04;
+    return score;
+  }
+
+  function pickBestRouteCandidate(candidates, others) {
+    var best = candidates[0];
+    var bestScore = Infinity;
+    candidates.forEach(function (poly) {
+      var s = scoreRouteCandidate(poly, others);
+      if (s < bestScore) {
+        bestScore = s;
+        best = poly;
+      }
+    });
+    return best;
+  }
+
+  function layoutLinkRoutesExhaustive(valid, candidateSets, n) {
+    var assigned = new Array(n);
+    var bestOverall = null;
+    var bestScore = Infinity;
+    var current = new Array(valid.length);
+
+    function totalScore() {
+      var score = 0;
+      for (var i = 0; i < valid.length; i++) {
+        for (var j = i + 1; j < valid.length; j++) {
+          score += countPolylineCrossings(current[i], current[j]) * 120;
+        }
+        score += Math.max(0, current[i].length - 2) * 3;
+        score += polylineDeviation(current[i]) * 0.04;
+      }
+      return score;
+    }
+
+    function search(pos) {
+      if (pos >= valid.length) {
+        var score = totalScore();
+        if (score < bestScore) {
+          bestScore = score;
+          bestOverall = current.slice();
+        }
+        return;
+      }
+      var cands = candidateSets[pos];
+      for (var c = 0; c < cands.length; c++) {
+        current[pos] = cands[c];
+        search(pos + 1);
+      }
+    }
+
+    search(0);
+    if (!bestOverall) return assigned;
+    valid.forEach(function (entryIdx, pos) {
+      assigned[entryIdx] = bestOverall[pos];
+    });
+    return assigned;
+  }
+
+  /**
+   * Choisit pour chaque lien un tracé à 0, 1 ou 2 points évitant les croisements.
+   * entries: [{ x1, y1, x2, y2, rank?, sign? }] — null/empty ignorés.
+   */
+  function layoutLinkRoutes(entries) {
+    var n = entries.length;
+    var assigned = new Array(n);
+    var valid = [];
+    entries.forEach(function (e, i) {
+      if (!e || e.empty || !isFinite(e.x1) || !isFinite(e.x2)) return;
+      valid.push(i);
+    });
+    if (!valid.length) return assigned;
+
+    var candidateSets = valid.map(function (i) {
+      var e = entries[i];
+      return generateLinkRouteCandidates(e.x1, e.y1, e.x2, e.y2, e);
+    });
+
+    if (valid.length <= 8) {
+      return layoutLinkRoutesExhaustive(valid, candidateSets, n);
+    }
+
+    valid.sort(function (ia, ib) {
+      var ea = entries[ia];
+      var eb = entries[ib];
+      var la = Math.hypot(ea.x2 - ea.x1, ea.y2 - ea.y1);
+      var lb = Math.hypot(eb.x2 - eb.x1, eb.y2 - eb.y1);
+      return lb - la;
+    });
+    var candidateMap = {};
+    valid.forEach(function (i) {
+      var e = entries[i];
+      candidateMap[i] = generateLinkRouteCandidates(e.x1, e.y1, e.x2, e.y2, e);
+    });
+    valid.forEach(function (i) {
+      var others = [];
+      valid.forEach(function (j) {
+        if (j !== i && assigned[j]) others.push(assigned[j]);
+      });
+      assigned[i] = pickBestRouteCandidate(candidateMap[i], others);
+    });
+    for (var pass = 0; pass < 2; pass++) {
+      valid.forEach(function (i) {
+        var others = [];
+        valid.forEach(function (j) {
+          if (j !== i && assigned[j]) others.push(assigned[j]);
+        });
+        assigned[i] = pickBestRouteCandidate(candidateMap[i], others);
+      });
+    }
+    return assigned;
+  }
+
+  function linkPolylineToPath(poly) {
+    if (!poly || !poly.length) return '';
+    if (poly.length === 1) {
+      return 'M ' + round1(poly[0].x) + ',' + round1(poly[0].y);
+    }
+    var d = 'M ' + round1(poly[0].x) + ',' + round1(poly[0].y);
+    for (var i = 1; i < poly.length; i++) {
+      d += ' L ' + round1(poly[i].x) + ',' + round1(poly[i].y);
+    }
+    return d;
+  }
+
+  /** Compat. : un seul lien (sans optimisation globale). */
+  function linkSplinePath(x1, y1, x2, y2, opts) {
+    var routes = layoutLinkRoutes([{ x1: x1, y1: y1, x2: x2, y2: y2, rank: opts && opts.rank, sign: opts && opts.sign }]);
+    return linkPolylineToPath(routes[0]);
   }
 
   function normalizeDropzone(dz, index) {
@@ -1697,21 +1926,36 @@
       return el;
     }
 
+    function buildLinkRouteEntries(extra) {
+      var entries = links.map(function (l, idx) {
+        var a = findNode(l.from);
+        var b = findNode(l.to);
+        if (!a || !b) return null;
+        var ca = nodeCenter(a);
+        var cb = nodeCenter(b);
+        var o = splineOptsForIndex(idx);
+        return { x1: ca.x, y1: ca.y, x2: cb.x, y2: cb.y, rank: o.rank, sign: o.sign };
+      });
+      if (extra) entries.push(extra);
+      return entries;
+    }
+
+    var linkPolylines = [];
+
     function drawLinks(ev) {
       Array.prototype.slice.call(svg.querySelectorAll('.dnd-link-line, .dnd-link-hit')).forEach(function (n) {
         n.parentNode.removeChild(n);
       });
       var showFb = showingLinkFeedback(ev);
+      var entries = buildLinkRouteEntries();
+      linkPolylines = layoutLinkRoutes(entries);
       links.forEach(function (l, idx) {
-        var a = findNode(l.from);
-        var b = findNode(l.to);
-        if (!a || !b) return;
-        var ca = nodeCenter(a);
-        var cb = nodeCenter(b);
+        var poly = linkPolylines[idx];
+        if (!poly) return;
         var ok = isAllowedPair(l.from, l.to);
         var state = showFb ? (ok ? 'ok' : 'bad') : 'pending';
         var locked = state === 'ok';
-        var d = linkSplinePath(ca.x, ca.y, cb.x, cb.y, splineOptsForIndex(idx));
+        var d = linkPolylineToPath(poly);
         var colors = { pending: '#1565c0', ok: '#2e7d32', bad: '#d32f2f' };
         var line = makeSplineEl('dnd-link-line dnd-link-' + state, d, {
           'stroke-width': '4',
@@ -1760,12 +2004,18 @@
       }
     }
 
+    function previewRoutePath(x1, y1, x2, y2) {
+      var candidates = generateLinkRouteCandidates(x1, y1, x2, y2, {});
+      return pickBestRouteCandidate(candidates, linkPolylines.filter(Boolean));
+    }
+
     function startDrag(fromEl, clientX, clientY) {
       var id = fromEl.getAttribute('data-id');
       if (!id) return;
       var c = nodeCenter(fromEl);
       var pt = localPoint(clientX, clientY);
-      var line = makeSplineEl('dnd-link-drag', linkSplinePath(c.x, c.y, pt.x, pt.y), {
+      var previewPoly = previewRoutePath(c.x, c.y, pt.x, pt.y);
+      var line = makeSplineEl('dnd-link-drag', linkPolylineToPath(previewPoly), {
         stroke: '#f59e0b',
         'stroke-width': '4',
         'stroke-dasharray': '8 6',
@@ -1798,7 +2048,7 @@
       }
       var c0 = nodeCenter(dragState.fromEl);
       var end = target && target !== dragState.fromEl ? nodeCenter(target) : pt;
-      dragState.line.setAttribute('d', linkSplinePath(c0.x, c0.y, end.x, end.y));
+      dragState.line.setAttribute('d', linkPolylineToPath(previewRoutePath(c0.x, c0.y, end.x, end.y)));
       showTip(DRAW_LINK_TIP, pt.x, pt.y);
     }
 
@@ -1814,7 +2064,7 @@
         var ca = nodeCenter(fromEl);
         var cb = nodeCenter(target);
         if (dragState.line) {
-          dragState.line.setAttribute('d', linkSplinePath(ca.x, ca.y, cb.x, cb.y));
+          dragState.line.setAttribute('d', linkPolylineToPath(previewRoutePath(ca.x, ca.y, cb.x, cb.y)));
         }
         cancelDrag();
         addLink(fromId, toId);
@@ -3153,6 +3403,10 @@
     allowedLinksToText: allowedLinksToText,
     effectiveAllowedLinks: effectiveAllowedLinks,
     linkSplinePath: linkSplinePath,
+    linkPolylineToPath: linkPolylineToPath,
+    layoutLinkRoutes: layoutLinkRoutes,
+    countPolylineCrossings: countPolylineCrossings,
+    generateLinkRouteCandidates: generateLinkRouteCandidates,
     isSingleUse: isSingleUse,
     normalizeDropzone: normalizeDropzone,
     applyGameDefaults: applyGameDefaults,
