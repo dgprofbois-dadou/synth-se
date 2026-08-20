@@ -568,13 +568,14 @@
       const gameRoot = d.closest('.drag-game, [data-dnd-gameid], [data-tt-enabled]');
       const tipEnabled = !(gameRoot && gameRoot.getAttribute('data-tt-enabled') === '0');
 
-      // Migration title -> data-tooltip si nécessaire (rétro-compatibilité)
-      if (tipEnabled && d.title && !d.getAttribute('data-tooltip')) {
-        d.setAttribute('data-tooltip', d.title);
-        d.removeAttribute('title');
-      }
+      // Infobulle uniquement si data-tooltip est présent (réglage par carte).
+      // data-tt-enabled=0 : ancien export « tout masquer ».
       if (!tipEnabled) {
         d.removeAttribute('data-tooltip');
+        d.removeAttribute('title');
+        return;
+      }
+      if (!d.getAttribute('data-tooltip')) {
         d.removeAttribute('title');
         return;
       }

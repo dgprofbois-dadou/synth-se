@@ -659,6 +659,32 @@ test('UI inspecteur zones compact dans placement-inputs.html', () => {
   assert.ok(!html.includes('Label (mémo admin — non affiché sur le canvas, voir badge ID)'));
 });
 
+test('infobulle par image droppable dans placement-inputs.html', () => {
+  const html = fs.readFileSync(path.join(__dirname, '..', 'placement-inputs.html'), 'utf8');
+  assert.ok(html.includes('mq-drag-card'));
+  assert.ok(html.includes('mq-drag-tip'));
+  assert.ok(html.includes('mq-drag-id'));
+  assert.ok(!html.includes('id="dndGame1TooltipEnabled"'));
+  assert.ok(!html.includes('Afficher le tooltip au survol des images'));
+});
+
+test('dragShowsTooltip : par carte, héritage de l’ancien interrupteur global', () => {
+  const gOff = Engine.applyGameDefaults({
+    tooltipEnabled: false,
+    draggables: [{ id: '1', title: 'A' }, { id: '2', title: 'B', tooltipEnabled: true }]
+  });
+  assert.strictEqual(gOff.draggables[0].tooltipEnabled, false);
+  assert.strictEqual(gOff.draggables[1].tooltipEnabled, true);
+  assert.strictEqual(Engine.dragShowsTooltip(gOff.draggables[0], gOff), false);
+  assert.strictEqual(Engine.dragShowsTooltip(gOff.draggables[1], gOff), true);
+  const gOn = Engine.applyGameDefaults({
+    tooltipEnabled: true,
+    draggables: [{ id: '1', title: 'A' }]
+  });
+  assert.strictEqual(gOn.draggables[0].tooltipEnabled, true);
+  assert.strictEqual(Engine.dragShowsTooltip(gOn.draggables[0], gOn), true);
+});
+
 test('saisie IDs d’étape : textarea + pastilles, pas de rerender à chaque frappe', () => {
   const html = fs.readFileSync(path.join(__dirname, '..', 'placement-inputs.html'), 'utf8');
   assert.ok(html.includes('textarea data-field="zoneIds"'));

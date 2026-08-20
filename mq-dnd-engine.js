@@ -604,6 +604,7 @@
     if (typeof g.enableSteps !== 'boolean') g.enableSteps = false;
     g.steps = normalizeSteps(g.steps);
     g.instructionsBox = normalizeInstructionsBox(g.instructionsBox, g);
+    migrateDraggableTooltips(g);
     if (g.enableSteps && (!g.steps || !g.steps.length) && String(g.instructions || '').trim()) {
       g.steps = [normalizeStep({
         title: 'Étape 1',
@@ -616,6 +617,25 @@
     }
     migrateLegacyLinkingToSteps(g);
     if (g.enableSteps) applyStepZoneMapsToDropzones(g);
+    return g;
+  }
+
+  /** Infobulle d’une carte : drapeau par image, sinon ancien réglage global du jeu. */
+  function dragShowsTooltip(drag, game) {
+    if (drag && typeof drag.tooltipEnabled === 'boolean') return !!drag.tooltipEnabled;
+    if (game && game.tooltip && game.tooltip.enabled === false) return false;
+    if (game && game.tooltipEnabled === false) return false;
+    return true;
+  }
+
+  /** Ancien interrupteur global → une case par carte (une seule fois). */
+  function migrateDraggableTooltips(g) {
+    if (!g || !Array.isArray(g.draggables)) return g;
+    var gameOn = !(g.tooltipEnabled === false || (g.tooltip && g.tooltip.enabled === false));
+    g.draggables.forEach(function (d) {
+      if (!d || typeof d !== 'object') return;
+      if (typeof d.tooltipEnabled !== 'boolean') d.tooltipEnabled = gameOn;
+    });
     return g;
   }
 
@@ -3660,6 +3680,8 @@
     isSingleUse: isSingleUse,
     normalizeDropzone: normalizeDropzone,
     applyGameDefaults: applyGameDefaults,
+    dragShowsTooltip: dragShowsTooltip,
+    migrateDraggableTooltips: migrateDraggableTooltips,
     applyStepZoneMapsToDropzones: applyStepZoneMapsToDropzones,
     isCardAcceptedInZone: isCardAcceptedInZone,
     usesZoneAcceptedIds: usesZoneAcceptedIds,

@@ -2576,12 +2576,92 @@
 
         #left .mq-dnd-draggables {
             max-height: 320px;
+            overflow-x: hidden !important;
             overflow-y: auto;
             background: rgba(255, 255, 255, .85) !important;
             padding: 8px !important;
             border-radius: 10px !important;
             border: 1px solid rgba(0, 0, 0, .08) !important;
             margin-bottom: 8px !important;
+            max-width: 100%;
+            box-sizing: border-box;
+        }
+        #left .mq-drag-card {
+            display: flex;
+            align-items: flex-start;
+            gap: 6px;
+            min-width: 0;
+            max-width: 100%;
+            overflow: hidden;
+            box-sizing: border-box;
+            margin-bottom: 6px;
+            padding: 6px;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            background: #fff;
+        }
+        #left .mq-drag-thumb {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            align-items: center;
+            flex: 0 0 40px;
+        }
+        #left .mq-drag-body {
+            flex: 1;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        #left .mq-drag-top {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            min-width: 0;
+        }
+        #left .mq-drag-card input:not([type="checkbox"]) {
+            height: 26px !important;
+            font-size: 12px !important;
+            padding: 0 6px !important;
+        }
+        #left .mq-drag-id {
+            width: 52px !important;
+            flex: 0 0 52px !important;
+            max-width: 52px !important;
+        }
+        #left .mq-drag-title {
+            width: 100% !important;
+        }
+        #left .mq-drag-tip {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            margin-left: auto;
+            font-size: 10px;
+            font-weight: 700;
+            color: #475569;
+            white-space: nowrap;
+            cursor: pointer;
+        }
+        #left .mq-drag-tip input {
+            width: 16px !important;
+            height: 16px !important;
+            margin: 0;
+            flex: 0 0 auto;
+        }
+        #left .mq-drag-del {
+            flex: 0 0 20px;
+            width: 20px;
+            height: 20px;
+            border: none;
+            background: none;
+            color: #ff4444;
+            font-weight: 700;
+            cursor: pointer;
+            font-size: 16px;
+            line-height: 1;
+            padding: 0;
         }
 
         #left .mq-dnd-add-btn {
@@ -3792,10 +3872,6 @@
                 </div>
                 <div class="row" style="margin-top:4px; padding-top:4px; border-top:1px dashed #eee;">
                     <label style="font-size:11px; width:100%;">Tooltips images</label>
-                    <label style="font-size:11px; width:100%; display:flex; align-items:center; gap:6px; margin:2px 0 4px 0;">
-                        <input type="checkbox" id="dndGame1TooltipEnabled" checked style="width:auto; margin:0;">
-                        Afficher le tooltip au survol
-                    </label>
                     <div style="display:flex; flex-wrap:wrap; gap:4px; align-items:center;">
                         <select id="dndGame1TooltipFont" style="width:75px; font-size:10px; height:20px;">
                             <option value="Arial, sans-serif">Arial</option>
@@ -3900,10 +3976,6 @@
                 </div>
                 <div class="row" style="margin-top:4px; padding-top:4px; border-top:1px dashed #eee;">
                     <label style="font-size:11px; width:100%;">Tooltips images</label>
-                    <label style="font-size:11px; width:100%; display:flex; align-items:center; gap:6px; margin:2px 0 4px 0;">
-                        <input type="checkbox" id="dndGame2TooltipEnabled" checked style="width:auto; margin:0;">
-                        Afficher le tooltip au survol
-                    </label>
                     <div style="display:flex; flex-wrap:wrap; gap:4px; align-items:center;">
                         <select id="dndGame2TooltipFont" style="width:75px; font-size:10px; height:20px;">
                             <option value="Arial, sans-serif">Arial</option>
@@ -8275,8 +8347,9 @@
                         el.draggable = true;
                         if (mqGameNeedsRelier(gameConfig)) el.classList.add('dnd-link-capable');
                         el.dataset.id = drag.id;
-                        const tipOn = gameConfig.tooltipEnabled !== false
-                            && !(gameConfig.tooltip && gameConfig.tooltip.enabled === false);
+                        const tipOn = (window.MqDndEngine && MqDndEngine.dragShowsTooltip)
+                            ? MqDndEngine.dragShowsTooltip(drag, gameConfig)
+                            : (drag.tooltipEnabled !== false);
                         const tipText = tipOn ? (drag.title || drag.tooltip || '') : '';
                         el.title = tipText;
                         if (tipText) el.setAttribute('data-tooltip', tipText);
@@ -12428,9 +12501,8 @@
                     if (!g.titleBox) g.titleBox = { x: 10, y: 10, width: 600, height: 80 };
                     g.titleBox.width = g.header.width;
                     g.titleBox.height = g.header.height;
-                    const ttEn = el('TooltipEnabled'), ttFont = el('TooltipFont'), ttDur = el('TooltipDuration'), ttBg = el('TooltipBgColor'), ttTxt = el('TooltipTextColor');
-                    if (ttEn) g.tooltipEnabled = !!ttEn.checked;
-                    else if (typeof g.tooltipEnabled !== 'boolean') g.tooltipEnabled = true;
+                    const ttFont = el('TooltipFont'), ttDur = el('TooltipDuration'), ttBg = el('TooltipBgColor'), ttTxt = el('TooltipTextColor');
+                    if (typeof g.tooltipEnabled !== 'boolean') g.tooltipEnabled = true;
                     if (ttFont) g.tooltipFont = ttFont.value;
                     if (ttDur) g.tooltipDuration = parseInt(ttDur.value, 10) || 3000;
                     if (ttBg) g.tooltipBgColor = ttBg.value;
@@ -13540,7 +13612,7 @@
                     id = suggested;
                 }
                 arr.push({
-                    id, kind: 'text', text: 'Étiquette', title: '',
+                    id, kind: 'text', text: 'Étiquette', title: '', tooltipEnabled: true,
                     x: 10 + arr.length * 70, y: 120, width: 240, height: 80,
                     fontSize: 28, font: 'Arial, sans-serif', color: '#000000',
                     bold: false, italic: false, bg: '#ffe082', bgOn: true
@@ -14664,7 +14736,9 @@
                         const h = d.height || 250;
                         const idLabel = String(d.id != null ? d.id : (idx + 1));
                         const safeId = idLabel.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
-                        const tipOn = g.tooltipEnabled !== false && !(g.tooltip && g.tooltip.enabled === false);
+                        const tipOn = (window.MqDndEngine && MqDndEngine.dragShowsTooltip)
+                            ? MqDndEngine.dragShowsTooltip(d, g)
+                            : (d.tooltipEnabled !== false);
                         const tipAttr = tipOn
                             ? ' data-tooltip="' + (d.title || '').replace(/"/g, '&quot;') + '"'
                             : '';
@@ -14830,7 +14904,6 @@
                         if (!text) return;
                         const gameId = img.dataset.game;
                         const game = state.dndGames[gameId];
-                        if (game && (game.tooltipEnabled === false || (game.tooltip && game.tooltip.enabled === false))) return;
 
                         const font = img.dataset.hintFont || "'OpenDyslexic', sans-serif";
                         const bgColor = game?.tooltipBgColor || '#333333';
@@ -15281,9 +15354,6 @@
                 if (el('ZoneHeight')) el('ZoneHeight').value = g.zoneHeight ?? 250;
                 if (el('ZoneGap')) el('ZoneGap').value = g.zoneGap ?? 10;
                 const tt = g.tooltip || {};
-                if (el('TooltipEnabled')) el('TooltipEnabled').checked = (typeof tt.enabled === 'boolean')
-                    ? tt.enabled
-                    : (g.tooltipEnabled !== false);
                 if (el('TooltipFont')) el('TooltipFont').value = tt.font || g.tooltipFont || "'OpenDyslexic', sans-serif";
                 if (el('TooltipDuration')) el('TooltipDuration').value = tt.duration ?? g.tooltipDuration ?? 3000;
                 if (el('TooltipBgColor')) el('TooltipBgColor').value = tt.bgColor || g.tooltipBgColor || '#333333';
@@ -15571,7 +15641,10 @@
                     const dH = ((d.height || 250) / G_H) * 100;
                     const dX = ((d.x || 0) / G_W) * 100;
                     const dY = ((d.y || 0) / G_H) * 100;
-                    const tipText = ttEnabled ? String(d.title || '').replace(/"/g, '&quot;') : '';
+                    const tipText = ((window.MqDndEngine && MqDndEngine.dragShowsTooltip)
+                        ? MqDndEngine.dragShowsTooltip(d, g)
+                        : (d.tooltipEnabled !== false))
+                        ? String(d.title || '').replace(/"/g, '&quot;') : '';
                     return '<div class="draggable-wrapper" style="position:absolute; left:' + dX + '%; top:' + dY + '%; width:' + dW + '%; height:' + dH + '%; box-sizing:border-box;">'
                         + '<span class="png-wrap draggable" draggable="true" tabindex="0" role="button" aria-label="Carte ' + d.id + '"'
                         + ' style="display:block; width:100%; height:100%; pointer-events:auto;"'
@@ -16603,7 +16676,10 @@
                     const title = img.getAttribute('title');
                     if (!title) return;
                     const game = state.dndGames[gameId];
-                    if (game && (game.tooltipEnabled === false || (game.tooltip && game.tooltip.enabled === false))) {
+                    const idx = Array.from(imgs).indexOf(img);
+                    const drag = game && Array.isArray(game.draggables) ? game.draggables[idx] : null;
+                    if (drag && window.MqDndEngine && MqDndEngine.dragShowsTooltip
+                        && !MqDndEngine.dragShowsTooltip(drag, game)) {
                         img.removeAttribute('title');
                         return;
                     }
@@ -17026,6 +17102,7 @@
                             id,
                             src,
                             title,
+                            tooltipEnabled: true,
                             x: 10 + n * 70,
                             y: 120,
                             width: 60,
@@ -17072,11 +17149,10 @@
 
                 draggables.forEach((d, index) => {
                     const div = document.createElement('div');
-                    div.style.cssText = 'display:flex; align-items:flex-start; gap:5px; margin-bottom:5px; padding:5px; border-bottom:1px solid #eee; background:#fff;';
+                    div.className = 'mq-drag-card';
 
-                    // Image miniature
                     const imgContainer = document.createElement('div');
-                    imgContainer.style.cssText = 'display:flex; flex-direction:column; gap:2px; align-items:center;';
+                    imgContainer.className = 'mq-drag-thumb';
 
                     if (d.kind === 'text') {
                         const badge = document.createElement('div');
@@ -17119,12 +17195,11 @@
 
                     // Conteneur Inputs
                     const inputsDiv = document.createElement('div');
-                    inputsDiv.style.cssText = 'display:flex; flex-direction:column; flex:1; gap:4px;';
+                    inputsDiv.className = 'mq-drag-body';
                     div.appendChild(inputsDiv);
 
-                    // Ligne 1 : ID et Supprimer
                     const row1 = document.createElement('div');
-                    row1.style.cssText = 'display:flex; align-items:center; justify-content:space-between;';
+                    row1.className = 'mq-drag-top';
 
                     const idGroup = document.createElement('div');
                     idGroup.style.cssText = 'display:flex; align-items:center; gap:4px;';
@@ -17139,8 +17214,9 @@
                     inputId.type = 'text';
                     inputId.value = d.id;
                     const isDupId = mqIsDraggableIdTaken(gameId, d.id, index);
-                    inputId.style.cssText = 'width:48px; padding:1px; font-size:11px; text-align:center; border:1px solid '
+                    inputId.style.cssText = 'width:52px; padding:1px; font-size:11px; text-align:center; border:1px solid '
                         + (isDupId ? '#dc2626' : '#ddd') + '; background:' + (isDupId ? '#fef2f2' : '#fff') + ';';
+                    inputId.className = 'mq-drag-id';
                     if (isDupId) inputId.title = 'ID en double — changez-le pour que les cases des zones soient indépendantes';
                     inputId.onchange = (e) => {
                         const newId = String(e.target.value || '').trim();
@@ -17164,11 +17240,31 @@
                     idGroup.appendChild(inputId);
                     row1.appendChild(idGroup);
 
-                    // Bouton Supprimer
+                    const tipOn = (typeof d.tooltipEnabled === 'boolean')
+                        ? d.tooltipEnabled
+                        : ((window.MqDndEngine && MqDndEngine.dragShowsTooltip)
+                            ? MqDndEngine.dragShowsTooltip(d, state.dndGames[gameId])
+                            : true);
+                    const tipLab = document.createElement('label');
+                    tipLab.className = 'mq-drag-tip';
+                    tipLab.title = 'Afficher l’infobulle au survol de cette image';
+                    const tipChk = document.createElement('input');
+                    tipChk.type = 'checkbox';
+                    tipChk.checked = tipOn;
+                    tipChk.addEventListener('change', () => {
+                        d.tooltipEnabled = !!tipChk.checked;
+                        saveLocal();
+                        renderDndGamesPreview();
+                    });
+                    tipLab.appendChild(tipChk);
+                    tipLab.appendChild(document.createTextNode(' Infobulle'));
+                    row1.appendChild(tipLab);
+
                     const btnDel = document.createElement('button');
+                    btnDel.type = 'button';
                     btnDel.textContent = '×';
                     btnDel.title = 'Supprimer';
-                    btnDel.style.cssText = 'width:20px; height:20px; border:none; background:none; color:#ff4444; font-weight:bold; cursor:pointer; font-size:16px; line-height:1; padding:0;';
+                    btnDel.className = 'mq-drag-del';
                     btnDel.onclick = () => {
                         if (confirm('Voulez-vous supprimer cette image ?')) {
                             state.dndGames[gameId].draggables.splice(index, 1);
@@ -17184,7 +17280,8 @@
                     const inputTitle = document.createElement('input');
                     inputTitle.type = 'text';
                     inputTitle.value = d.title || '';
-                    inputTitle.placeholder = 'Desc/Tooltip...';
+                    inputTitle.placeholder = 'Desc / infobulle…';
+                    inputTitle.className = 'mq-drag-title';
                     inputTitle.style.cssText = 'width:100%; padding:2px; font-size:11px; border:1px solid #ddd;';
                     inputTitle.onchange = (e) => {
                         d.title = e.target.value;
@@ -17223,8 +17320,8 @@
                     const rowDim = document.createElement('div');
                     rowDim.className = 'mq-dnd-dim-grid';
                     rowDim.innerHTML =
-                        mqDimPosField('Largeur', d.width || 250, 'updateDraggablePosition', gameId, index, 'width', 10) +
-                        mqDimPosField('Hauteur', d.height || 250, 'updateDraggablePosition', gameId, index, 'height', 10) +
+                        mqDimPosField('L', d.width || 250, 'updateDraggablePosition', gameId, index, 'width', 10) +
+                        mqDimPosField('H', d.height || 250, 'updateDraggablePosition', gameId, index, 'height', 10) +
                         mqDimPosField('X', d.x || 0, 'updateDraggablePosition', gameId, index, 'x', 5) +
                         mqDimPosField('Y', d.y || 0, 'updateDraggablePosition', gameId, index, 'y', 5);
                     inputsDiv.appendChild(rowDim);
@@ -17555,9 +17652,7 @@
                     + '<span style="font-size:10px; color:#999;">|</span>'
                     + '<input id="dndGame' + n + 'ZoneGap" type="number" value="10" style="width:35px; font-size:11px; padding:2px;" placeholder="Gap" title="Espacement"></div></div>'
                     + '<div class="row" style="margin-top:4px; padding-top:4px; border-top:1px dashed #eee;">'
-                    + '<label style="font-size:11px; width:100%;">Tooltips images</label>'
-                    + '<label style="font-size:11px; width:100%; display:flex; align-items:center; gap:6px; margin:2px 0 4px 0;">'
-                    + '<input type="checkbox" id="dndGame' + n + 'TooltipEnabled" checked style="width:auto; margin:0;"> Afficher le tooltip au survol</label>'
+                    + '<label style="font-size:11px; width:100%;">Style infobulles (affichage : case sur chaque image)</label>'
                     + '<div style="display:flex; flex-wrap:wrap; gap:4px; align-items:center;">'
                     + '<select id="dndGame' + n + 'TooltipFont" style="width:75px; font-size:10px; height:20px;">'
                     + '<option value="Arial, sans-serif">Arial</option>'
@@ -17736,11 +17831,18 @@
                 if (!anchor) return;
                 const row = anchor.closest('.row');
                 if (!row) return;
-                const tipId = String(fontInputId || '').replace(/TooltipFont$/, 'TooltipEnabled');
-                const tipEn = (tipId !== fontInputId) ? $(tipId) : null;
-                // v2 : case tooltip avec libellé lisible (v1 perdait le texte)
-                if (row.dataset.mqToolbarLayout === '2') return;
-                row.dataset.mqToolbarLayout = '2';
+                row.querySelectorAll('.mq-dnd-tip-toggle').forEach((el) => el.remove());
+                const leftover = $(String(fontInputId || '').replace(/TooltipFont$/, 'TooltipEnabled'));
+                if (leftover) {
+                    const wrap = leftover.closest('label') || leftover;
+                    if (wrap && wrap.parentNode) wrap.remove();
+                }
+                if (row.dataset.mqToolbarLayout === '3') return;
+                if (row.dataset.mqToolbarLayout === '2') {
+                    row.dataset.mqToolbarLayout = '3';
+                    return;
+                }
+                row.dataset.mqToolbarLayout = '3';
                 if (!row.classList.contains('mq-dnd-sub')) row.classList.add('mq-dnd-sub');
                 let subLab = row.querySelector('.mq-dnd-sub-label');
                 if (!subLab) {
@@ -17750,25 +17852,14 @@
                 } else {
                     subLab.textContent = subTitle;
                 }
-                const controls = Array.from(row.querySelectorAll('select, input')).filter((inp) => inp !== tipEn);
+                const controls = Array.from(row.querySelectorAll('select, input'));
                 const toolbar = document.createElement('div');
                 toolbar.className = 'mq-dnd-toolbar';
                 controls.forEach((inp) => {
                     inp.removeAttribute('style');
                     toolbar.appendChild(inp);
                 });
-                const kids = [subLab];
-                if (tipEn) {
-                    const tipLab = document.createElement('label');
-                    tipLab.className = 'mq-dnd-tip-toggle';
-                    tipLab.setAttribute('for', tipEn.id);
-                    tipEn.removeAttribute('style');
-                    tipLab.appendChild(tipEn);
-                    tipLab.appendChild(document.createTextNode(' Afficher le tooltip au survol des images'));
-                    kids.push(tipLab);
-                }
-                kids.push(toolbar);
-                row.replaceChildren.apply(row, kids);
+                row.replaceChildren(subLab, toolbar);
             }
 
             function mqEnhanceDndPanels() {
@@ -17808,12 +17899,12 @@
                         const lab = row.querySelector('label');
                         if (!lab) return;
                         const txt = lab.textContent || '';
-                        if (txt.indexOf('Tooltips') >= 0 || txt.indexOf('Bande Titre') >= 0) {
+                        if (txt.indexOf('Tooltips') >= 0 || txt.indexOf('infobulle') >= 0 || txt.indexOf('Bande Titre') >= 0) {
                             if (!row.classList.contains('mq-dnd-sub')) {
                                 row.classList.add('mq-dnd-sub');
                                 const subLab = document.createElement('span');
                                 subLab.className = 'mq-dnd-sub-label';
-                                subLab.textContent = txt.indexOf('Tooltips') >= 0 ? '💬 Infobulles' : '🏷️ Bandeau titre';
+                                subLab.textContent = (txt.indexOf('Tooltips') >= 0 || txt.indexOf('infobulle') >= 0) ? '💬 Infobulles' : '🏷️ Bandeau titre';
                                 row.insertBefore(subLab, row.firstChild);
                                 if (lab.style.width === '100%') lab.style.display = 'none';
                             }
