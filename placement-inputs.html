@@ -736,8 +736,24 @@
         .dnd-game-container {
             pointer-events: auto;
             overflow: visible;
+            cursor: move;
         }
         .dnd-game-background { pointer-events: none; }
+        .dnd-resize-handle {
+            position: absolute;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            border: 3px solid #fff;
+            z-index: 200;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+            pointer-events: auto;
+            box-sizing: border-box;
+        }
+        .dnd-resize-handle[data-corner="nw"] { left: -7px; top: -7px; cursor: nwse-resize; }
+        .dnd-resize-handle[data-corner="ne"] { right: -7px; top: -7px; cursor: nesw-resize; }
+        .dnd-resize-handle[data-corner="se"] { right: -7px; bottom: -7px; cursor: nwse-resize; }
+        .dnd-resize-handle[data-corner="sw"] { left: -7px; bottom: -7px; cursor: nesw-resize; }
         .dnd-element.mq-dnd-selected {
             border-color: #e8521f !important;
             box-shadow: 0 0 0 2px rgba(232,82,31,.45);
@@ -7902,6 +7918,7 @@
                     e.target.closest('.dropzone') ||
                     e.target.closest('.dnd-placed') ||
                     e.target.closest('.dnd-element') ||
+                    e.target.closest('.dnd-game-container') ||
                     e.target.closest('.dnd-resize-handle') ||
                     e.target.closest('.dnd-element-handle')
                 )) return;
@@ -14856,11 +14873,13 @@
                     const handleColor = (mqGameNum(gameId) % 2 === 1) ? '#4a90e2' : '#4ade80';
                     const tb = g.titleBox || { x: 10, y: 10, width: 600, height: 80 };
                     html += `
-                        <div class="dnd-game-container" data-game="${gameId}"
+                        <div class="dnd-game-container" data-game="${gameId}" title="Glisser la zone (images et textes inclus)"
                              style="position: absolute; left: ${g.x}px; top: ${g.y}px; width: ${g.width}px; height: ${g.height}px;">
                             <div class="dnd-game-background" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: ${g.bgColor}; border-radius: 30px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); z-index: 0; mix-blend-mode: multiply; pointer-events: none;"></div>
-                            <div class="dnd-resize-handle" data-game="${gameId}" title="Ctrl + Glisser pour redimensionner"
-                                 style="position: absolute; right: -5px; bottom: -5px; width: 20px; height: 20px; background: ${handleColor}; cursor: nwse-resize; border-radius: 50%; border: 3px solid white; z-index: 100; box-shadow: 0 2px 6px rgba(0,0,0,0.4);"></div>
+                            <div class="dnd-resize-handle" data-game="${gameId}" data-corner="nw" title="Redimensionner" style="background:${handleColor};"></div>
+                            <div class="dnd-resize-handle" data-game="${gameId}" data-corner="ne" title="Redimensionner" style="background:${handleColor};"></div>
+                            <div class="dnd-resize-handle" data-game="${gameId}" data-corner="se" title="Redimensionner" style="background:${handleColor};"></div>
+                            <div class="dnd-resize-handle" data-game="${gameId}" data-corner="sw" title="Redimensionner" style="background:${handleColor};"></div>
                             <div class="dnd-element dnd-title" data-game="${gameId}" data-type="title"
                                  style="left: ${tb.x}px; top: ${tb.y}px; width: ${tb.width}px; height: ${tb.height}px; z-index: 2;">
                                 <h2 style="margin:0; width:100%; font-family:${(g.header && g.header.font) || 'Verdana, sans-serif'}; font-size:${(g.header && g.header.fontSize) || 60}px; font-weight:${(g.header && g.header.bold) ? 'bold' : 'normal'}; font-style:${(g.header && g.header.italic) ? 'italic' : 'normal'}; text-align:${(g.header && g.header.align) || 'center'};">${g.title || gameId}</h2>
@@ -15324,23 +15343,34 @@
                         const stageRect = stage.getBoundingClientRect();
                         game.x = Math.round((e.clientX - stageRect.left - state.tx) / state.scale - mqDndUiDragGameOffX);
                         game.y = Math.round((e.clientY - stageRect.top - state.ty) / state.scale - mqDndUiDragGameOffY);
-                        const gameEl = document.querySelector('.dnd-game-container[data-game="' + mqDndUiDragGame + '"]');
-                        if (gameEl) {
-                            gameEl.style.left = game.x + 'px';
-                            gameEl.style.top = game.y + 'px';
-                        }
+                        mqApplyGameContainerBox(mqDndUiDragGame);
                     } else if (mqDndUiResizeGame) {
-                        const game = state.dndGames[mqDndUiResizeGame];
+                        const info = mqDndUiResizeGame;
+                        const game = state.dndGames[info.gameId];
                         if (!game) return;
-                        const deltaX = (e.clientX - mqDndUiResizeGameStartX) / state.scale;
-                        const deltaY = (e.clientY - mqDndUiResizeGameStartY) / state.scale;
-                        game.width = Math.max(200, Math.round(mqDndUiResizeGameStartW + deltaX));
-                        game.height = Math.max(150, Math.round(mqDndUiResizeGameStartH + deltaY));
-                        const gameEl = document.querySelector('.dnd-game-container[data-game="' + mqDndUiResizeGame + '"]');
-                        if (gameEl) {
-                            gameEl.style.width = game.width + 'px';
-                            gameEl.style.height = game.height + 'px';
+                        const sc = state.scale || 1;
+                        const dx = (e.clientX - info.startX) / sc;
+                        const dy = (e.clientY - info.startY) / sc;
+                        const corner = info.corner || 'se';
+                        const minW = 200, minH = 150;
+                        let x = info.origX, y = info.origY, w = info.origW, h = info.origH;
+                        if (corner.indexOf('e') >= 0) w = info.origW + dx;
+                        if (corner.indexOf('w') >= 0) { w = info.origW - dx; x = info.origX + dx; }
+                        if (corner.indexOf('s') >= 0) h = info.origH + dy;
+                        if (corner.indexOf('n') >= 0) { h = info.origH - dy; y = info.origY + dy; }
+                        if (w < minW) {
+                            if (corner.indexOf('w') >= 0) x = info.origX + (info.origW - minW);
+                            w = minW;
                         }
+                        if (h < minH) {
+                            if (corner.indexOf('n') >= 0) y = info.origY + (info.origH - minH);
+                            h = minH;
+                        }
+                        game.x = Math.round(x);
+                        game.y = Math.round(y);
+                        game.width = Math.round(w);
+                        game.height = Math.round(h);
+                        mqApplyGameContainerBox(info.gameId);
                     }
                 });
                 document.addEventListener('mouseup', (e) => { mqFinishDndUiGesture(e); });
@@ -15350,7 +15380,8 @@
                     if (e.key === 'Escape' && (mqDndUiDragEl || mqDndUiResizeEl || mqDndUiDragGame || mqDndUiResizeGame
                         || document.body.classList.contains('mq-dnd-ui-dragging')
                         || document.body.style.cursor === 'grabbing'
-                        || document.body.style.cursor === 'nwse-resize')) {
+                        || document.body.style.cursor === 'nwse-resize'
+                        || document.body.style.cursor === 'nesw-resize')) {
                         mqFinishDndUiGesture(null);
                     }
                 }, true);
@@ -15362,6 +15393,7 @@
                             || document.body.classList.contains('mq-dnd-ui-dragging')
                             || document.body.style.cursor === 'grabbing'
                             || document.body.style.cursor === 'nwse-resize'
+                            || document.body.style.cursor === 'nesw-resize'
                             || document.body.style.userSelect === 'none') {
                             mqFinishDndUiGesture(null);
                         }
@@ -15461,20 +15493,29 @@
             }
 
 
+            function mqApplyGameContainerBox(gameId) {
+                const game = state.dndGames[gameId];
+                const gameEl = document.querySelector('.dnd-game-container[data-game="' + gameId + '"]');
+                if (!game || !gameEl) return;
+                gameEl.style.left = (game.x || 0) + 'px';
+                gameEl.style.top = (game.y || 0) + 'px';
+                gameEl.style.width = (game.width || 200) + 'px';
+                gameEl.style.height = (game.height || 150) + 'px';
+            }
+
             // Attacher les gestionnaires pour déplacer et redimensionner les jeux
             function attachDndGameHandlers() {
                 mqEnsureDndUiDocListeners();
 
                 document.querySelectorAll('.dnd-game-container').forEach(gameEl => {
-                    const contentEl = gameEl.querySelector('.dnd-game-background');
-                    if (!contentEl) return;
-
-                    contentEl.addEventListener('mousedown', (e) => {
-                        if (e.target.classList.contains('dnd-resize-handle')) return;
-                        if (e.target.classList.contains('dnd-element')) return;
-                        if (e.target.closest('.dnd-element')) return;
-                        if (!e.ctrlKey) return;
+                    gameEl.addEventListener('mousedown', (e) => {
                         if (e.button !== 0) return;
+                        if (e.target.closest('.dnd-resize-handle')) return;
+                        if (e.target.closest('.dnd-element')) return;
+                        if (e.target.closest('.dnd-element-handle')) return;
+                        if (typeof drawingLinkZone !== 'undefined' && drawingLinkZone) return;
+                        if (mqDndAlignTarget || mqDndSizeBrush || mqDndSizePipetteTarget
+                            || mqDndTextPipetteTarget || mqDndTextBrushStyle) return;
 
                         e.stopPropagation();
                         e.preventDefault();
@@ -15484,15 +15525,14 @@
                         if (!game) return;
                         mqDndUiDragGame = gameId;
                         const stageRect = stage.getBoundingClientRect();
-                        mqDndUiDragGameOffX = (e.clientX - stageRect.left - state.tx) / state.scale - game.x;
-                        mqDndUiDragGameOffY = (e.clientY - stageRect.top - state.ty) / state.scale - game.y;
+                        mqDndUiDragGameOffX = (e.clientX - stageRect.left - state.tx) / state.scale - (game.x || 0);
+                        mqDndUiDragGameOffY = (e.clientY - stageRect.top - state.ty) / state.scale - (game.y || 0);
                         mqBeginDndUiDragChrome('grabbing');
                     });
                 });
 
                 document.querySelectorAll('.dnd-resize-handle').forEach(handle => {
                     handle.addEventListener('mousedown', (e) => {
-                        if (!e.ctrlKey) return;
                         if (e.button !== 0) return;
                         e.stopImmediatePropagation();
                         e.stopPropagation();
@@ -15500,12 +15540,18 @@
                         const gameId = handle.dataset.game;
                         const game = state.dndGames[gameId];
                         if (!game) return;
-                        mqDndUiResizeGame = gameId;
-                        mqDndUiResizeGameStartX = e.clientX;
-                        mqDndUiResizeGameStartY = e.clientY;
-                        mqDndUiResizeGameStartW = game.width;
-                        mqDndUiResizeGameStartH = game.height;
-                        mqBeginDndUiDragChrome('nwse-resize');
+                        const corner = handle.getAttribute('data-corner') || 'se';
+                        mqDndUiResizeGame = {
+                            gameId: gameId,
+                            corner: corner,
+                            origX: game.x || 0,
+                            origY: game.y || 0,
+                            origW: game.width || 200,
+                            origH: game.height || 150,
+                            startX: e.clientX,
+                            startY: e.clientY
+                        };
+                        mqBeginDndUiDragChrome((corner === 'ne' || corner === 'sw') ? 'nesw-resize' : 'nwse-resize');
                     }, { capture: true });
                 });
             }

@@ -728,6 +728,14 @@ test('ancienne config Relier jeu → étape Relier (reprise)', () => {
   assert.strictEqual(Engine.gameNeedsRelier(g), true);
 });
 
-console.log('\n--------------------------------');
-console.log('Résultat:', passed, 'ok,', failed, 'échec(s)');
-process.exit(failed ? 1 : 0);
+test('zone jeux : déplacement du cadre + 4 poignées de redim', () => {
+  const html = fs.readFileSync(path.join(__dirname, '..', 'placement-inputs.html'), 'utf8');
+  assert.ok(html.includes('data-corner="nw"'));
+  assert.ok(html.includes('data-corner="ne"'));
+  assert.ok(html.includes('data-corner="se"'));
+  assert.ok(html.includes('data-corner="sw"'));
+  assert.ok(html.includes('function mqApplyGameContainerBox'));
+  assert.ok(html.includes("e.target.closest('.dnd-game-container')"));
+  assert.ok(!html.includes('Ctrl + Glisser pour redimensionner'));
+});
+
