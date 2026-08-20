@@ -276,6 +276,7 @@ test('UI consignes dans placement-inputs.html', () => {
   assert.ok(html.includes('InstrW'));
   assert.ok(html.includes('instructionsBox'));
   assert.ok(html.includes('Disposition consignes'));
+  assert.ok(html.includes('mq-dnd-instr-box-fold'));
 });
 
 console.log('\n=== Test étapes / consignes ===');
@@ -646,7 +647,7 @@ test('UI étapes repliables dans placement-inputs.html', () => {
   assert.ok(html.includes('mqToggleStepCard'));
   assert.ok(html.includes('mqCaptureOpenStepIndices'));
   assert.ok(html.includes('data-open'));
-  assert.ok(html.includes('step-fold-v1'));
+  assert.ok(html.includes('instr-fold-v1'));
 });
 
 test('saisie IDs d’étape : textarea + pastilles, pas de rerender à chaque frappe', () => {

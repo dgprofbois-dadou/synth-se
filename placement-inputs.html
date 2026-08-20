@@ -1421,6 +1421,42 @@
             flex: 0 0 auto;
             width: auto;
         }
+        .mq-dnd-instr-box-fold {
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 6px 8px 8px;
+            margin: 8px 0;
+        }
+        .mq-dnd-instr-box-fold > summary {
+            cursor: pointer;
+            font-weight: 700;
+            font-size: 12px;
+            color: #475569;
+            list-style: none;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 2px;
+        }
+        .mq-dnd-instr-box-fold > summary::-webkit-details-marker { display: none; }
+        .mq-dnd-instr-box-fold > summary::before {
+            content: '▸';
+            display: inline-block;
+            width: 12px;
+            color: #64748b;
+            font-weight: 700;
+        }
+        .mq-dnd-instr-box-fold[open] > summary::before { content: '▾'; }
+        .mq-dnd-instr-box-fold > summary:hover { color: #1d4ed8; }
+        .mq-dnd-instr-box-body {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+            align-items: center;
+            font-size: 11px;
+            margin-top: 8px;
+        }
         .mq-dz-card.is-dup { border-color:#dc2626; background:#fef2f2; box-shadow:0 0 0 1px #fecaca; }
         .mq-dz-card.is-dup .mq-dz-card-id { color:#b91c1c; font-weight:700; }
         .mq-dz-dup-banner {
@@ -15147,9 +15183,9 @@
                     const n = mqGameNum(gid);
                     const host = document.getElementById('dndGame' + n + 'AdvancedHost');
                     if (!host) return;
-                    if (!host.dataset.ready || host.dataset.ready !== 'step-fold-v1') {
+                    if (!host.dataset.ready || host.dataset.ready !== 'instr-fold-v1') {
                         host.innerHTML = mqDndTypeControlsHTML(n);
-                        host.dataset.ready = 'step-fold-v1';
+                        host.dataset.ready = 'instr-fold-v1';
                         const btn = document.getElementById('btnGenGridGame' + n);
                         if (btn) {
                             btn.addEventListener('click', () => mqGenerateDndGrid(gid, n));
@@ -17307,9 +17343,9 @@
                     + '<label style="width:auto;"><input type="checkbox" id="dndGame' + n + 'ShowInstructions" checked> Afficher consignes</label>'
                     + '<label style="width:auto;"><input type="checkbox" id="dndGame' + n + 'EnableSteps"> Jeu par étapes</label>'
                     + '</div>'
-                    + '<div class="row" style="flex-direction:column;align-items:stretch;gap:4px;">'
-                    + '<label style="width:auto;font-size:12px;font-weight:bold;">Disposition consignes (déplaçable sur le canvas)</label>'
-                    + '<div style="display:flex;flex-wrap:wrap;gap:4px;align-items:center;font-size:11px;">'
+                    + '<details class="mq-dnd-instr-box-fold">'
+                    + '<summary>Disposition consignes (déplaçable sur le canvas)</summary>'
+                    + '<div class="mq-dnd-instr-box-body">'
                     + '<label>X <input id="dndGame' + n + 'InstrX" type="number" value="20" style="width:52px;font-size:11px;padding:2px;"></label>'
                     + '<label>Y <input id="dndGame' + n + 'InstrY" type="number" value="100" style="width:52px;font-size:11px;padding:2px;"></label>'
                     + '<label>L <input id="dndGame' + n + 'InstrW" type="number" value="760" style="width:52px;font-size:11px;padding:2px;"></label>'
@@ -17330,8 +17366,8 @@
                     + '<input id="dndGame' + n + 'InstrColor" type="color" value="#78350f" title="Texte" style="width:28px;height:22px;padding:0;border:1px solid #ccc;">'
                     + '<input id="dndGame' + n + 'InstrBorder" type="color" value="#f59e0b" title="Bordure" style="width:28px;height:22px;padding:0;border:1px solid #ccc;">'
                     + '</div>'
-                    + '<p style="margin:0;font-size:10px;color:#64748b;">Glissez la zone jaune sur le canvas, ou réglez X/Y/L/H ici.</p>'
-                    + '</div>'
+                    + '<p style="margin:8px 0 0;font-size:10px;color:#64748b;">Glissez la zone jaune sur le canvas, ou réglez X/Y/L/H ici.</p>'
+                    + '</details>'
                     + '<div class="row mq-dnd-instr-simple" style="flex-direction:column;align-items:stretch;gap:4px;">'
                     + '<label style="width:auto;font-size:12px;font-weight:bold;">Consignes (affichées pendant le jeu)</label>'
                     + '<textarea id="dndGame' + n + 'Instructions" rows="3" placeholder="Ex : Placez chaque étiquette dans la bonne zone." style="width:100%;resize:vertical;font-size:12px;padding:6px;border:1px solid #ccc;border-radius:6px;box-sizing:border-box;"></textarea>'
