@@ -2599,7 +2599,34 @@
             border: 1px solid #e2e8f0;
             border-radius: 8px;
             background: #fff;
+            cursor: pointer;
         }
+        #left .mq-drag-card[data-open="1"] {
+            border-color: #fb923c;
+            background: #fff7ed;
+            cursor: default;
+        }
+        #left .mq-drag-fold { display: none; }
+        #left .mq-drag-card[data-open="1"] .mq-drag-fold { display: block; }
+        #left .mq-drag-chevron {
+            flex: 0 0 12px;
+            width: 12px;
+            color: #64748b;
+            font-size: 11px;
+            line-height: 1;
+        }
+        #left .mq-drag-sum {
+            flex: 1;
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            font-size: 11px;
+            color: #64748b;
+        }
+        #left .mq-drag-card[data-open="1"] .mq-drag-sum { display: none; }
+        #left .mq-drag-card[data-open="1"] .mq-drag-tip { display: flex; }
+        #left .mq-drag-card:not([data-open="1"]) .mq-drag-tip { display: none; }
         #left .mq-drag-thumb {
             display: flex;
             flex-direction: column;
@@ -10686,7 +10713,72 @@
                 if (mqDndSel && mqDndSel.type === 'dropzone' && typeof window.mqRefreshDropzoneInspector === 'function') {
                     window.mqRefreshDropzoneInspector(mqDndSel.gameId, parseInt(mqDndSel.index, 10));
                 }
+                if (mqDndSel && (mqDndSel.type === 'draggable' || mqDndSel.type === 'decor' || mqDndSel.type === 'decorText')) {
+                    mqRevealItemCard(mqDndSel.gameId, mqDndSel.type, mqDndSel.index);
+                }
             };
+            function mqSetItemCardOpen(card, open) {
+                if (!card) return;
+                card.setAttribute('data-open', open ? '1' : '0');
+                const ch = card.querySelector('.mq-drag-chevron');
+                if (ch) ch.textContent = open ? '▾' : '▸';
+            }
+            function mqItemListMeta(list) {
+                const m = list && list.id && String(list.id).match(/^dndGame(\d+)(DraggablesList|DecorList|DecorTextList)$/);
+                if (!m) return null;
+                const type = m[2] === 'DraggablesList' ? 'draggable' : (m[2] === 'DecorList' ? 'decor' : 'decorText');
+                return { gameId: 'game' + m[1], type: type };
+            }
+            function mqBindItemCardFold(list) {
+                if (!list || list.dataset.foldBound === '1') return;
+                list.dataset.foldBound = '1';
+                list.addEventListener('click', (e) => {
+                    if (e.target.closest('input, textarea, select, button, .mq-step, .mq-drag-tip, .mq-drag-fold')) return;
+                    const card = e.target.closest('.mq-drag-card');
+                    if (!card || !list.contains(card)) return;
+                    const wasOpen = card.getAttribute('data-open') === '1';
+                    if (wasOpen) {
+                        mqSetItemCardOpen(card, false);
+                        return;
+                    }
+                    const meta = mqItemListMeta(list);
+                    if (meta && window.mqSetDndSel) {
+                        window.mqSetDndSel({ gameId: meta.gameId, type: meta.type, index: card.getAttribute('data-index') });
+                    } else {
+                        list.querySelectorAll('.mq-drag-card').forEach((c) => mqSetItemCardOpen(c, false));
+                        mqSetItemCardOpen(card, true);
+                    }
+                });
+            }
+            function mqItemCardShouldOpen(gameId, type, index) {
+                return !!(mqDndSel && mqDndSel.gameId === gameId && mqDndSel.type === type
+                    && String(mqDndSel.index) === String(index));
+            }
+            function mqRevealItemCard(gameId, type, index) {
+                const n = mqGameNum(gameId);
+                const ids = {
+                    draggable: 'dndGame' + n + 'DraggablesList',
+                    decor: 'dndGame' + n + 'DecorList',
+                    decorText: 'dndGame' + n + 'DecorTextList'
+                };
+                const list = document.getElementById(ids[type]);
+                if (!list) return;
+                if (typeof window.mqSetInspectorTab === 'function') window.mqSetInspectorTab('dnd');
+                const idx = String(index);
+                list.querySelectorAll('.mq-drag-card').forEach((card) => {
+                    mqSetItemCardOpen(card, card.getAttribute('data-index') === idx);
+                });
+                const openCard = list.querySelector('.mq-drag-card[data-index="' + idx + '"]');
+                if (openCard && openCard.scrollIntoView) {
+                    try { openCard.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (err) { openCard.scrollIntoView(true); }
+                }
+                const panel = document.getElementById('dndGame' + n + 'Enabled');
+                const card = panel && panel.closest('.mq-dnd-card, [data-mq-dnd-panel], div');
+                if (card && card.scrollIntoView) {
+                    try { card.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (e2) { /* ignore */ }
+                }
+            }
+            window.mqRevealItemCard = mqRevealItemCard;
             /** Nombre de zones en multi-sélection (pour le menu clic droit / UI). */
             window.mqDndMultiCount = function () {
                 return (mqDndMultiSel && mqDndMultiSel.length) ? mqDndMultiSel.length : 0;
@@ -10705,6 +10797,8 @@
                     mqRefreshDndSelectionHighlight();
                     if (clicked.type === 'dropzone' && typeof window.mqRefreshDropzoneInspector === 'function') {
                         window.mqRefreshDropzoneInspector(clicked.gameId, parseInt(clicked.index, 10));
+                    } else if (clicked.type === 'draggable' || clicked.type === 'decor' || clicked.type === 'decorText') {
+                        mqRevealItemCard(clicked.gameId, clicked.type, clicked.index);
                     }
                     return;
                 }
@@ -13601,9 +13695,11 @@
                             height: 60
                         });
 
+                        const newIndex = state.dndGames[gameId].draggables.length - 1;
                         if (typeof updateDraggablesUI === 'function') updateDraggablesUI(gameId);
                         else renderDraggablesList(gameId);
                         renderDndGamesPreview();
+                        if (window.mqSetDndSel) window.mqSetDndSel({ gameId: gameId, type: 'draggable', index: String(newIndex) });
                         saveLocal();
                     };
 
@@ -13665,8 +13761,10 @@
                     fontSize: 28, font: 'Arial, sans-serif', color: '#000000',
                     bold: false, italic: false, bg: '#ffe082', bgOn: true
                 });
+                const newIndex = arr.length - 1;
                 if (typeof updateDraggablesUI === 'function') updateDraggablesUI(gameId);
                 renderDndGamesPreview();
+                if (window.mqSetDndSel) window.mqSetDndSel({ gameId: gameId, type: 'draggable', index: String(newIndex) });
                 saveLocal();
             };
             // Met à jour une propriété (texte/police/couleur…) d'une étiquette
@@ -13735,7 +13833,11 @@
                             src: ev.target.result,
                             x: 50, y: 50, width: 300, height: 200, z: 0
                         });
-                        renderDndGamesPreview(); renderDecorList(gameId); saveLocal();
+                        const newIndex = arr.length - 1;
+                        renderDndGamesPreview();
+                        renderDecorList(gameId);
+                        if (window.mqSetDndSel) window.mqSetDndSel({ gameId: gameId, type: 'decor', index: String(newIndex) });
+                        saveLocal();
                     };
                     r.readAsDataURL(f);
                 };
@@ -13749,17 +13851,23 @@
                     list.innerHTML = '<div style="font-size:11px; color:#999; text-align:center; padding:8px;">Aucune image fixe</div>';
                     return;
                 }
-                list.innerHTML = arr.map((d, index) => `
-                    <div class="mq-drag-card mq-decor-card">
+                list.innerHTML = arr.map((d, index) => {
+                    const isOpen = mqItemCardShouldOpen(gameId, 'decor', index);
+                    const sum = mqEscapeHtmlLite(d.id || ('décor ' + (index + 1)));
+                    return `
+                    <div class="mq-drag-card mq-decor-card" data-index="${index}" data-open="${isOpen ? '1' : '0'}">
                         <div class="mq-drag-thumb"><img src="${d.src}" alt="" style="width:40px;height:40px;object-fit:contain;border:1px solid #ccc;background:#f0f0f0;"></div>
                         <div class="mq-drag-body">
                             <div class="mq-drag-top">
+                                <span class="mq-drag-chevron">${isOpen ? '▾' : '▸'}</span>
                                 <span style="font-weight:700;font-size:10px;color:#2e7d32;">ID</span>
                                 <input class="mq-drag-id" type="text" value="${String(d.id || '').replace(/"/g, '&quot;')}" placeholder="decor-1"
                                     onchange="window.updateDecorPosition('${gameId}', ${index}, 'id', this.value)">
+                                <span class="mq-drag-sum" title="${sum}">${sum}</span>
                                 <button type="button" onclick="window.replaceDecorImage('${gameId}', ${index})" title="Remplacer" style="font-size:11px;padding:2px 6px;cursor:pointer;">🔄</button>
                                 <button type="button" class="mq-drag-del" onclick="window.removeDecorImage('${gameId}', ${index})" title="Supprimer">×</button>
                             </div>
+                            <div class="mq-drag-fold">
                             <div class="mq-dnd-dim-grid">
                                 ${mqDimPosField('L', d.width || 300, 'updateDecorPosition', gameId, index, 'width', 10)}
                                 ${mqDimPosField('H', d.height || 200, 'updateDecorPosition', gameId, index, 'height', 10)}
@@ -13769,8 +13877,11 @@
                             <div class="mq-decor-z">
                                 ${mqDimPosField('z', d.z || 0, 'updateDecorPosition', gameId, index, 'z', 1)}
                             </div>
+                            </div>
                         </div>
-                    </div>`).join('');
+                    </div>`;
+                }).join('');
+                mqBindItemCardFold(list);
             }
 
             // ===== Textes fixes (décor) =====
@@ -13787,8 +13898,10 @@
                     fontSize: 28, font: 'Arial, sans-serif', color: '#000000',
                     bold: false, italic: false, bgOn: false, bg: '#ffffff'
                 });
+                const newIndex = arr.length - 1;
                 renderDndGamesPreview();
                 renderDecorTextList(gameId);
+                if (window.mqSetDndSel) window.mqSetDndSel({ gameId: gameId, type: 'decorText', index: String(newIndex) });
                 saveLocal();
             };
             window.removeDecorText = function (gameId, index) {
@@ -13824,14 +13937,20 @@
                     return;
                 }
                 const fonts = ['Arial, sans-serif', 'Verdana, sans-serif', 'Georgia, serif', "'Comic Sans MS', sans-serif", "'OpenDyslexic', sans-serif", "'Courier New', monospace"];
-                list.innerHTML = arr.map((d, index) => `
-                    <div class="mq-drag-card mq-decor-card mq-decor-text">
+                list.innerHTML = arr.map((d, index) => {
+                    const isOpen = mqItemCardShouldOpen(gameId, 'decorText', index);
+                    const sum = mqEscapeHtmlLite(d.text || d.id || ('texte ' + (index + 1)));
+                    return `
+                    <div class="mq-drag-card mq-decor-card mq-decor-text" data-index="${index}" data-open="${isOpen ? '1' : '0'}">
                         <div class="mq-drag-top">
+                            <span class="mq-drag-chevron">${isOpen ? '▾' : '▸'}</span>
                             <span style="font-weight:700;font-size:10px;color:#2e7d32;">ID</span>
                             <input class="mq-drag-id" type="text" value="${String(d.id || '').replace(/"/g, '&quot;')}" placeholder="dtext-1"
                                 onchange="window.updateDecorText('${gameId}', ${index}, 'id', this.value)">
+                            <span class="mq-drag-sum" title="${sum}">${sum}</span>
                             <button type="button" class="mq-drag-del" onclick="window.removeDecorText('${gameId}', ${index})" title="Supprimer">×</button>
                         </div>
+                        <div class="mq-drag-fold">
                         <input class="mq-drag-title" type="text" value="${String(d.text || '').replace(/"/g, '&quot;')}" placeholder="Texte fixe"
                             oninput="window.updateDecorText('${gameId}', ${index}, 'text', this.value)">
                         <div class="mq-decor-tools">
@@ -13860,7 +13979,10 @@
                         <div class="mq-decor-z">
                             ${mqDimPosField('z', d.z || 1, 'updateDecorText', gameId, index, 'z', 1)}
                         </div>
-                    </div>`).join('');
+                        </div>
+                    </div>`;
+                }).join('');
+                mqBindItemCardFold(list);
             }
 
             // ===== Zones SVG Relier =====
@@ -15280,6 +15402,9 @@
                         }
 
                         mqDndUiDragEl = { el, gameId, type, index, startX: e.clientX, startY: e.clientY, origX: ox, origY: oy, group: group || null };
+                        if (['draggable', 'decor', 'decorText'].includes(type) && window.mqSetDndSel) {
+                            window.mqSetDndSel({ gameId: gameId, type: type, index: String(index) }, group ? { keepMulti: true } : undefined);
+                        }
                         if (type === 'linkZone') {
                             const z0 = (g0.linkZones || [])[idx0];
                             mqDndUiDragEl.origPoints = (z0 && z0.points) ? z0.points.map(function (p) { return [p[0], p[1]]; }) : [];
@@ -17162,9 +17287,10 @@
 
                         console.log('✅ Image ajoutée au state');
 
-                        // Mise à jour de tout l'affichage
+                        const newIndex = state.dndGames[gameId].draggables.length - 1;
                         renderDndGamesPreview();
-                        updateDraggablesUI(gameId); // Nouvelle fonction pour le panneau de gauche
+                        updateDraggablesUI(gameId);
+                        if (window.mqSetDndSel) window.mqSetDndSel({ gameId: gameId, type: 'draggable', index: String(newIndex) });
                         saveLocal();
 
                         console.log(`✅ Image "${title}" ajoutée avec l'ID ${id}`);
@@ -17201,6 +17327,9 @@
                 draggables.forEach((d, index) => {
                     const div = document.createElement('div');
                     div.className = 'mq-drag-card';
+                    const isOpen = mqItemCardShouldOpen(gameId, 'draggable', index);
+                    div.setAttribute('data-index', String(index));
+                    div.setAttribute('data-open', isOpen ? '1' : '0');
 
                     const imgContainer = document.createElement('div');
                     imgContainer.className = 'mq-drag-thumb';
@@ -17252,6 +17381,11 @@
                     const row1 = document.createElement('div');
                     row1.className = 'mq-drag-top';
 
+                    const chev = document.createElement('span');
+                    chev.className = 'mq-drag-chevron';
+                    chev.textContent = isOpen ? '▾' : '▸';
+                    row1.appendChild(chev);
+
                     const idGroup = document.createElement('div');
                     idGroup.style.cssText = 'display:flex; align-items:center; gap:4px;';
 
@@ -17291,6 +17425,12 @@
                     idGroup.appendChild(inputId);
                     row1.appendChild(idGroup);
 
+                    const sumEl = document.createElement('span');
+                    sumEl.className = 'mq-drag-sum';
+                    sumEl.textContent = d.title || d.text || ('ID ' + d.id);
+                    sumEl.title = sumEl.textContent;
+                    row1.appendChild(sumEl);
+
                     const tipOn = (typeof d.tooltipEnabled === 'boolean')
                         ? d.tooltipEnabled
                         : ((window.MqDndEngine && MqDndEngine.dragShowsTooltip)
@@ -17327,6 +17467,10 @@
                     row1.appendChild(btnDel);
                     inputsDiv.appendChild(row1);
 
+                    const foldDiv = document.createElement('div');
+                    foldDiv.className = 'mq-drag-fold';
+                    inputsDiv.appendChild(foldDiv);
+
                     // Ligne 2 : Titre
                     const inputTitle = document.createElement('input');
                     inputTitle.type = 'text';
@@ -17339,7 +17483,7 @@
                         saveLocal();
                         renderDndGamesPreview();
                     };
-                    inputsDiv.appendChild(inputTitle);
+                    foldDiv.appendChild(inputTitle);
 
                     // Contrôles spécifiques aux étiquettes texte
                     if (d.kind === 'text') {
@@ -17364,7 +17508,7 @@
                             + '<label style="font-size:11px;"><input type="checkbox" ' + (d.bgOn ? 'checked' : '') + ' onchange="window.updateTextDraggable(\'' + gameId + '\', ' + index + ', \'bgOn\', this.checked)"> Fond</label>'
                             + '<input type="color" value="' + (d.bg || '#ffe082') + '" title="Couleur du fond" oninput="window.updateTextDraggable(\'' + gameId + '\', ' + index + ', \'bg\', this.value)" style="width:28px; height:24px; padding:0; border:1px solid #ccc;">'
                             + '</div>';
-                        inputsDiv.appendChild(tWrap);
+                        foldDiv.appendChild(tWrap);
                     }
 
                     // Ligne 3 : Dimensions et position (steppers lisibles)
@@ -17375,10 +17519,11 @@
                         mqDimPosField('H', d.height || 250, 'updateDraggablePosition', gameId, index, 'height', 10) +
                         mqDimPosField('X', d.x || 0, 'updateDraggablePosition', gameId, index, 'x', 5) +
                         mqDimPosField('Y', d.y || 0, 'updateDraggablePosition', gameId, index, 'y', 5);
-                    inputsDiv.appendChild(rowDim);
+                    foldDiv.appendChild(rowDim);
 
                     listContainer.appendChild(div);
                 });
+                mqBindItemCardFold(listContainer);
             }
 
             // Mettre à jour la liste des images dans le panneau de gauche (Éditeur)

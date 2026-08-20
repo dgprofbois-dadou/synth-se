@@ -668,13 +668,16 @@ test('UI décor compact (image fixe / texte fixe) dans placement-inputs.html', (
   assert.ok(!html.includes("grid-template-columns:1fr 1fr 1fr"));
 });
 
-test('infobulle par image droppable dans placement-inputs.html', () => {
+test('cartes image/texte repliées, dépliage au clic canvas', () => {
   const html = fs.readFileSync(path.join(__dirname, '..', 'placement-inputs.html'), 'utf8');
-  assert.ok(html.includes('mq-drag-card'));
-  assert.ok(html.includes('mq-drag-tip'));
-  assert.ok(html.includes('mq-drag-id'));
-  assert.ok(!html.includes('id="dndGame1TooltipEnabled"'));
-  assert.ok(!html.includes('Afficher le tooltip au survol des images'));
+  assert.ok(html.includes('mq-drag-fold'));
+  assert.ok(html.includes('mqRevealItemCard'));
+  assert.ok(html.includes('mqBindItemCardFold'));
+  assert.ok(html.includes('mqItemCardShouldOpen'));
+  assert.ok(html.includes("mqItemCardShouldOpen(gameId, 'draggable'"));
+  assert.ok(html.includes("mqItemCardShouldOpen(gameId, 'decor'"));
+  assert.ok(html.includes("mqItemCardShouldOpen(gameId, 'decorText'"));
+  assert.ok(html.includes("type: 'draggable', index: String(newIndex)"));
 });
 
 test('dragShowsTooltip : par carte, héritage de l’ancien interrupteur global', () => {
