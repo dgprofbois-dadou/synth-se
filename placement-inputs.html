@@ -1158,6 +1158,14 @@
             pointer-events: none !important;
             opacity: 0 !important;
         }
+        .draggable.dnd-step-future-hidden,
+        .dnd-decor-fixed.dnd-step-future-hidden,
+        .dnd-decor-text.dnd-step-future-hidden,
+        .dnd-link-zone.dnd-step-future-hidden {
+            visibility: hidden !important;
+            pointer-events: none !important;
+            opacity: 0 !important;
+        }
         .dropzone.dnd-step-locked .dnd-placed,
         .dropzone.dnd-step-locked .dnd-placed img {
             opacity: 1 !important;
@@ -1246,6 +1254,11 @@
         }
         .dnd-link-mode .draggable,
         .dnd-link-mode .dnd-link-node {
+            cursor: crosshair !important;
+        }
+        .drag-game.dnd-link-mode .dnd-decor-fixed[data-id],
+        .drag-game.dnd-link-mode .dnd-decor-text[data-id] {
+            pointer-events: auto !important;
             cursor: crosshair !important;
         }
         .drag-game.dnd-step-relier-auto .dnd-relier-btn {
@@ -7867,7 +7880,7 @@
                     if (game.classList.contains('dnd-link-mode')) return false;
                     if (el.closest('.dnd-relier-btn, .dnd-verify-btn, .dnd-next-step-btn, .dnd-step-next-btn')) continue;
                     const card = el.closest('.draggable, .dnd-placed, .png-wrap');
-                    if (card && !card.classList.contains('dnd-step-source-hidden') && !card.classList.contains('used')) return true;
+                    if (card && !card.classList.contains('dnd-step-source-hidden') && !card.classList.contains('dnd-step-future-hidden') && !card.classList.contains('used')) return true;
                     if (el.closest('.dropzone:not(.dnd-step-locked):not(.dnd-step-zone-hidden)')) return true;
                 }
                 return false;
@@ -8341,12 +8354,12 @@
                     (gameConfig.decorImages || []).forEach((dc) => {
                         const wrap = document.createElement('div');
                         const decorId = (dc.id != null && String(dc.id).trim() !== '') ? String(dc.id).trim() : '';
-                        wrap.className = 'dnd-decor-fixed';
+                        wrap.className = 'dnd-decor-fixed' + (decorId ? ' dnd-link-node' : '');
                         if (decorId) {
                             wrap.setAttribute('data-id', decorId);
                             wrap.setAttribute('data-link-node', '1');
                         }
-                        const linkable = mqGameNeedsRelier(gameConfig) && !!decorId;
+                        const linkable = !!decorId;
                         wrap.style.cssText = 'position:absolute; left:' + (dc.x || 0) + 'px; top:' + (dc.y || 0) + 'px; width:' + (dc.width || 300) + 'px; height:' + (dc.height || 200) + 'px; z-index:' + (dc.z || 0) + '; box-sizing:border-box; pointer-events:' + (linkable ? 'auto' : 'none') + ';';
                         const img = document.createElement('img');
                         if (dc.src && String(dc.src).indexOf('idb:') !== 0) img.src = dc.src;
@@ -8359,12 +8372,12 @@
                     (gameConfig.decorTexts || []).forEach((dt) => {
                         const el = document.createElement('div');
                         const decorId = (dt.id != null && String(dt.id).trim() !== '') ? String(dt.id).trim() : '';
-                        el.className = 'dnd-decor-text';
+                        el.className = 'dnd-decor-text' + (decorId ? ' dnd-link-node' : '');
                         if (decorId) {
                             el.setAttribute('data-id', decorId);
                             el.setAttribute('data-link-node', '1');
                         }
-                        const linkable = mqGameNeedsRelier(gameConfig) && !!decorId;
+                        const linkable = !!decorId;
                         el.textContent = dt.text || 'Texte';
                         el.style.cssText = 'position:absolute; left:' + (dt.x || 0) + 'px; top:' + (dt.y || 0) + 'px; width:' + (dt.width || 240) + 'px; height:' + (dt.height || 80) + 'px; z-index:' + (dt.z != null ? dt.z : 1) + '; pointer-events:' + (linkable ? 'auto' : 'none') + '; box-sizing:border-box;'
                             + 'display:flex;align-items:center;justify-content:center;text-align:center;padding:4px;overflow:hidden;'
@@ -14580,7 +14593,8 @@
                         + '</div>'
                         + '</div>'
                         + '<label data-step-link-fields style="font-size:11px;display:' + (showLink ? 'block' : 'none') + ';margin-top:8px;">Flèches à valider (id&gt;id) — fin d’étape Relier'
-                        + '<textarea data-field="linkPairs" rows="2" placeholder="Ex: 1&gt;3" style="width:100%;font-size:11px;padding:4px;box-sizing:border-box;font-family:monospace;">' + linksToText(s.linkPairs).replace(/</g, '&lt;') + '</textarea></label>'
+                        + '<textarea data-field="linkPairs" rows="2" placeholder="Ex: 1&gt;3 ou decor-1&gt;5" style="width:100%;font-size:11px;padding:4px;box-sizing:border-box;font-family:monospace;">' + linksToText(s.linkPairs).replace(/</g, '&lt;') + '</textarea>'
+                        + '<p style="margin:4px 0 0;font-size:10px;color:#4338ca;">Les <strong>images fixes</strong> et textes fixes avec un ID sont des nœuds Relier (clic droit comme une carte).</p></label>'
                         + '</div>'
                         + '</div>';
                 }).join('');
@@ -15939,11 +15953,11 @@
                     const cW = ((dc.width || 300) / G_W) * 100;
                     const cH = ((dc.height || 200) / G_H) * 100;
                     const decorId = (dc.id != null && String(dc.id).trim() !== '') ? String(dc.id).trim() : '';
-                    const linkable = mqGameNeedsRelier(g) && !!decorId;
+                    const linkable = !!decorId;
                     const idAttr = decorId
                         ? (' data-id="' + decorId.replace(/"/g, '&quot;') + '" data-link-node="1"')
                         : '';
-                    return '<div class="dnd-decor-fixed"' + idAttr
+                    return '<div class="dnd-decor-fixed' + (decorId ? ' dnd-link-node' : '') + '"' + idAttr
                         + ' style="position:absolute; left:' + cX + '%; top:' + cY + '%; width:' + cW + '%; height:' + cH + '%; z-index:' + (dc.z || 0) + '; box-sizing:border-box; pointer-events:' + (linkable ? 'auto' : 'none') + ';">'
                         + '<img src="' + dc.src + '" alt="" style="width:100%;height:100%;object-fit:contain;display:block;pointer-events:none;">'
                         + '</div>';
@@ -15956,11 +15970,11 @@
                     const safe = String(dt.text || 'Texte')
                         .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
                     const decorId = (dt.id != null && String(dt.id).trim() !== '') ? String(dt.id).trim() : '';
-                    const linkable = mqGameNeedsRelier(g) && !!decorId;
+                    const linkable = !!decorId;
                     const idAttr = decorId
                         ? (' data-id="' + decorId.replace(/"/g, '&quot;') + '" data-link-node="1"')
                         : '';
-                    return '<div class="dnd-decor-text"' + idAttr + ' style="position:absolute; left:' + cX + '%; top:' + cY + '%; width:' + cW + '%; height:' + cH + '%; z-index:' + (dt.z != null ? dt.z : 1) + '; pointer-events:' + (linkable ? 'auto' : 'none') + '; box-sizing:border-box;'
+                    return '<div class="dnd-decor-text' + (decorId ? ' dnd-link-node' : '') + '"' + idAttr + ' style="position:absolute; left:' + cX + '%; top:' + cY + '%; width:' + cW + '%; height:' + cH + '%; z-index:' + (dt.z != null ? dt.z : 1) + '; pointer-events:' + (linkable ? 'auto' : 'none') + '; box-sizing:border-box;'
                         + 'display:flex;align-items:center;justify-content:center;text-align:center;padding:4px;overflow:hidden;'
                         + 'font-family:' + (dt.font || 'Arial, sans-serif') + ';'
                         + 'font-size:' + (dt.fontSize || 28) + 'px;'

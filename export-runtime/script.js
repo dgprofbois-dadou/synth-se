@@ -745,7 +745,7 @@
         if (!game) continue;
         if (game.classList.contains('dnd-link-mode')) return false;
         const card = el.closest('.draggable, .dnd-placed, .png-wrap');
-        if (card && !card.classList.contains('dnd-step-source-hidden') && !card.classList.contains('used')) return true;
+        if (card && !card.classList.contains('dnd-step-source-hidden') && !card.classList.contains('dnd-step-future-hidden') && !card.classList.contains('used')) return true;
         if (el.closest('.dropzone:not(.dnd-step-locked):not(.dnd-step-zone-hidden)')) return true;
       }
       return false;

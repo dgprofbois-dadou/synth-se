@@ -1330,6 +1330,65 @@
     return !!(st.active && normalizeStep(st.active, 0).activity === 'linking');
   }
 
+  /** IDs d’images / nœuds Relier référencés par une étape (goodIds, zoneMap, linkPairs). */
+  function idsReferencedByStep(step) {
+    step = normalizeStep(step, 0);
+    var out = {};
+    parseIdList(step.goodIds).forEach(function (id) { out[String(id)] = true; });
+    Object.keys(step.zoneMap || {}).forEach(function (zk) {
+      normalizeZoneMapIds(step.zoneMap[zk]).forEach(function (id) { out[String(id)] = true; });
+    });
+    (step.linkPairs || []).forEach(function (l) {
+      if (l && l.from != null) out[String(l.from)] = true;
+      if (l && l.to != null) out[String(l.to)] = true;
+    });
+    return out;
+  }
+
+  /** Première étape (index) où apparaît chaque élément / zone. */
+  function buildStepOwnership(game) {
+    var steps = normalizeSteps(game && game.steps);
+    var elementMinStep = {};
+    var zoneMinStep = {};
+    steps.forEach(function (step, i) {
+      Object.keys(idsReferencedByStep(step)).forEach(function (id) {
+        if (elementMinStep[id] == null || i < elementMinStep[id]) elementMinStep[id] = i;
+      });
+      effectiveStepZoneIds(step).forEach(function (zid) {
+        var zs = String(zid);
+        if (zoneMinStep[zs] == null || i < zoneMinStep[zs]) zoneMinStep[zs] = i;
+      });
+    });
+    return { elementMinStep: elementMinStep, zoneMinStep: zoneMinStep };
+  }
+
+  function minStepIndexForElement(game, elementId) {
+    var own = buildStepOwnership(game);
+    var id = String(elementId);
+    return own.elementMinStep[id] != null ? own.elementMinStep[id] : null;
+  }
+
+  function minStepIndexForZone(game, zoneId) {
+    var own = buildStepOwnership(game);
+    var id = String(zoneId);
+    return own.zoneMinStep[id] != null ? own.zoneMinStep[id] : null;
+  }
+
+  /** Élément visible à l’étape courante (index 0-based) ? */
+  function isElementVisibleAtStep(game, elementId, currentStepIndex) {
+    if (!game || !game.enableSteps || !Array.isArray(game.steps) || !game.steps.length) return true;
+    var min = minStepIndexForElement(game, elementId);
+    if (min == null) return true;
+    return min <= currentStepIndex;
+  }
+
+  function isZoneVisibleAtStep(game, zoneId, currentStepIndex) {
+    if (!game || !game.enableSteps || !Array.isArray(game.steps) || !game.steps.length) return true;
+    var min = minStepIndexForZone(game, zoneId);
+    if (min == null) return true;
+    return min <= currentStepIndex;
+  }
+
   /**
    * Score brut (sans malus) : nombre de cartes correctement placées / liens corrects.
    * placements: { zoneKey: id[] }  OU  pour linking: { links: [{from,to}] } / tableau de liens
@@ -1606,15 +1665,18 @@
       // 1) Carte déjà déposée (position jouée) — prioritaire sur le bac
       var placed = gameContainer.querySelector('.dropzone .dnd-placed[data-id="' + sid + '"]');
       if (placed) return placed;
-      // 2) Zone SVG Relier / nœud dédié
+      // 2) Image / texte fixe (décor)
+      var decor = gameContainer.querySelector('.dnd-decor-fixed[data-id="' + sid + '"], .dnd-decor-text[data-id="' + sid + '"]');
+      if (decor) return decor;
+      // 3) Zone SVG Relier / nœud dédié
       var linkNode = gameContainer.querySelector('[data-link-node][data-id="' + sid + '"]');
       if (linkNode) return linkNode;
-      // 3) Image source dans le bac
+      // 4) Image source dans le bac
       return gameContainer.querySelector('.draggable[data-id="' + sid + '"]');
     }
     function allNodes() {
       return Array.prototype.slice.call(
-        gameContainer.querySelectorAll('.draggable[data-id], .dnd-placed[data-id], [data-link-node][data-id], .dropzone[data-zone-id]')
+        gameContainer.querySelectorAll('.draggable[data-id], .dnd-placed[data-id], .dnd-decor-fixed[data-id], .dnd-decor-text[data-id], [data-link-node][data-id], .dropzone[data-zone-id]')
       );
     }
     function clientToLocal(clientX, clientY) {
@@ -1769,6 +1831,7 @@
       }
       var placed = null;
       var drag = null;
+      var decor = null;
       var bestZone = null;
       var bestArea = Infinity;
       var seen = {};
@@ -1784,6 +1847,11 @@
         if (d && gameContainer.contains(d) && !d.classList.contains('used') && !seen['d:' + d.getAttribute('data-id')]) {
           seen['d:' + d.getAttribute('data-id')] = 1;
           if (!drag) drag = d;
+        }
+        var dc = node.closest('.dnd-decor-fixed[data-id], .dnd-decor-text[data-id]');
+        if (dc && gameContainer.contains(dc) && !seen['c:' + dc.getAttribute('data-id')]) {
+          seen['c:' + dc.getAttribute('data-id')] = 1;
+          if (!decor) decor = dc;
         }
         var lz = node.closest('[data-link-node][data-id]');
         if (lz && gameContainer.contains(lz)) {
@@ -1805,6 +1873,14 @@
       }
       if (placed) return placed;
       if (drag) return drag;
+      // Zone SVG plus petite prioritaire si elle recouvre l’image fixe ; sinon l’image fixe.
+      if (bestZone && decor && bestZone !== decor) {
+        var zoneArea = linkNodeArea(bestZone);
+        var decorArea = linkNodeArea(decor);
+        if (zoneArea <= decorArea * 0.85) return bestZone;
+        return decor;
+      }
+      if (decor) return decor;
       if (bestZone) return bestZone;
       // Fallback : dropzone vide (id de zone)
       for (var j = 0; j < stack.length; j++) {
@@ -1828,6 +1904,8 @@
       if (placed && gameContainer.contains(placed)) return placed;
       var drag = el.closest('.draggable[data-id]');
       if (drag && gameContainer.contains(drag) && !drag.classList.contains('used')) return drag;
+      var decor = el.closest('.dnd-decor-fixed[data-id], .dnd-decor-text[data-id]');
+      if (decor && gameContainer.contains(decor)) return decor;
       var linkNode = el.closest('[data-link-node][data-id]');
       if (linkNode && gameContainer.contains(linkNode)) return linkNode;
       var zone = el.closest('.dropzone');
@@ -2006,8 +2084,10 @@
           el.dataset._prevDraggable = el.draggable ? '1' : '0';
           el.draggable = false;
           el.style.cursor = 'crosshair';
+          el.style.pointerEvents = 'auto';
         } else {
           el.classList.remove('dnd-link-node', 'dnd-link-from', 'dnd-selected');
+          var isDecor = el.classList && (el.classList.contains('dnd-decor-fixed') || el.classList.contains('dnd-decor-text'));
           if (el.classList.contains('dnd-placed')) {
             el.draggable = false;
             el.style.cursor = 'pointer';
@@ -2019,6 +2099,10 @@
               el.draggable = true;
               el.style.cursor = 'grab';
             }
+          } else if (isDecor) {
+            el.style.pointerEvents = hybrid ? 'none' : 'auto';
+            el.style.cursor = hybrid ? '' : 'pointer';
+            if (!hybrid) el.classList.add('dnd-link-node');
           } else if (hybrid) {
             el.draggable = el.dataset._prevDraggable === '1';
             el.style.cursor = '';
@@ -2390,6 +2474,11 @@
     });
 
     allNodes().forEach(function (el) {
+      var isDecorInit = el.classList && (el.classList.contains('dnd-decor-fixed') || el.classList.contains('dnd-decor-text'));
+      if (isDecorInit || (el.hasAttribute && el.hasAttribute('data-link-node'))) {
+        el.classList.add('dnd-link-node');
+        if (!hybrid || isDecorInit) el.style.pointerEvents = hybrid && isDecorInit ? 'none' : 'auto';
+      }
       if (!hybrid) {
         el.draggable = false;
         el.classList.add('dnd-link-node');
@@ -2826,18 +2915,38 @@
       });
     }
 
-    /** Pendant une étape Relier / étape suivante : masquer sources grisées et chrome des zones DnD hors étape. */
+    /** Pendant une étape : masquer sources grisées, éléments des étapes futures, chrome zones hors étape. */
     function syncZonesForStep(st) {
       var linkingOnly = false;
       var hideUsedSources = false;
       var currentZoneIds = null;
+      var ownership = null;
+      var curIdx = 0;
+      var hideFuture = false;
       if (stepsEnabled && st && st.active) {
         var act = normalizeStep(st.active, 0).activity;
         if (!st.allComplete) linkingOnly = act === 'linking';
         hideUsedSources = shouldHideUsedStepSources(st);
+        curIdx = st.currentIndex;
+        hideFuture = !st.allComplete;
+        ownership = buildStepOwnership(game);
         if (!st.allComplete && !linkingOnly) {
           currentZoneIds = effectiveStepZoneIds(st.active);
           if (!currentZoneIds.length) currentZoneIds = null;
+        }
+      }
+      function applyFutureHidden(el, isFuture) {
+        el.classList.toggle('dnd-step-future-hidden', !!isFuture);
+        if (isFuture) {
+          el.style.visibility = 'hidden';
+          el.style.pointerEvents = 'none';
+          el.setAttribute('aria-hidden', 'true');
+        } else if (!el.classList.contains('dnd-step-source-hidden')) {
+          el.style.visibility = '';
+          if (el.classList.contains('draggable') || el.classList.contains('dnd-link-zone')) {
+            el.style.pointerEvents = '';
+          }
+          el.removeAttribute('aria-hidden');
         }
       }
       Array.prototype.forEach.call(gameContainer.querySelectorAll('.dropzone'), function (z) {
@@ -2845,7 +2954,10 @@
         z.style.removeProperty('opacity');
         var zid = String(z.getAttribute('data-zone-id') || '');
         var hideChrome = linkingOnly || !!(st && st.allComplete);
-        // Étape 1 (index 0) : ne jamais masquer les zones — elles recouvraient les cartes sources.
+        if (hideFuture && ownership) {
+          var zMin = ownership.zoneMinStep[zid];
+          if (zMin != null && zMin > curIdx) hideChrome = true;
+        }
         if (!hideChrome && currentZoneIds && st && st.currentIndex > 0) {
           hideChrome = currentZoneIds.indexOf(zid) < 0;
         }
@@ -2856,6 +2968,7 @@
         if (el.classList.contains('dnd-placed')) return;
         var id = String(el.getAttribute('data-id') || '');
         var isUsed = used.has(id) || el.classList.contains('used');
+        var futureHide = !!(hideFuture && ownership && id && ownership.elementMinStep[id] != null && ownership.elementMinStep[id] > curIdx);
         if (linkingOnly) {
           el.draggable = false;
           el.classList.add('dnd-step-link-phase');
@@ -2865,16 +2978,30 @@
             if (!el.classList.contains('used')) el.draggable = true;
           }
         }
-        if (hideUsedSources && isUsed) {
+        if (futureHide) {
+          el.classList.add('dnd-step-future-hidden');
+          el.draggable = false;
+          applyFutureHidden(el, true);
+        } else if (hideUsedSources && isUsed) {
           el.classList.add('dnd-step-source-hidden');
+          applyFutureHidden(el, false);
           el.style.visibility = 'hidden';
           el.style.pointerEvents = 'none';
           el.setAttribute('aria-hidden', 'true');
         } else {
-          el.classList.remove('dnd-step-source-hidden');
+          el.classList.remove('dnd-step-source-hidden', 'dnd-step-future-hidden');
           el.style.visibility = '';
           el.style.pointerEvents = '';
           el.removeAttribute('aria-hidden');
+        }
+      });
+      Array.prototype.forEach.call(gameContainer.querySelectorAll('.dnd-decor-fixed, .dnd-decor-text, .dnd-link-zone'), function (el) {
+        var id = String(el.getAttribute('data-id') || '');
+        if (!id) return;
+        var futureHide = !!(hideFuture && ownership && ownership.elementMinStep[id] != null && ownership.elementMinStep[id] > curIdx);
+        applyFutureHidden(el, futureHide);
+        if (el.classList.contains('dnd-link-zone')) {
+          el.style.pointerEvents = (futureHide || !isLinkModeOn()) ? 'none' : 'auto';
         }
       });
       // Les polygones SVG Relier (z-index 5) ne doivent pas intercepter le drop DnD hors mode Relier
@@ -2883,9 +3010,19 @@
         var blockLinkHit = !isLinkModeOn();
         linkLayer.style.pointerEvents = blockLinkHit ? 'none' : '';
         Array.prototype.forEach.call(linkLayer.querySelectorAll('.dnd-link-zone'), function (gEl) {
-          gEl.style.pointerEvents = blockLinkHit ? 'none' : 'auto';
+          if (gEl.classList.contains('dnd-step-future-hidden')) {
+            gEl.style.pointerEvents = 'none';
+          } else {
+            gEl.style.pointerEvents = blockLinkHit ? 'none' : 'auto';
+          }
         });
       }
+      Array.prototype.forEach.call(gameContainer.querySelectorAll('.dnd-decor-fixed[data-id], .dnd-decor-text[data-id]'), function (el) {
+        var hit = !!(linkingOnly || isLinkModeOn()) && !el.classList.contains('dnd-step-future-hidden');
+        el.style.pointerEvents = hit ? 'auto' : 'none';
+        if (hit) el.classList.add('dnd-link-node');
+        else el.classList.remove('dnd-link-node');
+      });
     }
 
     function sourceRoot() {
@@ -3712,6 +3849,12 @@
     stepNeedsRelier: stepNeedsRelier,
     stepAutoLinkMode: stepAutoLinkMode,
     shouldHideUsedStepSources: shouldHideUsedStepSources,
+    idsReferencedByStep: idsReferencedByStep,
+    buildStepOwnership: buildStepOwnership,
+    minStepIndexForElement: minStepIndexForElement,
+    minStepIndexForZone: minStepIndexForZone,
+    isElementVisibleAtStep: isElementVisibleAtStep,
+    isZoneVisibleAtStep: isZoneVisibleAtStep,
     evaluateStep: evaluateStep,
     getStepsState: getStepsState,
     effectiveStepZoneIds: effectiveStepZoneIds,

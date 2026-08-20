@@ -173,6 +173,14 @@ function rebuild() {
   pointer-events: none !important;
   opacity: 0 !important;
 }
+.draggable.dnd-step-future-hidden,
+.dnd-decor-fixed.dnd-step-future-hidden,
+.dnd-decor-text.dnd-step-future-hidden,
+.dnd-link-zone.dnd-step-future-hidden {
+  visibility: hidden !important;
+  pointer-events: none !important;
+  opacity: 0 !important;
+}
 .dropzone.dnd-step-locked .dnd-placed,
 .dropzone.dnd-step-locked .dnd-placed img {
   opacity: 1 !important;
@@ -275,6 +283,11 @@ g.dnd-link-zone.dnd-link-node.dnd-link-from {
 }
 .dnd-link-mode .draggable,
 .dnd-link-mode .dnd-link-node {
+  cursor: crosshair !important;
+}
+.drag-game.dnd-link-mode .dnd-decor-fixed[data-id],
+.drag-game.dnd-link-mode .dnd-decor-text[data-id] {
+  pointer-events: auto !important;
   cursor: crosshair !important;
 }
 .drag-game.dnd-step-relier-auto .dnd-relier-btn {

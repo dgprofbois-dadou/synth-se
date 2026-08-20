@@ -50,6 +50,8 @@ Exemple typique : étape 1 = Déposer (zones 1,2) → étape 2 = Relier (`1>3`) 
 
 Sans critère et sans bouton forcé → bouton **Étape suivante** obligatoire. Le jeu est réussi quand **toutes** les étapes sont terminées.
 
+En mode élève, les **images / cartes / décor / zones Relier** référencés dans une étape ultérieure (`goodIds`, associations zone↔carte, paires `id>id`) restent **masqués** jusqu’à ce que l’étape en amont soit validée.
+
 **Relier n’existe plus comme type de jeu global.** L’ancienne config (`gameType: linking`, case « Activer Relier », paires globales) est migrée vers une **étape Relier** au chargement, pour reprendre la config sur cette étape.
 
 Les outils canvas (zones SVG, mode de liaison, tooltip) s’affichent dès que « Jeu par étapes » est coché. Les flèches à valider se règlent dans chaque étape (`Flèches à valider`).

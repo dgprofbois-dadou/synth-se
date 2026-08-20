@@ -628,6 +628,30 @@ test('effectiveAllowedLinks : étapes primenet sur allowedLinks', () => {
   assert.strictEqual(Engine.effectiveAllowedLinks(g2)[0].from, 'a');
 });
 
+test('étapes : masquage éléments des étapes futures (ownership)', () => {
+  const g = Engine.applyGameDefaults({
+    enableSteps: true,
+    steps: [
+      { title: 'E1', activity: 'dnd', goodIds: '1,2', zoneIds: ['10'] },
+      { title: 'E2', activity: 'dnd', goodIds: '3,4', zoneIds: ['20'] },
+      { title: 'E3', activity: 'linking', linkPairs: [{ from: '5', to: '6' }] }
+    ]
+  });
+  assert.strictEqual(Engine.minStepIndexForElement(g, '1'), 0);
+  assert.strictEqual(Engine.minStepIndexForElement(g, '3'), 1);
+  assert.strictEqual(Engine.minStepIndexForElement(g, '5'), 2);
+  assert.strictEqual(Engine.minStepIndexForElement(g, '6'), 2);
+  assert.strictEqual(Engine.minStepIndexForZone(g, '10'), 0);
+  assert.strictEqual(Engine.minStepIndexForZone(g, '20'), 1);
+  assert.strictEqual(Engine.isElementVisibleAtStep(g, '1', 0), true);
+  assert.strictEqual(Engine.isElementVisibleAtStep(g, '3', 0), false);
+  assert.strictEqual(Engine.isElementVisibleAtStep(g, '3', 1), true);
+  assert.strictEqual(Engine.isElementVisibleAtStep(g, '5', 1), false);
+  assert.strictEqual(Engine.isElementVisibleAtStep(g, '5', 2), true);
+  assert.strictEqual(Engine.isZoneVisibleAtStep(g, '20', 0), false);
+  assert.strictEqual(Engine.isZoneVisibleAtStep(g, '20', 1), true);
+});
+
 test('UI Relier uniquement par étape dans placement-inputs.html', () => {
   const html = fs.readFileSync(path.join(__dirname, '..', 'placement-inputs.html'), 'utf8');
   assert.ok(html.includes('value="linking"'));
@@ -729,6 +753,25 @@ test('ancienne config Relier jeu → étape Relier (reprise)', () => {
   assert.strictEqual(g.steps[0].linkPairs[0].from, '1');
   assert.strictEqual(g.enableLinking, true);
   assert.strictEqual(Engine.gameNeedsRelier(g), true);
+});
+
+test('Relier : images / textes fixes sont des nœuds (id decor-N)', () => {
+  const g = Engine.applyGameDefaults({
+    enableSteps: true,
+    steps: [{ title: 'Relier', activity: 'linking', linkPairs: [{ from: 'decor-1', to: '5' }] }]
+  });
+  assert.strictEqual(Engine.gameNeedsRelier(g), true);
+  const ev = Engine.evaluateLinks(g, [{ from: 'decor-1', to: '5' }]);
+  assert.strictEqual(ev.isComplete, true);
+  assert.strictEqual(ev.score, 1);
+  const engineSrc = fs.readFileSync(path.join(__dirname, '..', 'mq-dnd-engine.js'), 'utf8');
+  assert.ok(engineSrc.includes('.dnd-decor-fixed[data-id], .dnd-decor-text[data-id]'));
+  assert.ok(engineSrc.includes('zoneArea <= decorArea * 0.85'));
+  const html = fs.readFileSync(path.join(__dirname, '..', 'placement-inputs.html'), 'utf8');
+  assert.ok(html.includes('drag-game.dnd-link-mode .dnd-decor-fixed[data-id]'));
+  assert.ok(html.includes('dnd-link-node'));
+  assert.ok(html.includes('placeholder="Ex: 1&gt;3 ou decor-1&gt;5"'));
+  assert.ok(html.includes('Les <strong>images fixes</strong>'));
 });
 
 test('zone jeux : déplacement du cadre + 4 poignées de redim', () => {
