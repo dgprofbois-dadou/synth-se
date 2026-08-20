@@ -2662,31 +2662,33 @@
 
         /* Steppers dim/pos : ne pas forcer width:100% (sinon le champ entre +/- disparaît) */
         #left .mq-dnd-card .mq-step {
-            gap: 4px !important;
+            gap: 2px !important;
+            min-width: 0 !important;
+            width: 100% !important;
         }
         #left .mq-dnd-card .mq-step input[type="number"] {
             width: auto !important;
-            flex: 1 1 58px !important;
-            min-width: 54px !important;
-            max-width: 88px !important;
-            height: 32px !important;
-            padding: 0 4px !important;
-            font-size: 13px !important;
+            flex: 1 1 36px !important;
+            min-width: 32px !important;
+            max-width: none !important;
+            height: 28px !important;
+            padding: 0 2px !important;
+            font-size: 12px !important;
             font-weight: 700 !important;
             text-align: center !important;
             color: #0f172a !important;
             border: 1px solid var(--mq-border-strong) !important;
-            border-radius: 8px !important;
+            border-radius: 6px !important;
             background: #fff !important;
         }
         #left .mq-dnd-card .mq-step button {
-            flex: 0 0 32px !important;
-            width: 32px !important;
-            height: 32px !important;
+            flex: 0 0 22px !important;
+            width: 22px !important;
+            height: 28px !important;
             border: 1px solid var(--mq-border-strong) !important;
-            border-radius: 8px !important;
+            border-radius: 6px !important;
             background: #fff !important;
-            font-size: 16px !important;
+            font-size: 14px !important;
             font-weight: 700 !important;
             color: #334155 !important;
         }
@@ -2696,31 +2698,153 @@
             color: #1d4ed8 !important;
         }
         #left .mq-dnd-card .mq-field-label {
-            font-size: 10px !important;
+            font-size: 9px !important;
             font-weight: 700 !important;
             text-transform: uppercase;
             letter-spacing: .4px;
             color: var(--mq-muted) !important;
-            margin-bottom: 4px !important;
+            margin-bottom: 2px !important;
+        }
+        #left .mq-dnd-dim-grid,
+        #left .mq-dz-xywh {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+            gap: 6px 8px;
+            width: 100%;
+            min-width: 0;
+            box-sizing: border-box;
+        }
+        #left .mq-dnd-dim-grid {
+            margin-top: 8px;
+            padding: 6px;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+        }
+        #left .mq-dnd-dim-grid > *,
+        #left .mq-dz-xywh > * {
+            min-width: 0;
+        }
+
+        /* Inspecteur zone de dépôt : compact, sans scroll horizontal */
+        #left .mq-dnd-dropzones-host {
+            min-width: 0;
+            max-width: 100%;
+        }
+        #left [id$="DropzonesList"] {
+            max-width: 100%;
+            overflow-x: hidden !important;
+            overflow-y: auto;
+            box-sizing: border-box;
+        }
+        #left .mq-dz-block {
+            padding: 8px;
+            background: #fff7ed;
+            border: 2px solid #e8521f;
+            border-radius: 8px;
+            min-width: 0;
+            max-width: 100%;
+            box-sizing: border-box;
+            overflow: hidden;
+        }
+        #left .mq-dz-block-head {
+            font-weight: 700;
+            font-size: 12px;
+            color: #9a3412;
+            margin-bottom: 6px;
+        }
+        #left .mq-dz-memo {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            margin: 0 0 6px;
+            font-size: 10px;
+            font-weight: 700;
+            color: #9a3412;
+        }
+        #left .mq-dz-block input:not([type="checkbox"]),
+        #left .mq-dz-block select {
+            height: 28px !important;
+            font-size: 12px !important;
+            padding: 0 8px !important;
+            width: 100% !important;
+            box-sizing: border-box !important;
+        }
+        #left .mq-dz-block .mq-step input[type="number"] {
+            width: auto !important;
+            padding: 0 2px !important;
+        }
+        #left .mq-dz-xywh {
+            margin: 0 0 6px;
+            padding: 6px;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+        }
+        #left .mq-dz-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px 8px;
+            align-items: flex-end;
+            font-size: 10px;
+            font-weight: 700;
+            color: #475569;
+            margin-bottom: 6px;
+        }
+        #left .mq-dz-meta > label:not(.mq-dz-req) {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            flex: 1 1 72px;
+            min-width: 0;
+        }
+        #left .mq-dz-meta .mq-dz-req {
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            gap: 4px;
+            flex: 0 0 auto;
+            white-space: nowrap;
+            padding-bottom: 5px;
+            font-weight: 600;
+        }
+        #left .mq-dz-more {
+            margin: 0 0 6px;
+            font-size: 11px;
+        }
+        #left .mq-dz-more > summary {
+            cursor: pointer;
+            font-size: 11px;
+            font-weight: 700;
+            color: #64748b;
+        }
+        #left .mq-dz-more .row {
+            margin: 4px 0 !important;
+            gap: 2px !important;
+        }
+        #left .mq-dnd-card .mq-dnd-inline-3 {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 6px;
+            width: 100%;
+            min-width: 0;
+        }
+        #left .mq-dnd-card .mq-dnd-inline-3>div {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            min-width: 0;
+        }
+        #left .mq-dnd-card .mq-dnd-inline-3 input:not([type="checkbox"]) {
+            height: 28px !important;
+            padding: 0 6px !important;
+            font-size: 12px !important;
         }
 
         #left .mq-dnd-card input[type="color"] {
             height: 36px !important;
             padding: 4px !important;
             cursor: pointer;
-        }
-
-        #left .mq-dnd-card .mq-dnd-inline-3 {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 10px;
-            width: 100%;
-        }
-
-        #left .mq-dnd-card .mq-dnd-inline-3>div {
-            display: flex;
-            flex-direction: column;
-            gap: 4px;
         }
 
         #left .mq-dnd-card .mq-dnd-inline-3 label {
@@ -13155,9 +13279,9 @@
                         assocHtml = '<p style="margin:4px 0 0;font-size:11px;color:#9a3412;">Aucune association — cochez une ou plusieurs cartes dans l’<strong>étape</strong> concernée (encadré orange ci-dessus).</p>';
                     }
                     acceptedSection = ''
-                        + '<div style="margin-top:6px;padding:8px;background:#eef2ff;border:1px solid #c7d2fe;border-radius:8px;">'
+                        + '<div class="mq-dz-assoc" style="margin-top:4px;padding:6px 8px;background:#eef2ff;border:1px solid #c7d2fe;border-radius:8px;">'
                         + '<div style="font-size:11px;font-weight:bold;color:#3730a3;">Association carte (lecture seule)</div>'
-                        + '<p style="margin:2px 0 4px;font-size:10px;color:#4338ca;">Jeu par étapes : modifiez uniquement dans la section <strong>Configuration DnD de cette étape</strong>, pas ici.</p>'
+                        + '<p style="margin:2px 0 4px;font-size:10px;color:#4338ca;">Modifiez dans <strong>Configuration DnD de cette étape</strong>.</p>'
                         + assocHtml
                         + '</div>';
                 } else {
@@ -13194,26 +13318,28 @@
                 }
 
                 body += ''
-                    + '<div class="mq-dz-block" data-game="' + gameId + '" data-index="' + index + '" style="padding:8px; background:#fff7ed; border:2px solid #e8521f; border-radius:8px;">'
-                    + '<div style="font-weight:bold; font-size:12px; color:#9a3412; margin-bottom:6px;">⚙️ ' + mqDropzoneDisplayName(dz, index).replace(/</g, '&lt;') + '</div>'
-                    + '<div class="row" style="margin:0 0 4px 0;"><label style="font-size:10px;">Label (mémo admin — non affiché sur le canvas, voir badge ID)</label>'
-                    + '<input type="text" data-field="label" value="' + String(dz.label || '').replace(/"/g, '&quot;') + '" style="font-size:11px;" placeholder="Ex: L7-C1 (optionnel)"></div>'
-                    + '<div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:4px; padding:6px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px;">'
+                    + '<div class="mq-dz-block" data-game="' + gameId + '" data-index="' + index + '">'
+                    + '<div class="mq-dz-block-head">⚙️ ' + mqDropzoneDisplayName(dz, index).replace(/</g, '&lt;') + '</div>'
+                    + '<label class="mq-dz-memo" title="Non affiché sur le canvas — voir le badge ID">Mémo admin'
+                    + '<input type="text" data-field="label" value="' + String(dz.label || '').replace(/"/g, '&quot;') + '" placeholder="Ex: L7-C1"></label>'
+                    + '<div class="mq-dz-xywh">'
                     + mqDimPosField('X', dz.x || 0, 'updateDropzonePosition', gameId, index, 'x', 5)
                     + mqDimPosField('Y', dz.y || 0, 'updateDropzonePosition', gameId, index, 'y', 5)
-                    + mqDimPosField('Largeur', dz.width || 80, 'updateDropzonePosition', gameId, index, 'width', 10)
-                    + mqDimPosField('Hauteur', dz.height || 80, 'updateDropzonePosition', gameId, index, 'height', 10)
+                    + mqDimPosField('L', dz.width || 80, 'updateDropzonePosition', gameId, index, 'width', 10)
+                    + mqDimPosField('H', dz.height || 80, 'updateDropzonePosition', gameId, index, 'height', 10)
                     + '</div>'
-                    + '<div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-top:6px; font-size:11px;">'
-                    + '<label>Capacité <input type="number" min="1" max="50" data-field="capacity" value="' + (dz.capacity || 1) + '" style="width:100%;"></label>'
-                    + '<label>Groupe/ligne <input type="text" data-field="groupId" value="' + String(dz.groupId || '').replace(/"/g, '&quot;') + '" style="width:100%;"></label>'
-                    + '<label style="grid-column:1/-1;"><input type="checkbox" data-field="required" ' + (dz.required === false ? '' : 'checked') + '> Zone obligatoire</label>'
+                    + '<div class="mq-dz-meta">'
+                    + '<label>Capacité <input type="number" min="1" max="50" data-field="capacity" value="' + (dz.capacity || 1) + '"></label>'
+                    + '<label>Groupe <input type="text" data-field="groupId" value="' + String(dz.groupId || '').replace(/"/g, '&quot;') + '" placeholder="row-7"></label>'
+                    + '<label class="mq-dz-req"><input type="checkbox" data-field="required" ' + (dz.required === false ? '' : 'checked') + '> Oblig.</label>'
                     + '</div>'
                     + acceptedSection
-                    + '<div class="row" style="margin-top:4px;"><label style="font-size:10px;">Msg réussite</label>'
-                    + '<input type="text" data-field="successMessage" value="' + String(dz.successMessage || '').replace(/"/g, '&quot;') + '" style="font-size:11px;"></div>'
-                    + '<div class="row"><label style="font-size:10px;">Msg erreur</label>'
-                    + '<input type="text" data-field="errorMessage" value="' + String(dz.errorMessage || '').replace(/"/g, '&quot;') + '" style="font-size:11px;"></div>'
+                    + '<details class="mq-dz-more"><summary>Messages (réussite / erreur)</summary>'
+                    + '<div class="row" style="margin:4px 0;"><label style="font-size:10px;">Réussite</label>'
+                    + '<input type="text" data-field="successMessage" value="' + String(dz.successMessage || '').replace(/"/g, '&quot;') + '"></div>'
+                    + '<div class="row"><label style="font-size:10px;">Erreur</label>'
+                    + '<input type="text" data-field="errorMessage" value="' + String(dz.errorMessage || '').replace(/"/g, '&quot;') + '"></div>'
+                    + '</details>'
                     + '</div>';
 
                 list.innerHTML = body;
@@ -15183,9 +15309,9 @@
                     const n = mqGameNum(gid);
                     const host = document.getElementById('dndGame' + n + 'AdvancedHost');
                     if (!host) return;
-                    if (!host.dataset.ready || host.dataset.ready !== 'instr-fold-v1') {
+                    if (!host.dataset.ready || host.dataset.ready !== 'dz-compact-v1') {
                         host.innerHTML = mqDndTypeControlsHTML(n);
-                        host.dataset.ready = 'instr-fold-v1';
+                        host.dataset.ready = 'dz-compact-v1';
                         const btn = document.getElementById('btnGenGridGame' + n);
                         if (btn) {
                             btn.addEventListener('click', () => mqGenerateDndGrid(gid, n));
@@ -17096,7 +17222,6 @@
                     // Ligne 3 : Dimensions et position (steppers lisibles)
                     const rowDim = document.createElement('div');
                     rowDim.className = 'mq-dnd-dim-grid';
-                    rowDim.style.cssText = 'display:grid; grid-template-columns:1fr 1fr; gap:10px 8px; margin-top:8px; padding:8px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px;';
                     rowDim.innerHTML =
                         mqDimPosField('Largeur', d.width || 250, 'updateDraggablePosition', gameId, index, 'width', 10) +
                         mqDimPosField('Hauteur', d.height || 250, 'updateDraggablePosition', gameId, index, 'height', 10) +
@@ -17402,8 +17527,8 @@
                     + '<div style="margin-top:8px;" class="mq-dnd-dropzones-host" data-game-num="' + n + '">'
                     + '<label style="font-size:12px;font-weight:bold;display:block;margin-bottom:4px;">Zones de dépôt <span class="mq-dz-steps-sub" style="font-weight:normal;font-size:11px;color:#64748b;">(position &amp; taille)</span></label>'
                     + '<p class="mq-dz-help-no-steps" style="font-size:11px;color:#64748b;margin:0 0 6px 0;">Cliquez une zone : position, taille et cartes acceptées.</p>'
-                    + '<p class="mq-dz-help-steps" style="display:none;font-size:11px;color:#64748b;margin:0 0 6px 0;">Cliquez une zone pour la déplacer ou la redimensionner. Les associations <strong>zone → carte</strong> se règlent uniquement dans chaque étape (encadré orange).</p>'
-                    + '<div id="dndGame' + n + 'DropzonesList" style="max-height:360px;overflow-y:auto;background:#fff;padding:5px;border-radius:4px;border:1px solid #ddd;"></div>'
+                    + '<p class="mq-dz-help-steps" style="display:none;font-size:11px;color:#64748b;margin:0 0 6px 0;">Cliquez une zone pour la déplacer ou la redimensionner. Associations <strong>zone → carte</strong> : dans chaque étape.</p>'
+                    + '<div id="dndGame' + n + 'DropzonesList" style="max-height:360px;overflow-x:hidden;overflow-y:auto;background:#fff;padding:5px;border-radius:4px;border:1px solid #ddd;box-sizing:border-box;max-width:100%;"></div>'
                     + '</div>';
             }
 

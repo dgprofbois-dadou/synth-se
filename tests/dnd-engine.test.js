@@ -647,7 +647,16 @@ test('UI étapes repliables dans placement-inputs.html', () => {
   assert.ok(html.includes('mqToggleStepCard'));
   assert.ok(html.includes('mqCaptureOpenStepIndices'));
   assert.ok(html.includes('data-open'));
-  assert.ok(html.includes('instr-fold-v1'));
+  assert.ok(html.includes('dz-compact-v1'));
+});
+
+test('UI inspecteur zones compact dans placement-inputs.html', () => {
+  const html = fs.readFileSync(path.join(__dirname, '..', 'placement-inputs.html'), 'utf8');
+  assert.ok(html.includes('mq-dz-xywh'));
+  assert.ok(html.includes('mq-dz-meta'));
+  assert.ok(html.includes('Mémo admin'));
+  assert.ok(html.includes('overflow-x:hidden'));
+  assert.ok(!html.includes('Label (mémo admin — non affiché sur le canvas, voir badge ID)'));
 });
 
 test('saisie IDs d’étape : textarea + pastilles, pas de rerender à chaque frappe', () => {
