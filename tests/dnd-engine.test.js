@@ -277,6 +277,9 @@ test('UI consignes dans placement-inputs.html', () => {
   assert.ok(html.includes('instructionsBox'));
   assert.ok(html.includes('Disposition consignes'));
   assert.ok(html.includes('mq-dnd-instr-box-fold'));
+  assert.ok(html.includes('mqWrapDndSubRowFold'));
+  assert.ok(html.includes('Ajouter sans remplacer'));
+  assert.ok(html.includes('btnAddGridGame'));
 });
 
 console.log('\n=== Test étapes / consignes ===');
@@ -647,7 +650,7 @@ test('UI étapes repliables dans placement-inputs.html', () => {
   assert.ok(html.includes('mqToggleStepCard'));
   assert.ok(html.includes('mqCaptureOpenStepIndices'));
   assert.ok(html.includes('data-open'));
-  assert.ok(html.includes('dz-compact-v1'));
+  assert.ok(html.includes('dz-grid-append-v1'));
 });
 
 test('UI inspecteur zones compact dans placement-inputs.html', () => {

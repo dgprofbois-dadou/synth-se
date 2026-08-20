@@ -1465,6 +1465,15 @@
         }
         .mq-dnd-instr-box-fold[open] > summary::before { content: '▾'; }
         .mq-dnd-instr-box-fold > summary:hover { color: #1d4ed8; }
+        #left .mq-dnd-sub-fold {
+            margin: 8px 0;
+        }
+        #left .mq-dnd-sub-fold > .row.mq-dnd-sub {
+            margin-top: 6px;
+            border: 0;
+            padding: 4px 0 0;
+            background: transparent;
+        }
         .mq-dnd-instr-box-body {
             display: flex;
             flex-wrap: wrap;
@@ -15625,12 +15634,16 @@
                     const n = mqGameNum(gid);
                     const host = document.getElementById('dndGame' + n + 'AdvancedHost');
                     if (!host) return;
-                    if (!host.dataset.ready || host.dataset.ready !== 'dz-compact-v1') {
+                    if (!host.dataset.ready || host.dataset.ready !== 'dz-grid-append-v1') {
                         host.innerHTML = mqDndTypeControlsHTML(n);
-                        host.dataset.ready = 'dz-compact-v1';
+                        host.dataset.ready = 'dz-grid-append-v1';
                         const btn = document.getElementById('btnGenGridGame' + n);
                         if (btn) {
-                            btn.addEventListener('click', () => mqGenerateDndGrid(gid, n));
+                            btn.addEventListener('click', () => mqGenerateDndGrid(gid, n, false));
+                        }
+                        const btnAdd = document.getElementById('btnAddGridGame' + n);
+                        if (btnAdd) {
+                            btnAdd.addEventListener('click', () => mqGenerateDndGrid(gid, n, true));
                         }
                         const toggleSteps = () => {
                             const en = document.getElementById('dndGame' + n + 'EnableSteps');
@@ -15693,11 +15706,15 @@
                     }
                 });
             }
-            function mqGenerateDndGrid(gameId, n) {
+            function mqGenerateDndGrid(gameId, n, append) {
                 if (!window.MqDndEngine) return;
                 const g = state.dndGames[gameId];
                 if (!g) return;
-                if (g.dropzones && g.dropzones.length && !confirm('Remplacer les ' + g.dropzones.length + ' zones existantes par la grille ?')) return;
+                const existing = Array.isArray(g.dropzones) ? g.dropzones : [];
+                if (!append && existing.length
+                    && !confirm('Cela VA REMPLACER les ' + existing.length + ' zones actuelles (positions, tailles, cartes acceptées). Continuer ?\n\nPour seulement ajouter des zones, utilisez « Ajouter sans remplacer » ou augmentez « Nombre de zones ».')) {
+                    return;
+                }
                 const rows = parseInt(($('dndGame' + n + 'GridRows') || {}).value, 10) || 7;
                 const cols = parseInt(($('dndGame' + n + 'GridCols') || {}).value, 10) || 3;
                 try {
@@ -15710,17 +15727,33 @@
                         startX: parseInt(($('dndGame' + n + 'GridStartX') || {}).value, 10) || 10,
                         startY: parseInt(($('dndGame' + n + 'GridStartY') || {}).value, 10) || 250
                     });
-                    g.dropzones = zones;
-                    g.targetCount = zones.length;
+                    if (append) {
+                        const ids = existing.map((dz) => parseInt(dz.id, 10) || 0);
+                        let maxId = ids.length ? Math.max.apply(null, ids) : 0;
+                        const extra = zones.map((z) => {
+                            maxId += 1;
+                            const copy = Object.assign({}, z);
+                            copy.id = maxId;
+                            return copy;
+                        });
+                        g.dropzones = existing.concat(extra);
+                    } else {
+                        g.dropzones = zones;
+                    }
+                    g.targetCount = g.dropzones.length;
                     const tc = $('dndGame' + n + 'TargetCount');
-                    if (tc) tc.value = zones.length;
+                    if (tc) tc.value = g.dropzones.length;
                     if (g.gameType === 'selection') g.gameType = 'exact';
                     const gt = $('dndGame' + n + 'GameType');
                     if (gt) gt.value = g.gameType;
                     renderDropzonesList(gameId);
                     renderDndGamesPreview();
                     scheduleSaveLocal();
-                    if (window.mqToast) mqToast('Grille ' + rows + '×' + cols + ' (' + zones.length + ' zones)');
+                    if (window.mqToast) {
+                        mqToast(append
+                            ? ('Ajout de ' + zones.length + ' zone(s) — total ' + g.dropzones.length)
+                            : ('Grille ' + rows + '×' + cols + ' (' + g.dropzones.length + ' zones)'));
+                    }
                 } catch (err) {
                     alert(err.message || String(err));
                 }
@@ -17875,6 +17908,7 @@
                     + '</div>'
                     + '<details style="margin:8px 0;background:#fff;border:1px solid #ddd;border-radius:6px;padding:6px;">'
                     + '<summary style="cursor:pointer;font-weight:bold;font-size:12px;">Générer une grille</summary>'
+                    + '<p style="margin:6px 0 0;font-size:10px;color:#64748b;line-height:1.35;">« Générer/remplacer » recrée <strong>toutes</strong> les zones. Pour en ajouter 2 sans tout casser : mettez 1 ligne × 2 colonnes, réglez Départ X/Y à côté de la grille, puis « Ajouter sans remplacer ». Autre option : augmentez « Nombre de zones » (ex. 21 → 23).</p>'
                     + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-top:6px;font-size:11px;">'
                     + '<label>Lignes <input id="dndGame' + n + 'GridRows" type="number" min="1" max="20" value="7" style="width:100%;"></label>'
                     + '<label>Colonnes <input id="dndGame' + n + 'GridCols" type="number" min="1" max="20" value="3" style="width:100%;"></label>'
@@ -17886,6 +17920,7 @@
                     + '<label>Départ Y <input id="dndGame' + n + 'GridStartY" type="number" value="250" style="width:100%;"></label>'
                     + '</div>'
                     + '<button type="button" id="btnGenGridGame' + n + '" style="width:100%;margin-top:6px;font-weight:bold;">Générer/remplacer les zones</button>'
+                    + '<button type="button" id="btnAddGridGame' + n + '" style="width:100%;margin-top:4px;">Ajouter sans remplacer</button>'
                     + '</details>'
                     + '<div style="margin-top:8px;" class="mq-dnd-dropzones-host" data-game-num="' + n + '">'
                     + '<label style="font-size:12px;font-weight:bold;display:block;margin-bottom:4px;">Zones de dépôt <span class="mq-dz-steps-sub" style="font-weight:normal;font-size:11px;color:#64748b;">(position &amp; taille)</span></label>'
@@ -18128,6 +18163,22 @@
                 row.replaceChildren(subLab, toolbar);
             }
 
+            function mqWrapDndSubRowFold(anchorId, summaryText) {
+                const anchor = $(anchorId);
+                if (!anchor) return;
+                const row = anchor.closest('.row');
+                if (!row || row.closest('details.mq-dnd-sub-fold')) return;
+                const details = document.createElement('details');
+                details.className = 'mq-dnd-instr-box-fold mq-dnd-sub-fold';
+                const summary = document.createElement('summary');
+                summary.textContent = summaryText;
+                const subLab = row.querySelector('.mq-dnd-sub-label');
+                if (subLab) subLab.remove();
+                row.parentNode.insertBefore(details, row);
+                details.appendChild(summary);
+                details.appendChild(row);
+            }
+
             function mqEnhanceDndPanels() {
                 try {
                 const mqCardEmojis = ['🎯', '🧩', '🧠', '🎨', '⭐', '🚀', '🎲', '🔧', '📦', '🎵'];
@@ -18204,6 +18255,7 @@
                     mqLayoutDndZoneRow(p);
                     mqLayoutDndToolbar(p + 'TooltipFont', '💬 Infobulles');
                     mqLayoutDndToolbar(p + 'HeaderWidth', '🏷️ Bandeau titre');
+                    mqWrapDndSubRowFold(p + 'HeaderWidth', '🏷️ Bandeau titre');
                 }
                 } catch (e) { console.warn('[mq-ui] mqEnhanceDndPanels', e); }
             }
