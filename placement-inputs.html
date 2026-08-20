@@ -2663,6 +2663,54 @@
             line-height: 1;
             padding: 0;
         }
+        #left [id$="DecorList"],
+        #left [id$="DecorTextList"] {
+            max-width: 100%;
+            overflow-x: hidden !important;
+            overflow-y: auto;
+            box-sizing: border-box;
+        }
+        #left .mq-decor-card {
+            flex-wrap: nowrap;
+        }
+        #left .mq-decor-card.mq-decor-text {
+            flex-direction: column;
+        }
+        #left .mq-decor-tools {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 6px;
+            min-width: 0;
+        }
+        #left .mq-decor-tools select {
+            flex: 1 1 90px;
+            min-width: 0 !important;
+            width: auto !important;
+            max-width: 100%;
+        }
+        #left .mq-decor-tools input[type="number"] {
+            width: 52px !important;
+            flex: 0 0 52px !important;
+            max-width: 52px !important;
+        }
+        #left .mq-decor-card input[type="color"] {
+            width: 28px !important;
+            height: 24px !important;
+            padding: 0 !important;
+            flex: 0 0 28px;
+            min-width: 28px;
+        }
+        #left .mq-decor-z {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            min-width: 0;
+        }
+        #left .mq-decor-z .mq-step {
+            flex: 1;
+            min-width: 0;
+        }
 
         #left .mq-dnd-add-btn {
             width: 100%;
@@ -3929,11 +3977,11 @@
                     <button id="btnAddTextGame1" type="button" style="width:100%; font-size:12px; margin-top:4px;">🔤 + Étiquette texte</button>
                     <label style="font-size:12px; font-weight:bold; display:block; margin:8px 0 5px;">Images fixes (décor) :</label>
                     <div id="dndGame1DecorList"
-                        style="max-height:150px; overflow-y:auto; background:#fff; padding:5px; border-radius:4px; border:1px solid #ddd; margin-bottom:5px;"></div>
+                        style="max-height:280px; overflow-x:hidden; overflow-y:auto; background:#fff; padding:5px; border-radius:4px; border:1px solid #ddd; margin-bottom:5px; box-sizing:border-box; max-width:100%;"></div>
                     <button id="btnAddDecorGame1" type="button" style="width:100%; font-size:12px;">🖼️ + Image fixe</button>
                     <button id="btnAddDecorTextGame1" type="button" style="width:100%; font-size:12px; margin-top:4px;">🔤 + Texte fixe</button>
                     <div id="dndGame1DecorTextList"
-                        style="max-height:150px; overflow-y:auto; background:#fff; padding:5px; border-radius:4px; border:1px solid #ddd; margin-top:5px;"></div>
+                        style="max-height:280px; overflow-x:hidden; overflow-y:auto; background:#fff; padding:5px; border-radius:4px; border:1px solid #ddd; margin-top:5px; box-sizing:border-box; max-width:100%;"></div>
                 </div>
 
 
@@ -4033,11 +4081,11 @@
                     <button id="btnAddTextGame2" type="button" style="width:100%; font-size:12px; margin-top:4px;">🔤 + Étiquette texte</button>
                     <label style="font-size:12px; font-weight:bold; display:block; margin:8px 0 5px;">Images fixes (décor) :</label>
                     <div id="dndGame2DecorList"
-                        style="max-height:150px; overflow-y:auto; background:#fff; padding:5px; border-radius:4px; border:1px solid #ddd; margin-bottom:5px;"></div>
+                        style="max-height:280px; overflow-x:hidden; overflow-y:auto; background:#fff; padding:5px; border-radius:4px; border:1px solid #ddd; margin-bottom:5px; box-sizing:border-box; max-width:100%;"></div>
                     <button id="btnAddDecorGame2" type="button" style="width:100%; font-size:12px;">🖼️ + Image fixe</button>
                     <button id="btnAddDecorTextGame2" type="button" style="width:100%; font-size:12px; margin-top:4px;">🔤 + Texte fixe</button>
                     <div id="dndGame2DecorTextList"
-                        style="max-height:150px; overflow-y:auto; background:#fff; padding:5px; border-radius:4px; border:1px solid #ddd; margin-top:5px;"></div>
+                        style="max-height:280px; overflow-x:hidden; overflow-y:auto; background:#fff; padding:5px; border-radius:4px; border:1px solid #ddd; margin-top:5px; box-sizing:border-box; max-width:100%;"></div>
                 </div>
 
 
@@ -13702,23 +13750,24 @@
                     return;
                 }
                 list.innerHTML = arr.map((d, index) => `
-                    <div style="padding:6px; border-bottom:1px solid #eee; background:#fff; display:flex; gap:6px; align-items:flex-start;">
-                        <img src="${d.src}" style="width:42px; height:42px; object-fit:contain; border:1px solid #ccc; background:#f0f0f0;">
-                        <div style="flex:1; display:flex; flex-direction:column; gap:5px;">
-                            <div style="display:flex; align-items:center; gap:6px;">
-                                <label style="font-weight:bold; font-size:11px; color:#2e7d32; white-space:nowrap;">ID</label>
-                                <input type="text" value="${String(d.id || '').replace(/"/g, '&quot;')}" placeholder="ex: decor-1"
-                                    onchange="window.updateDecorPosition('${gameId}', ${index}, 'id', this.value)"
-                                    style="flex:1; padding:3px 6px; font-size:12px; border:1px solid #ccc; border-radius:4px; font-family:monospace;">
+                    <div class="mq-drag-card mq-decor-card">
+                        <div class="mq-drag-thumb"><img src="${d.src}" alt="" style="width:40px;height:40px;object-fit:contain;border:1px solid #ccc;background:#f0f0f0;"></div>
+                        <div class="mq-drag-body">
+                            <div class="mq-drag-top">
+                                <span style="font-weight:700;font-size:10px;color:#2e7d32;">ID</span>
+                                <input class="mq-drag-id" type="text" value="${String(d.id || '').replace(/"/g, '&quot;')}" placeholder="decor-1"
+                                    onchange="window.updateDecorPosition('${gameId}', ${index}, 'id', this.value)">
+                                <button type="button" onclick="window.replaceDecorImage('${gameId}', ${index})" title="Remplacer" style="font-size:11px;padding:2px 6px;cursor:pointer;">🔄</button>
+                                <button type="button" class="mq-drag-del" onclick="window.removeDecorImage('${gameId}', ${index})" title="Supprimer">×</button>
                             </div>
-                            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px 8px; padding:8px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px;">
-                                ${mqDimPosField('Largeur', d.width || 300, 'updateDecorPosition', gameId, index, 'width', 10)}
-                                ${mqDimPosField('Hauteur', d.height || 200, 'updateDecorPosition', gameId, index, 'height', 10)}
-                                ${mqDimPosField('Plan (z)', d.z || 0, 'updateDecorPosition', gameId, index, 'z', 1)}
+                            <div class="mq-dnd-dim-grid">
+                                ${mqDimPosField('L', d.width || 300, 'updateDecorPosition', gameId, index, 'width', 10)}
+                                ${mqDimPosField('H', d.height || 200, 'updateDecorPosition', gameId, index, 'height', 10)}
+                                ${mqDimPosField('X', d.x || 0, 'updateDecorPosition', gameId, index, 'x', 5)}
+                                ${mqDimPosField('Y', d.y || 0, 'updateDecorPosition', gameId, index, 'y', 5)}
                             </div>
-                            <div style="display:flex; gap:5px;">
-                                <button type="button" onclick="window.replaceDecorImage('${gameId}', ${index})" style="flex:1; font-size:11px; cursor:pointer;">🔄 Remplacer</button>
-                                <button type="button" onclick="window.removeDecorImage('${gameId}', ${index})" style="font-size:11px; color:#fff; background:#ff4444; border:none; border-radius:4px; padding:3px 8px; cursor:pointer;">✕</button>
+                            <div class="mq-decor-z">
+                                ${mqDimPosField('z', d.z || 0, 'updateDecorPosition', gameId, index, 'z', 1)}
                             </div>
                         </div>
                     </div>`).join('');
@@ -13776,37 +13825,39 @@
                 }
                 const fonts = ['Arial, sans-serif', 'Verdana, sans-serif', 'Georgia, serif', "'Comic Sans MS', sans-serif", "'OpenDyslexic', sans-serif", "'Courier New', monospace"];
                 list.innerHTML = arr.map((d, index) => `
-                    <div style="padding:6px; border-bottom:1px solid #eee; background:#fffdf5; display:flex; flex-direction:column; gap:5px;">
-                        <div style="display:flex; align-items:center; gap:6px;">
-                            <label style="font-weight:bold; font-size:11px; color:#2e7d32; white-space:nowrap;">ID</label>
-                            <input type="text" value="${String(d.id || '').replace(/"/g, '&quot;')}" placeholder="ex: dtext-1"
-                                onchange="window.updateDecorText('${gameId}', ${index}, 'id', this.value)"
-                                style="flex:1; padding:3px 6px; font-size:12px; border:1px solid #ccc; border-radius:4px; font-family:monospace;">
+                    <div class="mq-drag-card mq-decor-card mq-decor-text">
+                        <div class="mq-drag-top">
+                            <span style="font-weight:700;font-size:10px;color:#2e7d32;">ID</span>
+                            <input class="mq-drag-id" type="text" value="${String(d.id || '').replace(/"/g, '&quot;')}" placeholder="dtext-1"
+                                onchange="window.updateDecorText('${gameId}', ${index}, 'id', this.value)">
+                            <button type="button" class="mq-drag-del" onclick="window.removeDecorText('${gameId}', ${index})" title="Supprimer">×</button>
                         </div>
-                        <input type="text" value="${String(d.text || '').replace(/"/g, '&quot;')}" placeholder="Texte fixe"
-                            oninput="window.updateDecorText('${gameId}', ${index}, 'text', this.value)"
-                            style="width:100%; padding:4px; font-size:13px; border:1px solid #ddd; box-sizing:border-box;">
-                        <div style="display:flex; gap:5px; align-items:center; flex-wrap:wrap;">
-                            <label style="font-size:11px;">Taille</label>
+                        <input class="mq-drag-title" type="text" value="${String(d.text || '').replace(/"/g, '&quot;')}" placeholder="Texte fixe"
+                            oninput="window.updateDecorText('${gameId}', ${index}, 'text', this.value)">
+                        <div class="mq-decor-tools">
+                            <label style="font-size:10px;font-weight:700;color:#64748b;">Taille</label>
                             <input type="number" value="${d.fontSize || 28}" min="8" max="200"
-                                onchange="window.updateDecorText('${gameId}', ${index}, 'fontSize', this.value)" style="width:52px; padding:3px; font-size:12px;">
-                            <select onchange="window.updateDecorText('${gameId}', ${index}, 'font', this.value)" style="font-size:11px; flex:1; min-width:80px;">
+                                onchange="window.updateDecorText('${gameId}', ${index}, 'fontSize', this.value)">
+                            <select onchange="window.updateDecorText('${gameId}', ${index}, 'font', this.value)">
                                 ${fonts.map(f => '<option value="' + f + '"' + ((d.font || 'Arial, sans-serif') === f ? ' selected' : '') + '>' + f.split(',')[0].replace(/'/g, '') + '</option>').join('')}
                             </select>
                             <input type="color" value="${d.color || '#000000'}" title="Couleur"
-                                oninput="window.updateDecorText('${gameId}', ${index}, 'color', this.value)" style="width:28px; height:24px; padding:0; border:1px solid #ccc;">
+                                oninput="window.updateDecorText('${gameId}', ${index}, 'color', this.value)">
                         </div>
-                        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-                            <label style="font-size:12px; font-weight:bold;"><input type="checkbox" ${d.bold ? 'checked' : ''} onchange="window.updateDecorText('${gameId}', ${index}, 'bold', this.checked)"> G</label>
-                            <label style="font-size:12px; font-style:italic;"><input type="checkbox" ${d.italic ? 'checked' : ''} onchange="window.updateDecorText('${gameId}', ${index}, 'italic', this.checked)"> I</label>
+                        <div class="mq-decor-tools">
+                            <label style="font-size:12px;font-weight:bold;"><input type="checkbox" ${d.bold ? 'checked' : ''} onchange="window.updateDecorText('${gameId}', ${index}, 'bold', this.checked)"> G</label>
+                            <label style="font-size:12px;font-style:italic;"><input type="checkbox" ${d.italic ? 'checked' : ''} onchange="window.updateDecorText('${gameId}', ${index}, 'italic', this.checked)"> I</label>
                             <label style="font-size:11px;"><input type="checkbox" ${d.bgOn ? 'checked' : ''} onchange="window.updateDecorText('${gameId}', ${index}, 'bgOn', this.checked)"> Fond</label>
                             <input type="color" value="${d.bg || '#ffffff'}" title="Fond"
-                                oninput="window.updateDecorText('${gameId}', ${index}, 'bg', this.value)" style="width:28px; height:24px; padding:0; border:1px solid #ccc;">
-                            <button type="button" onclick="window.removeDecorText('${gameId}', ${index})" style="margin-left:auto; font-size:11px; color:#fff; background:#ff4444; border:none; border-radius:4px; padding:3px 8px; cursor:pointer;">✕</button>
+                                oninput="window.updateDecorText('${gameId}', ${index}, 'bg', this.value)">
                         </div>
-                        <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px; padding:6px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px;">
+                        <div class="mq-dnd-dim-grid">
                             ${mqDimPosField('L', d.width || 240, 'updateDecorText', gameId, index, 'width', 10)}
                             ${mqDimPosField('H', d.height || 80, 'updateDecorText', gameId, index, 'height', 10)}
+                            ${mqDimPosField('X', d.x || 0, 'updateDecorText', gameId, index, 'x', 5)}
+                            ${mqDimPosField('Y', d.y || 0, 'updateDecorText', gameId, index, 'y', 5)}
+                        </div>
+                        <div class="mq-decor-z">
                             ${mqDimPosField('z', d.z || 1, 'updateDecorText', gameId, index, 'z', 1)}
                         </div>
                     </div>`).join('');
@@ -17687,10 +17738,10 @@
                     + '<button id="btnAddDraggableGame' + n + '" type="button" style="width:100%; font-size:12px;">+ Ajouter image</button>'
                     + '<button id="btnAddTextGame' + n + '" type="button" style="width:100%; font-size:12px; margin-top:4px;">🔤 + Étiquette texte</button>'
                     + '<label style="font-size:12px; font-weight:bold; display:block; margin:8px 0 5px;">Images fixes (décor) :</label>'
-                    + '<div id="dndGame' + n + 'DecorList" style="max-height:150px; overflow-y:auto; background:#fff; padding:5px; border-radius:4px; border:1px solid #ddd; margin-bottom:5px;"></div>'
+                    + '<div id="dndGame' + n + 'DecorList" style="max-height:280px;overflow-x:hidden;overflow-y:auto;background:#fff;padding:5px;border-radius:4px;border:1px solid #ddd;margin-bottom:5px;box-sizing:border-box;max-width:100%;"></div>'
                     + '<button id="btnAddDecorGame' + n + '" type="button" style="width:100%; font-size:12px;">🖼️ + Image fixe</button>'
                     + '<button id="btnAddDecorTextGame' + n + '" type="button" style="width:100%; font-size:12px; margin-top:4px;">🔤 + Texte fixe</button>'
-                    + '<div id="dndGame' + n + 'DecorTextList" style="max-height:150px; overflow-y:auto; background:#fff; padding:5px; border-radius:4px; border:1px solid #ddd; margin-top:5px;"></div>'
+                    + '<div id="dndGame' + n + 'DecorTextList" style="max-height:280px;overflow-x:hidden;overflow-y:auto;background:#fff;padding:5px;border-radius:4px;border:1px solid #ddd;margin-top:5px;box-sizing:border-box;max-width:100%;"></div>'
                     + '</div></div>';
             }
 

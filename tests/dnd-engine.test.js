@@ -659,6 +659,15 @@ test('UI inspecteur zones compact dans placement-inputs.html', () => {
   assert.ok(!html.includes('Label (mémo admin — non affiché sur le canvas, voir badge ID)'));
 });
 
+test('UI décor compact (image fixe / texte fixe) dans placement-inputs.html', () => {
+  const html = fs.readFileSync(path.join(__dirname, '..', 'placement-inputs.html'), 'utf8');
+  assert.ok(html.includes('mq-decor-card'));
+  assert.ok(html.includes('mq-decor-tools'));
+  assert.ok(html.includes('mq-decor-z'));
+  assert.ok(!html.includes("mqDimPosField('Largeur', d.width || 300, 'updateDecorPosition'"));
+  assert.ok(!html.includes("grid-template-columns:1fr 1fr 1fr"));
+});
+
 test('infobulle par image droppable dans placement-inputs.html', () => {
   const html = fs.readFileSync(path.join(__dirname, '..', 'placement-inputs.html'), 'utf8');
   assert.ok(html.includes('mq-drag-card'));
