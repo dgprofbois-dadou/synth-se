@@ -674,10 +674,13 @@ test('cartes image/texte repliées, dépliage au clic canvas', () => {
   assert.ok(html.includes('mqRevealItemCard'));
   assert.ok(html.includes('mqBindItemCardFold'));
   assert.ok(html.includes('mqItemCardShouldOpen'));
+  assert.ok(html.includes('mqScrollLeftToEl'));
+  assert.ok(html.includes('mqEnsureDndInspectorTab'));
   assert.ok(html.includes("mqItemCardShouldOpen(gameId, 'draggable'"));
   assert.ok(html.includes("mqItemCardShouldOpen(gameId, 'decor'"));
   assert.ok(html.includes("mqItemCardShouldOpen(gameId, 'decorText'"));
   assert.ok(html.includes("type: 'draggable', index: String(newIndex)"));
+  assert.ok(!html.includes("closest('.mq-dnd-card, [data-mq-dnd-panel], div')"));
 });
 
 test('dragShowsTooltip : par carte, héritage de l’ancien interrupteur global', () => {

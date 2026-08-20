@@ -10717,6 +10717,43 @@
                     mqRevealItemCard(mqDndSel.gameId, mqDndSel.type, mqDndSel.index);
                 }
             };
+            /** Défile uniquement #left (et listes internes), sans remonter tout le panneau. */
+            function mqScrollLeftToEl(el) {
+                if (!el) return;
+                const apply = function () {
+                    if (!el.isConnected) return;
+                    let node = el.parentElement;
+                    while (node && node !== document.body && node !== document.documentElement) {
+                        const style = window.getComputedStyle(node);
+                        const oy = style.overflowY;
+                        const canY = (oy === 'auto' || oy === 'scroll' || oy === 'overlay')
+                            && (node.scrollHeight > node.clientHeight + 1);
+                        if (canY) {
+                            const sRect = node.getBoundingClientRect();
+                            const eRect = el.getBoundingClientRect();
+                            const pad = 10;
+                            let dy = 0;
+                            if (eRect.height > sRect.height - pad * 2) dy = eRect.top - sRect.top - pad;
+                            else if (eRect.top < sRect.top + pad) dy = eRect.top - sRect.top - pad;
+                            else if (eRect.bottom > sRect.bottom - pad) dy = eRect.bottom - sRect.bottom + pad;
+                            if (Math.abs(dy) > 1) node.scrollTop += dy;
+                        }
+                        if (node.id === 'left') break;
+                        node = node.parentElement;
+                    }
+                };
+                apply();
+                requestAnimationFrame(function () {
+                    apply();
+                    requestAnimationFrame(apply);
+                });
+                setTimeout(apply, 50);
+            }
+            function mqEnsureDndInspectorTab() {
+                const tab = document.querySelector('#left .mq-tab[data-tab="dnd"]');
+                if (tab && tab.classList.contains('is-active')) return;
+                if (typeof window.mqSetInspectorTab === 'function') window.mqSetInspectorTab('dnd');
+            }
             function mqSetItemCardOpen(card, open) {
                 if (!card) return;
                 card.setAttribute('data-open', open ? '1' : '0');
@@ -10763,20 +10800,13 @@
                 };
                 const list = document.getElementById(ids[type]);
                 if (!list) return;
-                if (typeof window.mqSetInspectorTab === 'function') window.mqSetInspectorTab('dnd');
+                mqEnsureDndInspectorTab();
                 const idx = String(index);
                 list.querySelectorAll('.mq-drag-card').forEach((card) => {
                     mqSetItemCardOpen(card, card.getAttribute('data-index') === idx);
                 });
                 const openCard = list.querySelector('.mq-drag-card[data-index="' + idx + '"]');
-                if (openCard && openCard.scrollIntoView) {
-                    try { openCard.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (err) { openCard.scrollIntoView(true); }
-                }
-                const panel = document.getElementById('dndGame' + n + 'Enabled');
-                const card = panel && panel.closest('.mq-dnd-card, [data-mq-dnd-panel], div');
-                if (card && card.scrollIntoView) {
-                    try { card.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (e2) { /* ignore */ }
-                }
+                if (openCard) mqScrollLeftToEl(openCard);
             }
             window.mqRevealItemCard = mqRevealItemCard;
             /** Nombre de zones en multi-sélection (pour le menu clic droit / UI). */
@@ -10811,17 +10841,11 @@
             window.mqSelectDropzoneForEdit = function (gameId, index) {
                 const g = state.dndGames && state.dndGames[gameId];
                 if (!g || !g.dropzones || !g.dropzones[index]) return;
-                if (typeof window.mqSetInspectorTab === 'function') window.mqSetInspectorTab('dnd');
+                mqEnsureDndInspectorTab();
                 window.mqSetDndSel({ gameId, type: 'dropzone', index: String(index) });
-                const panel = document.getElementById('dndGame' + mqGameNum(gameId) + 'Enabled');
-                const card = panel && panel.closest('.mq-dnd-card, [data-mq-dnd-panel], div');
-                if (card && card.scrollIntoView) {
-                    try { card.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (e) { card.scrollIntoView(true); }
-                }
                 const insp = document.getElementById('dndGame' + mqGameNum(gameId) + 'DropzonesList');
-                if (insp && insp.scrollIntoView) {
-                    try { insp.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (e2) { /* ignore */ }
-                }
+                const active = insp && insp.querySelector('.mq-dz-chip.is-active, .mq-dz-block');
+                mqScrollLeftToEl(active || insp);
             };
             window.mqStartDndAlign = function () {
                 if (!mqDndSel) { alert('Faites d\'abord un clic droit sur la zone à aligner.'); return; }
@@ -18875,7 +18899,8 @@
             /* ─── MQ UI · Menu contextuel (clic droit canvas) ─── */
             function mqSetInspectorTab(tabId) {
                 const tab = document.querySelector('#left .mq-tab[data-tab="' + tabId + '"]');
-                if (tab) tab.click();
+                if (!tab || tab.classList.contains('is-active')) return;
+                tab.click();
             }
 
             function mqProxyClick(btnId) {
