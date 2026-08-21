@@ -14410,6 +14410,8 @@
                     const stepGameTypeEl = card.querySelector('[data-field="stepGameType"]');
                     const stepGameType = (stepGameTypeEl && stepGameTypeEl.value) || 'exact';
                     const linksRaw = (card.querySelector('[data-field="linkPairs"]') || {}).value || '';
+                    const minLinksEl = card.querySelector('[data-field="minCorrectLinks"]');
+                    const minCorrectLinks = Math.max(0, parseInt(minLinksEl && minLinksEl.value, 10) || 0);
                     const zoneIds = mqParseStepIdList(zoneIdsRaw);
                     const goodIds = mqParseStepIdList(goodIdsRaw).join(',');
                     const zoneMap = {};
@@ -14432,6 +14434,7 @@
                         activity,
                         stepGameType,
                         requireNextButton,
+                        minCorrectLinks,
                         zoneIds,
                         goodIds,
                         linkPairs,
@@ -14451,6 +14454,7 @@
                     activity: 'dnd',
                     stepGameType: 'exact',
                     requireNextButton: false,
+                    minCorrectLinks: 0,
                     zoneIds: [],
                     goodIds: '',
                     linkPairs: [],
@@ -14686,6 +14690,7 @@
                     const actLink = activity === 'linking' ? ' selected' : '';
                     const actBoth = activity === 'both' ? ' selected' : '';
                     const reqNext = s.requireNextButton ? ' checked' : '';
+                    const minLinks = Math.max(0, parseInt(s.minCorrectLinks, 10) || 0);
                     const showDnd = activity !== 'linking';
                     const showLink = activity !== 'dnd';
                     const stepGt = (s.stepGameType === 'classification') ? 'classification' : 'exact';
@@ -14745,9 +14750,16 @@
                         + '<div data-step-zonemap>' + zoneMapHtml + '</div>'
                         + '</div>'
                         + '</div>'
-                        + '<label data-step-link-fields style="font-size:11px;display:' + (showLink ? 'block' : 'none') + ';margin-top:8px;">Flèches à valider (id&gt;id) — fin d’étape Relier'
+                        + '<div data-step-link-fields style="display:' + (showLink ? 'block' : 'none') + ';margin-top:8px;padding:8px;background:#eef2ff;border:1px solid #c7d2fe;border-radius:8px;font-size:11px;">'
+                        + '<label style="display:block;font-weight:bold;margin-bottom:4px;">🔗 Flèches à valider (id&gt;id)</label>'
                         + '<textarea data-field="linkPairs" rows="2" placeholder="Ex: 1&gt;3 ou decor-1&gt;5" style="width:100%;font-size:11px;padding:4px;box-sizing:border-box;font-family:monospace;">' + linksToText(s.linkPairs).replace(/</g, '&lt;') + '</textarea>'
-                        + '<p style="margin:4px 0 0;font-size:10px;color:#4338ca;">Les <strong>images fixes</strong> et textes fixes avec un ID sont des nœuds Relier (clic droit comme une carte).</p></label>'
+                        + '<label style="display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap;">'
+                        + '<span style="font-weight:bold;white-space:nowrap;">Réponses justes pour passer</span>'
+                        + '<input data-field="minCorrectLinks" type="number" min="0" step="1" value="' + minLinks + '" '
+                        + 'title="0 = toutes les flèches listées" style="width:64px;font-size:12px;padding:4px;">'
+                        + '<span style="color:#4338ca;font-size:10px;">0 = toutes les paires ci-dessus</span></label>'
+                        + '<p style="margin:6px 0 0;font-size:10px;color:#4338ca;">Ex. : 5 paires listées, seuil <strong>3</strong> → l’étape avance dès 3 flèches correctes (sans flèche fausse). Les <strong>images fixes</strong> et textes fixes avec un ID sont des nœuds Relier.</p>'
+                        + '</div>'
                         + '</div>'
                         + '</div>';
                 }).join('');
@@ -15998,6 +16010,7 @@
                             activity: ns.activity || 'dnd',
                             stepGameType: ns.stepGameType || 'exact',
                             requireNextButton: !!ns.requireNextButton,
+                            minCorrectLinks: Math.max(0, parseInt(ns.minCorrectLinks, 10) || 0),
                             zoneIds: ns.zoneIds || [],
                             goodIds: ns.goodIds || '',
                             linkPairs: ns.linkPairs || [],

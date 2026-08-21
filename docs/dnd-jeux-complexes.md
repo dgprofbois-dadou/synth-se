@@ -27,7 +27,7 @@ node rebuild-mq-export-runtime.js --extract
 | `showInstructions` | Afficher les consignes (défaut `true`) |
 | `instructionsBox` | Disposition consignes : `{ x, y, width, height, font, fontSize, bold, italic, align, bgColor, color, borderColor }` |
 | `enableSteps` | Jeu par étapes avec consignes successives |
-| `steps` | Liste d’étapes `{ id, title, instructions, zoneIds, goodIds, linkPairs }` |
+| `steps` | Liste d’étapes `{ id, title, instructions, zoneIds, goodIds, linkPairs, minCorrectLinks }` |
 | `allowedLinks` | Union des `linkPairs` des étapes Relier (cache runtime). Plus de paires globales : Relier se configure **par étape**. |
 | `linkMode` | `one-to-one` (défaut) ou `one-to-many` |
 | `enableLinking` | Dérivé automatiquement : `true` si au moins une étape est Relier / Les deux |
@@ -45,6 +45,7 @@ Dans l’admin : cocher **Jeu par étapes**, puis ajouter des étapes. Chaque é
   - `linking` — Relier (dépôt **verrouillé**, bouton Relier visible) ;
   - `both` — Déposer + Relier ;
 - une **fin d’étape** : critères (zones / cartes / flèches) → passage **automatique**, ou case **Exiger le bouton « Étape suivante »**.
+- étape **Relier** : champ **Réponses justes pour passer** (`minCorrectLinks`) — nombre de flèches correctes suffisant pour avancer (0 = toutes les paires listées). Les flèches fausses bloquent toujours le passage.
 
 Exemple typique : étape 1 = Déposer (zones 1,2) → étape 2 = Relier (`1>3`) → étape 3 = Déposer… Le bouton Relier n’apparaît qu’à l’étape 2.
 

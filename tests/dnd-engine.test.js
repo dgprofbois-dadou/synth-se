@@ -805,6 +805,48 @@ test('Relier : images / textes fixes sont des nœuds (id decor-N)', () => {
   assert.ok(html.includes('Les <strong>images fixes</strong>'));
 });
 
+test('Relier : minCorrectLinks pour passer à l’étape suivante', () => {
+  const g = Engine.applyGameDefaults({
+    enableSteps: true,
+    steps: [{
+      title: 'Relier',
+      activity: 'linking',
+      minCorrectLinks: 2,
+      linkPairs: [
+        { from: '1', to: '2' },
+        { from: '3', to: '4' },
+        { from: '5', to: '6' }
+      ]
+    }]
+  });
+  assert.strictEqual(g.steps[0].minCorrectLinks, 2);
+  const one = Engine.evaluateStep(g, g.steps[0], { links: [{ from: '1', to: '2' }] });
+  assert.strictEqual(one.isComplete, false);
+  const two = Engine.evaluateStep(g, g.steps[0], {
+    links: [{ from: '1', to: '2' }, { from: '3', to: '4' }]
+  });
+  assert.strictEqual(two.isComplete, true);
+  const withWrong = Engine.evaluateStep(g, g.steps[0], {
+    links: [{ from: '1', to: '2' }, { from: '3', to: '4' }, { from: '9', to: '8' }]
+  });
+  assert.strictEqual(withWrong.isComplete, false);
+  const allDefault = Engine.applyGameDefaults({
+    enableSteps: true,
+    steps: [{
+      title: 'Relier',
+      activity: 'linking',
+      linkPairs: [{ from: '1', to: '2' }, { from: '3', to: '4' }]
+    }]
+  });
+  const partial = Engine.evaluateStep(allDefault, allDefault.steps[0], {
+    links: [{ from: '1', to: '2' }]
+  });
+  assert.strictEqual(partial.isComplete, false);
+  const html = fs.readFileSync(path.join(__dirname, '..', 'placement-inputs.html'), 'utf8');
+  assert.ok(html.includes('data-field="minCorrectLinks"'));
+  assert.ok(html.includes('Réponses justes pour passer'));
+});
+
 test('zone jeux : déplacement du cadre + 4 poignées de redim', () => {
   const html = fs.readFileSync(path.join(__dirname, '..', 'placement-inputs.html'), 'utf8');
   assert.ok(html.includes('data-corner="nw"'));

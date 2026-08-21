@@ -840,7 +840,7 @@
    * Avec étapes : union des linkPairs ; sinon allowedLinks.
    * evaluateStep passe { allowedLinks: stepPairs } → même chemin via effectiveAllowedLinks.
    */
-  function evaluateLinks(game, links) {
+  function evaluateLinks(game, links, opts) {
     var allowed = effectiveAllowedLinks(game);
     var allowedSet = {};
     allowed.forEach(function (l) {
@@ -863,13 +863,19 @@
     });
     var maxScore = allowed.length;
     var score = correct.length;
+    var required = maxScore;
+    if (opts && opts.minCorrect != null && opts.minCorrect !== '') {
+      var m = parseInt(opts.minCorrect, 10);
+      if (isFinite(m) && m > 0) required = Math.min(maxScore, m);
+    }
     return {
       links: user,
       correct: correct,
       wrong: wrong,
       score: score,
       maxScore: maxScore,
-      isComplete: maxScore > 0 && score >= maxScore && wrong.length === 0,
+      requiredScore: required,
+      isComplete: maxScore > 0 && score >= required && wrong.length === 0,
       gameType: 'linking'
     };
   }
@@ -1117,6 +1123,8 @@
     var draft = { zoneIds: zoneIds, goodIds: goodIds, linkPairs: linkPairs, zoneMap: zoneMap };
     var activity = normalizeStepActivity(s.activity != null ? s.activity : s.mode, draft);
     var stepGameType = normalizeGameType(s.stepGameType || s.gameType || 'exact');
+    var minCorrectLinks = parseInt(s.minCorrectLinks, 10);
+    if (!isFinite(minCorrectLinks) || minCorrectLinks < 0) minCorrectLinks = 0;
     return {
       id: s.id != null ? String(s.id) : String(index + 1),
       title: s.title != null ? String(s.title) : ('Étape ' + (index + 1)),
@@ -1124,6 +1132,7 @@
       activity: activity,
       stepGameType: activity === 'linking' ? 'linking' : stepGameType,
       requireNextButton: !!s.requireNextButton,
+      minCorrectLinks: minCorrectLinks,
       zoneIds: zoneIds,
       goodIds: goodIds,
       linkPairs: linkPairs,
@@ -1266,7 +1275,11 @@
 
     if (linkPairs.length) {
       // Évaluer uniquement les paires de CETTE étape (pas l'union globale)
-      var lev = evaluateLinks({ allowedLinks: linkPairs }, placements.links || []);
+      var lev = evaluateLinks(
+        { allowedLinks: linkPairs },
+        placements.links || [],
+        { minCorrect: step.minCorrectLinks }
+      );
       okLinks = lev.isComplete;
     }
 
