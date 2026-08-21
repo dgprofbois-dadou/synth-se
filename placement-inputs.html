@@ -758,6 +758,27 @@
             border-color: #e8521f !important;
             box-shadow: 0 0 0 2px rgba(232,82,31,.45);
         }
+        /* Sélection zone : pas de fond bleu global */
+        .dnd-dropzone.mq-dnd-selected {
+            background: rgba(255, 255, 255, 0.55) !important;
+        }
+        .dnd-link-zone-wrap.mq-dnd-selected {
+            box-shadow: inset 0 0 0 2px rgba(232, 82, 31, 0.85);
+        }
+        /* Zones SVG Relier admin : quasi invisibles (sinon tout le canvas paraît « sélectionné » en bleu) */
+        .dnd-link-zones-layer .lz-admin-fill {
+            fill: rgba(21, 101, 192, 0.04);
+            stroke: rgba(21, 101, 192, 0.45);
+            stroke-width: 1.5;
+            stroke-dasharray: 6 4;
+            pointer-events: none;
+            transition: fill 0.12s ease, stroke 0.12s ease;
+        }
+        .dnd-link-zones-layer .lz-admin-fill.is-active {
+            fill: rgba(21, 101, 192, 0.2);
+            stroke: #1565c0;
+            stroke-width: 2.5;
+        }
         /* Steppers +/- pour dim/pos des zones DnD */
         .mq-step {
             display: flex;
@@ -10660,14 +10681,25 @@
             }
             function mqRefreshDndSelectionHighlight() {
                 document.querySelectorAll('.dnd-element.mq-dnd-selected').forEach(el => el.classList.remove('mq-dnd-selected'));
+                document.querySelectorAll('.dnd-link-zones-layer .lz-admin-fill.is-active').forEach((p) => p.classList.remove('is-active'));
                 const keys = new Set();
                 (mqDndMultiSel || []).forEach((s) => keys.add(mqDndKey(s)));
                 if (mqDndSel) keys.add(mqDndKey(mqDndSel));
                 keys.forEach((k) => {
                     const parts = k.split('|');
                     if (parts.length < 3) return;
-                    const el = document.querySelector(mqDndSelector({ gameId: parts[0], type: parts[1], index: parts[2] }));
+                    const gameId = parts[0];
+                    const type = parts[1];
+                    const index = parts[2];
+                    if (!type || index === '' || index == null) return;
+                    const el = document.querySelector(mqDndSelector({ gameId: gameId, type: type, index: index }));
                     if (el) el.classList.add('mq-dnd-selected');
+                    if (type === 'linkZone') {
+                        const poly = document.querySelector(
+                            '.dnd-game-container[data-game="' + gameId + '"] .lz-admin-fill[data-lz-index="' + index + '"]'
+                        );
+                        if (poly) poly.classList.add('is-active');
+                    }
                 });
             }
             function mqDndClearMulti() {
@@ -10881,6 +10913,8 @@
                 const g = state.dndGames && state.dndGames[gameId];
                 if (!g || !g.dropzones || !g.dropzones[index]) return;
                 mqEnsureDndInspectorTab();
+                // Sélection unique : ne pas laisser une multi-sélection bleuir d’autres éléments
+                mqDndClearMulti();
                 window.mqSetDndSel({ gameId, type: 'dropzone', index: String(index) });
                 // Avec étapes : ouvrir uniquement la ligne « Zone N » du panneau étapes + focus
                 const zmapRow = (typeof mqFocusStepZoneMapForDropzone === 'function')
@@ -15122,8 +15156,8 @@
                             const by = Math.max(0, bb.y);
                             const bw = Math.max(24, bb.width);
                             const bh = Math.max(24, bb.height);
-                            const fillA = 0.12 + Math.min(0.2, drawOrder * 0.04);
-                            zoneSvg += '<polygon points="' + mqPointsToSvgAttr(z.points) + '" fill="rgba(21,101,192,' + fillA.toFixed(2) + ')" stroke="#1565c0" stroke-width="2" stroke-dasharray="6 4" pointer-events="none"></polygon>';
+                            const fillA = 0.04;
+                            zoneSvg += '<polygon class="lz-admin-fill" data-lz-index="' + idx + '" points="' + mqPointsToSvgAttr(z.points) + '" fill="rgba(21,101,192,' + fillA.toFixed(2) + ')" stroke="rgba(21,101,192,0.45)" stroke-width="1.5" stroke-dasharray="6 4" pointer-events="none"></polygon>';
                             html += `
                             <div class="dnd-element dnd-link-zone-wrap" data-game="${gameId}" data-type="linkZone" data-index="${idx}"
                                  title="Zone SVG Relier — ID ${safeId} (glisser pour déplacer · superposable)"
@@ -15147,7 +15181,7 @@
                             }
                         }
                         if (zoneSvg) {
-                            html += '<svg class="dnd-link-zones-layer" style="position:absolute;inset:0;width:100%;height:100%;z-index:7;overflow:visible;pointer-events:none;">' + zoneSvg + '</svg>';
+                            html += '<svg class="dnd-link-zones-layer" style="position:absolute;inset:0;width:100%;height:100%;z-index:1;overflow:visible;pointer-events:none;">' + zoneSvg + '</svg>';
                         }
                     }
 
@@ -15182,6 +15216,7 @@
 
                 // Attacher les tooltips personnalisés
                 attachDndTooltips();
+                mqBindLinkZoneAdminHover();
 
                 // Restaurer la sélection (contour + panneau gauche) — multi-sélection Maj+clic incluse
                 if (mqDndMultiSel && mqDndMultiSel.length) {
@@ -15190,6 +15225,27 @@
                     const still = document.querySelector(mqDndSelector(mqDndSel));
                     if (still && window.mqSetDndSel) window.mqSetDndSel(mqDndSel);
                 }
+            }
+
+            /** Survol d’une zone SVG Relier : n’activer que ce polygone (pas tout le calque bleu). */
+            function mqBindLinkZoneAdminHover() {
+                document.querySelectorAll('.dnd-link-zone-wrap').forEach((wrap) => {
+                    const gameId = wrap.dataset.game;
+                    const index = wrap.dataset.index;
+                    const polySel = '.dnd-game-container[data-game="' + gameId + '"] .lz-admin-fill[data-lz-index="' + index + '"]';
+                    wrap.addEventListener('mouseenter', () => {
+                        const p = document.querySelector(polySel);
+                        if (p) p.classList.add('is-active');
+                    });
+                    wrap.addEventListener('mouseleave', () => {
+                        const p = document.querySelector(polySel);
+                        if (!p) return;
+                        const keep = mqDndSel && mqDndSel.type === 'linkZone'
+                            && String(mqDndSel.gameId) === String(gameId)
+                            && String(mqDndSel.index) === String(index);
+                        if (!keep) p.classList.remove('is-active');
+                    });
+                });
             }
 
             // Système de tooltip personnalisé pour les images DnD
