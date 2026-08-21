@@ -74,15 +74,19 @@
       .input-error { background-color: #ffcdd2 !important; border: 2px solid #c62828 !important; }
       .input-partial { background-color: #ffe0b2 !important; border: 2px solid #ef6c00 !important; }
       .floating-feedback { position: fixed; pointer-events: none; z-index: 10000; font-weight: 900; font-size: 28px; color: #2e7d32; text-shadow: 1px 1px 0 #fff; animation: floatUpFade 0.8s ease-out forwards; }
+      .floating-feedback.is-bad { color: #c62828; }
     `;
     document.head.appendChild(style);
   }
 
-  function showFloatingFeedback(boxElement) {
+  function showFloatingFeedback(boxElement, kind) {
+    if (!boxElement || !boxElement.getBoundingClientRect) return;
+    const ok = kind !== 'error' && kind !== 'wrong' && kind !== false;
     const rect = boxElement.getBoundingClientRect();
     const el = document.createElement('div');
     el.classList.add('floating-feedback');
-    el.textContent = "+1 🌟";
+    el.classList.add(ok ? 'is-ok' : 'is-bad');
+    el.textContent = ok ? '+1 🌟' : '✗';
     const x = rect.left + (rect.width / 2);
     const y = rect.top;
     el.style.left = x + 'px';

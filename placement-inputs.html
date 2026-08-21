@@ -665,6 +665,9 @@
             animation: floatUpFade 0.8s ease-out forwards;
             white-space: nowrap;
         }
+        .floating-feedback.is-bad {
+            color: #c62828;
+        }
 
         /* === STYLES POUR LA PRÉVISUALISATION DES JEUX DND === */
         #dndGamesPreview {
@@ -1051,6 +1054,9 @@
                 0 2px 5px rgba(0, 0, 0, 0.3);
             animation: floatUpFade 0.8s ease-out forwards;
             white-space: nowrap;
+        }
+        .floating-feedback.is-bad {
+            color: #c62828;
         }
 
         @import url('https://fonts.cdnfonts.com/css/open-dyslexic');
@@ -4731,23 +4737,20 @@
                 return `rgba(${r},${g},${b},${a})`;
             }
 
-            // Fonction pour faire apparaître le +1
-            function showFloatingFeedback(boxElement) {
+            // Feedback flottant (+1 / erreur) au-dessus d’une zone ou d’un champ
+            function showFloatingFeedback(boxElement, kind) {
+                if (!boxElement || !boxElement.getBoundingClientRect) return;
+                const ok = kind !== 'error' && kind !== 'wrong' && kind !== false;
                 const rect = boxElement.getBoundingClientRect();
                 const el = document.createElement('div');
                 el.classList.add('floating-feedback');
-                el.textContent = "+1 🌟"; // Vous pouvez changer le texte ici
-
-                // Positionner au centre-haut du champ
+                el.classList.add(ok ? 'is-ok' : 'is-bad');
+                el.textContent = ok ? '+1 🌟' : '✗';
                 const x = rect.left + (rect.width / 2);
                 const y = rect.top;
-
                 el.style.left = x + 'px';
                 el.style.top = y + 'px';
-
                 document.body.appendChild(el);
-
-                // Auto-destruction après l'animation
                 setTimeout(() => el.remove(), 800);
             }
 
@@ -6239,23 +6242,20 @@
                 const b = parseInt(hex.slice(5, 7), 16);
                 return `rgba(${r},${g},${b},${a})`;
             }
-            // Fonction pour faire apparaître le +1
-            function showFloatingFeedback(boxElement) {
+            // Feedback flottant (+1 / erreur) au-dessus d’une zone ou d’un champ
+            function showFloatingFeedback(boxElement, kind) {
+                if (!boxElement || !boxElement.getBoundingClientRect) return;
+                const ok = kind !== 'error' && kind !== 'wrong' && kind !== false;
                 const rect = boxElement.getBoundingClientRect();
                 const el = document.createElement('div');
                 el.classList.add('floating-feedback');
-                el.textContent = "+1 🌟"; // Vous pouvez changer le texte ici
-
-                // Positionner au centre-haut du champ
+                el.classList.add(ok ? 'is-ok' : 'is-bad');
+                el.textContent = ok ? '+1 🌟' : '✗';
                 const x = rect.left + (rect.width / 2);
                 const y = rect.top;
-
                 el.style.left = x + 'px';
                 el.style.top = y + 'px';
-
                 document.body.appendChild(el);
-
-                // Auto-destruction après l'animation
                 setTimeout(() => el.remove(), 800);
             }
             function playSound(type) {
@@ -16688,9 +16688,36 @@
         @keyframes shake { 0%,100% { transform:translateX(0); } 25% { transform:translateX(-5px); } 75% { transform:translateX(5px); } }
         .input-wrapper input.incorrect { animation: shake 0.4s ease; background-color:#ffcdd2 !important; border-color:#c62828 !important; }
         
-        /* Dropzone Feedback */
-        .dropzone.dropzone-correct { border: 3px solid #4caf50 !important; background: rgba(76, 175, 80, 0.15) !important; }
-        .dropzone.dropzone-wrong { border: 3px solid #f44336 !important; background: rgba(244, 67, 54, 0.15) !important; }
+        /* Dropzone Feedback — teintes très pâles + flash au dépôt */
+        .dropzone.dropzone-correct {
+            border: 2px solid rgba(76, 175, 80, 0.35) !important;
+            background: rgba(76, 175, 80, 0.07) !important;
+            box-shadow: none !important;
+        }
+        .dropzone.dropzone-wrong {
+            border: 2px solid rgba(244, 67, 54, 0.32) !important;
+            background: rgba(244, 67, 54, 0.07) !important;
+            box-shadow: none !important;
+        }
+        @keyframes dndZoneFlashOk {
+            0% { background: rgba(76, 175, 80, 0.22) !important; box-shadow: 0 0 0 0 rgba(76, 175, 80, 0.25); }
+            100% { background: rgba(76, 175, 80, 0.07) !important; box-shadow: 0 0 0 10px rgba(76, 175, 80, 0); }
+        }
+        @keyframes dndZoneFlashBad {
+            0%, 100% { transform: translateX(0); }
+            20% { transform: translateX(-4px); }
+            40% { transform: translateX(4px); }
+            60% { transform: translateX(-3px); }
+            80% { transform: translateX(2px); }
+            0% { background: rgba(244, 67, 54, 0.22) !important; }
+            100% { background: rgba(244, 67, 54, 0.07) !important; }
+        }
+        .dropzone.dnd-zone-flash-ok {
+            animation: dndZoneFlashOk 0.65s ease-out;
+        }
+        .dropzone.dnd-zone-flash-bad {
+            animation: dndZoneFlashBad 0.65s ease-out;
+        }
         
         /* Widget Score */
         .controls .score-widget { display: flex; align-items: center; gap: 15px; background: rgba(255,255,255,0.9); padding: 8px 15px; border-radius: 30px; border: 1px solid #ccc; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }

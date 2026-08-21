@@ -300,6 +300,27 @@ g.dnd-link-zone.dnd-link-node.dnd-link-from {
 }
 `;
 
+  if (styleCss.indexOf('dnd-zone-flash-ok') < 0) {
+    styleCss += `
+@keyframes dndZoneFlashOk {
+  0% { background: rgba(76, 175, 80, 0.22) !important; box-shadow: 0 0 0 0 rgba(76, 175, 80, 0.25); }
+  100% { background: rgba(76, 175, 80, 0.07) !important; box-shadow: 0 0 0 10px rgba(76, 175, 80, 0); }
+}
+@keyframes dndZoneFlashBad {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-4px); }
+  40% { transform: translateX(4px); }
+  60% { transform: translateX(-3px); }
+  80% { transform: translateX(2px); }
+  0% { background: rgba(244, 67, 54, 0.22) !important; }
+  100% { background: rgba(244, 67, 54, 0.07) !important; }
+}
+.dropzone.dnd-zone-flash-ok { animation: dndZoneFlashOk 0.65s ease-out; }
+.dropzone.dnd-zone-flash-bad { animation: dndZoneFlashBad 0.65s ease-out; }
+.floating-feedback.is-bad { color: #c62828; }
+`;
+  }
+
   if (styleCss.indexOf('dnd-selected') < 0) {
     styleCss += dndExtraCss;
   } else if (styleCss.indexOf('.dnd-instructions') < 0) {

@@ -3400,16 +3400,30 @@
         nbErreurs += 1;
         if (feedbackMode === 'immediate') {
           applyZoneFeedback(zone, zcfg, true);
+          pulseZoneFlash(zone, false);
           if (typeof hooks.playSound === 'function') hooks.playSound('error');
+          if (typeof hooks.showFloating === 'function') hooks.showFloating(zone, 'error');
         }
       } else if (feedbackMode === 'immediate') {
         applyZoneFeedback(zone, zcfg, true);
+        pulseZoneFlash(zone, true);
         if (typeof hooks.playSound === 'function') hooks.playSound('success');
-        if (typeof hooks.showFloating === 'function') hooks.showFloating(zone);
+        if (typeof hooks.showFloating === 'function') hooks.showFloating(zone, 'success');
       }
 
       refreshUI();
       return true;
+    }
+
+    /** Flash court rouge/vert très pâle sur la zone au moment du dépôt. */
+    function pulseZoneFlash(zone, ok) {
+      if (!zone) return;
+      zone.classList.remove('dnd-zone-flash-ok', 'dnd-zone-flash-bad');
+      try { void zone.offsetWidth; } catch (e) { /* ignore */ }
+      zone.classList.add(ok ? 'dnd-zone-flash-ok' : 'dnd-zone-flash-bad');
+      setTimeout(function () {
+        zone.classList.remove('dnd-zone-flash-ok', 'dnd-zone-flash-bad');
+      }, 650);
     }
 
     function applyZoneFeedback(zone, zcfg, force) {

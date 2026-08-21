@@ -869,6 +869,18 @@ test('placement exact : cartes incorrectes repositionnables (pas seulement retry
   assert.ok(!src.includes("var movable = (cardUse === 'retry' && !correctHere)"));
 });
 
+test('feedback dépôt : flash zone pâle + floating erreur', () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'mq-dnd-engine.js'), 'utf8');
+  assert.ok(src.includes('function pulseZoneFlash'));
+  assert.ok(src.includes("hooks.showFloating(zone, 'error')"));
+  assert.ok(src.includes("hooks.showFloating(zone, 'success')"));
+  const html = fs.readFileSync(path.join(__dirname, '..', 'placement-inputs.html'), 'utf8');
+  assert.ok(html.includes('dnd-zone-flash-ok'));
+  assert.ok(html.includes('dnd-zone-flash-bad'));
+  assert.ok(html.includes('floating-feedback.is-bad'));
+  assert.ok(html.includes("el.textContent = ok ? '+1 🌟' : '✗'"));
+});
+
 test('Relier→DnD : isLinkModeOn ignore le mode flèche résiduel sur étape dépôt', () => {
   const src = fs.readFileSync(path.join(__dirname, '..', 'mq-dnd-engine.js'), 'utf8');
   assert.ok(src.includes("lastStepActivity === 'dnd'"));
