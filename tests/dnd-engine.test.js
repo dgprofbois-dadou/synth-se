@@ -847,6 +847,18 @@ test('Relier : minCorrectLinks pour passer à l’étape suivante', () => {
   assert.ok(html.includes('Réponses justes pour passer'));
 });
 
+test('admin : testDndStep / jumpToStep sans prérequis', () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'mq-dnd-engine.js'), 'utf8');
+  assert.ok(src.includes('function jumpToStep'));
+  assert.ok(src.includes('startAtStep'));
+  assert.ok(src.includes('jumpToStep: jumpToStep'));
+  const html = fs.readFileSync(path.join(__dirname, '..', 'placement-inputs.html'), 'utf8');
+  assert.ok(html.includes('window.testDndStep'));
+  assert.ok(html.includes('mq-dnd-step-test'));
+  assert.ok(html.includes('mqDndTestBar'));
+  assert.ok(html.includes('startAtStep: startAt'));
+});
+
 test('Relier→DnD : isLinkModeOn ignore le mode flèche résiduel sur étape dépôt', () => {
   const src = fs.readFileSync(path.join(__dirname, '..', 'mq-dnd-engine.js'), 'utf8');
   assert.ok(src.includes("lastStepActivity === 'dnd'"));

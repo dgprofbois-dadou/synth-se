@@ -2734,6 +2734,26 @@
     var manualStepDone = {};
     var showInstructions = game.showInstructions !== false;
 
+    /** Marque les étapes 0..idx-1 comme faites et place le jeu sur l’étape idx (test admin). */
+    function jumpToStep(stepIndex) {
+      if (!stepsEnabled) return false;
+      var steps = normalizeSteps(game.steps);
+      if (!steps.length) return false;
+      var idx = parseInt(stepIndex, 10);
+      if (!isFinite(idx)) idx = 0;
+      if (idx < 0) idx = 0;
+      if (idx >= steps.length) idx = steps.length - 1;
+      manualStepDone = {};
+      for (var i = 0; i < idx; i++) {
+        manualStepDone[String(steps[i].id)] = true;
+      }
+      lastActiveStepId = null;
+      lastStepIndex = -1;
+      if (syncRelierForStep) syncRelierForStep._stepKey = '';
+      refreshUI();
+      return true;
+    }
+
     function ensureInstructionsEl() {
       if (!instructionsEl) {
         instructionsEl = document.createElement('div');
@@ -3710,6 +3730,13 @@
     var scoreHook = hooks.onScore;
     hooks.onScore = null;
     refreshUI();
+    var startAt = hooks.startAtStep;
+    if (startAt == null && gameConfig && gameConfig._startAtStep != null) {
+      startAt = gameConfig._startAtStep;
+    }
+    if (startAt != null && stepsEnabled) {
+      jumpToStep(startAt);
+    }
     hooks.onScore = scoreHook;
     if (typeof hooks.onReady === 'function') {
       hooks.onReady({
@@ -3720,6 +3747,24 @@
 
     return {
       refresh: refreshUI,
+      jumpToStep: jumpToStep,
+      getCurrentStepIndex: function () {
+        if (!stepsEnabled) return 0;
+        var p = collectPlacements(gameContainer, game);
+        if (linkingApi) p.links = linkingApi.getLinks();
+        var st = getStepsState(game, p);
+        st.statuses.forEach(function (s, i) {
+          var sid = String((st.steps[i] && st.steps[i].id) || i);
+          if (manualStepDone[sid]) {
+            s.isComplete = true;
+            s.needsManualNext = false;
+          }
+        });
+        st.allComplete = st.statuses.every(function (s) { return s.isComplete; });
+        if (st.allComplete) return Math.max(0, st.steps.length - 1);
+        var ci = st.statuses.findIndex(function (s) { return !s.isComplete; });
+        return ci < 0 ? 0 : ci;
+      },
       getPlacements: function () {
         var p = collectPlacements(gameContainer, game);
         if (linkingApi) p.links = linkingApi.getLinks();

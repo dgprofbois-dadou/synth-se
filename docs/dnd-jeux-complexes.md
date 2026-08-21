@@ -39,6 +39,8 @@ node rebuild-mq-export-runtime.js --extract
 
 Dans l’admin : cocher **Jeu par étapes**, puis ajouter des étapes. Chaque étape a :
 
+- un bouton **▶** (Tester) : bascule en mode élève **directement sur cette étape**, sans faire les précédentes. Une barre en bas permet de changer d’étape ou de revenir en admin.
+
 - une **consigne** affichée quand l’étape devient active ;
 - un **type d’activité** :
   - `dnd` — Déposer (Relier **masqué**) ;

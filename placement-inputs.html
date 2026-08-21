@@ -5116,6 +5116,9 @@
                     state.selectedId = null;
                     state.selectedHotspotId = null;
                 } else {
+                    state.dndTestJump = null;
+                    state.dndPlayApis = {};
+                    mqHideDndTestBar();
                     const dndContainer = document.getElementById('dndGamesPreview');
                     if (dndContainer) {
                         dndContainer.innerHTML = '';
@@ -8537,18 +8540,31 @@
                     }
 
                     const cfg = Object.assign({}, gameConfig, { _gameId: gameId });
+                    const jump = state.dndTestJump;
+                    const startAt = (jump && jump.gameId === gameId && jump.stepIndex != null)
+                        ? jump.stepIndex
+                        : null;
                     if (window.MqDndEngine && MqDndEngine.initPlayableDndGame) {
-                        MqDndEngine.initPlayableDndGame(gameEl, cfg, {
+                        const api = MqDndEngine.initPlayableDndGame(gameEl, cfg, {
                             playSound: typeof playSound === 'function' ? playSound : null,
                             showFloating: typeof showFloatingFeedback === 'function' ? showFloatingFeedback : null,
+                            startAtStep: startAt,
                             onScore: function (info) {
                                 if (!state.dndGames.dndResults) state.dndGames.dndResults = {};
                                 state.dndGames.dndResults[gameId] = (info.displayScore != null) ? info.displayScore : info.score;
                                 updateScore();
                             }
                         });
+                        if (!state.dndPlayApis) state.dndPlayApis = {};
+                        state.dndPlayApis[gameId] = api;
                     }
                 });
+                if (state.dndTestJump) {
+                    mqEnsureDndTestBar();
+                    mqUpdateDndTestBar();
+                } else {
+                    mqHideDndTestBar();
+                }
             }
 
 
@@ -14481,6 +14497,88 @@
                 if (typeof renderDecorList === 'function') renderDecorList(gameId);
                 scheduleSaveLocal();
             };
+            /** Mode élève sur une étape précise (ignore les prérequis des étapes précédentes). */
+            window.testDndStep = function (gameId, stepIndex) {
+                try { if (typeof syncDndGamesFromUI === 'function') syncDndGamesFromUI(); } catch (e) {}
+                const g = state.dndGames[gameId];
+                if (!g || !g.enableSteps || !Array.isArray(g.steps) || !g.steps.length) {
+                    alert('Activez « Jeu par étapes » et ajoutez au moins une étape.');
+                    return;
+                }
+                const idx = Math.max(0, Math.min(g.steps.length - 1, parseInt(stepIndex, 10) || 0));
+                state.dndTestJump = { gameId: gameId, stepIndex: idx };
+                const after = () => {
+                    mqEnsureDndTestBar();
+                    mqUpdateDndTestBar();
+                    if (window.mqToast) {
+                        window.mqToast('Test étape ' + (idx + 1) + (g.steps[idx].title ? (' — ' + g.steps[idx].title) : ''));
+                    }
+                };
+                if (state.mode === 'student') {
+                    try { if (typeof renderDndGames === 'function') renderDndGames(); } catch (e) {}
+                    setTimeout(after, 60);
+                    return;
+                }
+                if (btnMode) btnMode.click();
+                setTimeout(after, 200);
+            };
+
+            function mqHideDndTestBar() {
+                const bar = document.getElementById('mqDndTestBar');
+                if (bar) bar.style.display = 'none';
+            }
+            function mqEnsureDndTestBar() {
+                let bar = document.getElementById('mqDndTestBar');
+                if (bar) {
+                    bar.style.display = '';
+                    return bar;
+                }
+                bar = document.createElement('div');
+                bar.id = 'mqDndTestBar';
+                bar.style.cssText = 'position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:99999;display:flex;align-items:center;gap:8px;padding:8px 12px;background:#0f172a;color:#fff;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.35);font:12px/1.3 system-ui,sans-serif;max-width:min(920px,96vw);';
+                bar.innerHTML = ''
+                    + '<span style="font-weight:700;white-space:nowrap;opacity:0.9;">Test étape</span>'
+                    + '<select id="mqDndTestBarSelect" style="min-width:140px;max-width:42vw;font-size:12px;padding:4px 6px;border-radius:6px;border:none;"></select>'
+                    + '<button type="button" id="mqDndTestBarGo" style="padding:5px 10px;border:none;border-radius:6px;background:#1565c0;color:#fff;font-weight:700;cursor:pointer;">Aller</button>'
+                    + '<button type="button" id="mqDndTestBarAdmin" style="padding:5px 10px;border:none;border-radius:6px;background:#475569;color:#fff;cursor:pointer;">Admin</button>';
+                document.body.appendChild(bar);
+                const sel = bar.querySelector('#mqDndTestBarSelect');
+                const go = bar.querySelector('#mqDndTestBarGo');
+                const back = bar.querySelector('#mqDndTestBarAdmin');
+                if (go) {
+                    go.addEventListener('click', () => {
+                        const jump = state.dndTestJump;
+                        if (!jump || !sel) return;
+                        const idx = parseInt(sel.value, 10) || 0;
+                        window.testDndStep(jump.gameId, idx);
+                    });
+                }
+                if (back) {
+                    back.addEventListener('click', () => {
+                        state.dndTestJump = null;
+                        mqHideDndTestBar();
+                        if (state.mode === 'student' && btnMode) btnMode.click();
+                    });
+                }
+                return bar;
+            }
+            function mqUpdateDndTestBar() {
+                const jump = state.dndTestJump;
+                if (!jump || state.mode !== 'student') {
+                    mqHideDndTestBar();
+                    return;
+                }
+                const bar = mqEnsureDndTestBar();
+                const g = state.dndGames[jump.gameId];
+                const sel = bar.querySelector('#mqDndTestBarSelect');
+                if (!sel || !g || !Array.isArray(g.steps)) return;
+                sel.innerHTML = g.steps.map((s, i) => {
+                    const label = '#' + (i + 1) + ' — ' + String((s && s.title) || ('Étape ' + (i + 1))).replace(/</g, '&lt;').replace(/"/g, '&quot;');
+                    const selected = i === jump.stepIndex ? ' selected' : '';
+                    return '<option value="' + i + '"' + selected + '>' + label + '</option>';
+                }).join('');
+            }
+
             window.moveDndStep = function (gameId, index, dir) {
                 const g = state.dndGames[gameId];
                 if (!g || !g.steps) return;
@@ -14710,6 +14808,7 @@
                         + '<input data-field="title" type="text" value="' + String(s.title || '').replace(/"/g, '&quot;') + '" placeholder="Titre de l’étape" style="flex:1;font-size:12px;padding:4px;">'
                         + '<button type="button" title="Monter" onclick="window.moveDndStep(\'' + gameId + '\',' + index + ',-1)" style="font-size:11px;">↑</button>'
                         + '<button type="button" title="Descendre" onclick="window.moveDndStep(\'' + gameId + '\',' + index + ',1)" style="font-size:11px;">↓</button>'
+                        + '<button type="button" class="mq-dnd-step-test" title="Tester cette étape en mode élève (sans prérequis)" onclick="window.testDndStep(\'' + gameId + '\',' + index + ')" style="font-size:11px;padding:2px 6px;cursor:pointer;background:#1565c0;color:#fff;border:none;border-radius:4px;font-weight:700;">▶</button>'
                         + '<button type="button" onclick="window.removeDndStep(\'' + gameId + '\',' + index + ')" style="font-size:11px;color:#fff;background:#ff4444;border:none;border-radius:4px;padding:2px 6px;">✕</button>'
                         + '</div>'
                         + '<div class="mq-dnd-step-body">'
