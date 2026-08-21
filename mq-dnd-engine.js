@@ -3182,6 +3182,12 @@
       });
       if (reactivate !== false) setUsed(cardId, false);
       zone.classList.remove('dropzone-correct', 'dropzone-wrong');
+      if (typeof clearZoneFeedbackPaint === 'function') clearZoneFeedbackPaint(zone);
+      else if (zone && zone.style) {
+        zone.style.removeProperty('background');
+        zone.style.removeProperty('border');
+        zone.style.removeProperty('box-shadow');
+      }
       if (!getZonePlacements(zone).length) zone.classList.remove('dnd-has-card');
     }
 
@@ -3396,26 +3402,29 @@
       if (linkingApi && linkingApi.markCardDropped) linkingApi.markCardDropped();
 
       // Malus à chaque dépôt incorrect (tous modes), y compris repositionnements
+      var flashOk = null;
       if (!correctHere) {
         nbErreurs += 1;
         if (feedbackMode === 'immediate') {
           applyZoneFeedback(zone, zcfg, true);
-          pulseZoneFlash(zone, false);
+          flashOk = false;
           if (typeof hooks.playSound === 'function') hooks.playSound('error');
           if (typeof hooks.showFloating === 'function') hooks.showFloating(zone, 'error');
         }
       } else if (feedbackMode === 'immediate') {
         applyZoneFeedback(zone, zcfg, true);
-        pulseZoneFlash(zone, true);
+        flashOk = true;
         if (typeof hooks.playSound === 'function') hooks.playSound('success');
         if (typeof hooks.showFloating === 'function') hooks.showFloating(zone, 'success');
       }
 
       refreshUI();
+      // Flash après refreshUI pour que l’animation ne soit pas écrasée
+      if (flashOk != null) pulseZoneFlash(zone, flashOk);
       return true;
     }
 
-    /** Flash court rouge/vert très pâle sur la zone au moment du dépôt. */
+    /** Flash court rouge/vert sur la zone au moment du dépôt. */
     function pulseZoneFlash(zone, ok) {
       if (!zone) return;
       zone.classList.remove('dnd-zone-flash-ok', 'dnd-zone-flash-bad');
@@ -3426,17 +3435,51 @@
       }, 650);
     }
 
+    function clearZoneFeedbackPaint(zone) {
+      if (!zone || !zone.style) return;
+      zone.style.removeProperty('background');
+      zone.style.removeProperty('border');
+      zone.style.removeProperty('border-color');
+      zone.style.removeProperty('box-shadow');
+    }
+
+    function paintZoneFeedback(zone, kind) {
+      if (!zone || !zone.style) return;
+      if (kind === 'wrong') {
+        zone.style.setProperty('background', 'rgba(244, 67, 54, 0.20)', 'important');
+        zone.style.setProperty('border', '3px solid rgba(211, 47, 47, 0.75)', 'important');
+        zone.style.setProperty('box-shadow', 'inset 0 0 0 1px rgba(244, 67, 54, 0.25)', 'important');
+      } else if (kind === 'correct') {
+        zone.style.setProperty('background', 'rgba(76, 175, 80, 0.22)', 'important');
+        zone.style.setProperty('border', '3px solid rgba(56, 142, 60, 0.75)', 'important');
+        zone.style.setProperty('box-shadow', 'inset 0 0 0 1px rgba(76, 175, 80, 0.25)', 'important');
+      } else {
+        clearZoneFeedbackPaint(zone);
+      }
+    }
+
     function applyZoneFeedback(zone, zcfg, force) {
       if (feedbackMode === 'deferred' && !verifiedOnce && !force) {
         zone.classList.remove('dropzone-correct', 'dropzone-wrong');
+        clearZoneFeedbackPaint(zone);
         return;
       }
       var ids = getZonePlacements(zone);
       zone.classList.remove('dropzone-correct', 'dropzone-wrong');
-      if (!ids.length) return;
+      if (!ids.length) {
+        clearZoneFeedbackPaint(zone);
+        return;
+      }
       var ev = evaluateZone(game, zcfg, ids);
-      if (ev.hasWrong) zone.classList.add('dropzone-wrong');
-      else if (ev.correctCount > 0) zone.classList.add('dropzone-correct');
+      if (ev.hasWrong) {
+        zone.classList.add('dropzone-wrong');
+        paintZoneFeedback(zone, 'wrong');
+      } else if (ev.correctCount > 0) {
+        zone.classList.add('dropzone-correct');
+        paintZoneFeedback(zone, 'correct');
+      } else {
+        clearZoneFeedbackPaint(zone);
+      }
     }
 
     function refreshUI() {

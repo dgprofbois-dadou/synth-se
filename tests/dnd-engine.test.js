@@ -879,6 +879,8 @@ test('feedback dépôt : flash zone pâle + floating erreur', () => {
   assert.ok(html.includes('dnd-zone-flash-bad'));
   assert.ok(html.includes('floating-feedback.is-bad'));
   assert.ok(html.includes("el.textContent = ok ? '+1 🌟' : '✗'"));
+  assert.ok(src.includes('paintZoneFeedback'));
+  assert.ok(src.includes("setProperty('background'"));
 });
 
 test('Relier→DnD : isLinkModeOn ignore le mode flèche résiduel sur étape dépôt', () => {
