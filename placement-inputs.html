@@ -10882,6 +10882,14 @@
                 if (!g || !g.dropzones || !g.dropzones[index]) return;
                 mqEnsureDndInspectorTab();
                 window.mqSetDndSel({ gameId, type: 'dropzone', index: String(index) });
+                // Avec étapes : ouvrir uniquement la ligne « Zone N » du panneau étapes + focus
+                const zmapRow = (typeof mqFocusStepZoneMapForDropzone === 'function')
+                    ? mqFocusStepZoneMapForDropzone(gameId, index)
+                    : null;
+                if (zmapRow) {
+                    mqScrollLeftToEl(zmapRow);
+                    return;
+                }
                 const insp = document.getElementById('dndGame' + mqGameNum(gameId) + 'DropzonesList');
                 const active = insp && insp.querySelector('.mq-dz-chip.is-active, .mq-dz-block');
                 mqScrollLeftToEl(active || insp);
@@ -14443,6 +14451,78 @@
                 const preview = host.querySelector('[data-ids-preview="' + field + '"]');
                 if (preview) preview.innerHTML = mqStepIdChipsHTML(inp.value);
             }
+            function mqSetZmapRowsExclusiveOpen(wrap, zoneId) {
+                if (!wrap) return null;
+                const want = String(zoneId);
+                let opened = null;
+                wrap.querySelectorAll('.mq-zmap-row').forEach((r) => {
+                    const z = String(r.getAttribute('data-zmap-zone') || '');
+                    const open = z === want;
+                    r.classList.toggle('open', open);
+                    const b = r.querySelector('.mq-zmap-toggle');
+                    const p = r.querySelector('.mq-zmap-picker');
+                    const ch = r.querySelector('.mq-zmap-chevron');
+                    if (b) b.setAttribute('aria-expanded', open ? 'true' : 'false');
+                    if (p) p.hidden = !open;
+                    if (ch) ch.textContent = open ? '▾' : '▸';
+                    if (open) opened = r;
+                });
+                return opened;
+            }
+            /** Clic canvas sur une zone : ouvrir sa ligne dans l’étape (ferme les autres). */
+            function mqFocusStepZoneMapForDropzone(gameId, dropzoneIndex) {
+                const g = state.dndGames && state.dndGames[gameId];
+                if (!g || !g.enableSteps || !Array.isArray(g.steps) || !g.steps.length) return null;
+                const dz = (g.dropzones || [])[dropzoneIndex];
+                if (!dz) return null;
+                const zid = String(mqDropzoneId(dz, dropzoneIndex));
+                const list = document.getElementById('dndGame' + mqGameNum(gameId) + 'StepsList');
+                if (!list) return null;
+
+                let stepIdx = -1;
+                g.steps.forEach((s, i) => {
+                    if (stepIdx >= 0) return;
+                    const ids = Array.isArray(s.zoneIds) ? s.zoneIds.map(String) : [];
+                    if (ids.indexOf(zid) >= 0) stepIdx = i;
+                    else {
+                        const map = (s && s.zoneMap) || {};
+                        if (Object.prototype.hasOwnProperty.call(map, zid)) stepIdx = i;
+                    }
+                });
+
+                let card = null;
+                if (stepIdx >= 0) {
+                    card = list.querySelector('.mq-dnd-step-card[data-step-idx="' + stepIdx + '"]');
+                }
+                if (!card) {
+                    const anyRow = list.querySelector('.mq-zmap-row[data-zmap-zone="' + zid.replace(/"/g, '') + '"]');
+                    if (anyRow) card = anyRow.closest('.mq-dnd-step-card');
+                }
+                if (!card) return null;
+
+                if (card.getAttribute('data-open') !== '1') {
+                    list.querySelectorAll('.mq-dnd-step-card').forEach((c) => {
+                        if (c === card) return;
+                        if (c.getAttribute('data-open') === '1') {
+                            c.setAttribute('data-open', '0');
+                            const t = c.querySelector('.mq-dnd-step-toggle');
+                            const ch = c.querySelector('.mq-dnd-step-chevron');
+                            if (t) t.setAttribute('aria-expanded', 'false');
+                            if (ch) ch.textContent = '▸';
+                        }
+                    });
+                    card.setAttribute('data-open', '1');
+                    const toggle = card.querySelector('.mq-dnd-step-toggle');
+                    const chev = card.querySelector('.mq-dnd-step-chevron');
+                    if (toggle) toggle.setAttribute('aria-expanded', 'true');
+                    if (chev) chev.textContent = '▾';
+                }
+
+                const wrap = card.querySelector('.mq-zmap');
+                if (!wrap) return card;
+                const opened = mqSetZmapRowsExclusiveOpen(wrap, zid);
+                return opened || card;
+            }
             function mqRefreshStepZoneMap(gameId, card) {
                 const host = card && card.querySelector('[data-step-zonemap]');
                 if (!host) return;
@@ -14678,22 +14758,11 @@
                         const row = btn.closest('.mq-zmap-row');
                         if (!wrap || !row) return;
                         const wasOpen = btn.getAttribute('aria-expanded') === 'true';
-                        wrap.querySelectorAll('.mq-zmap-row').forEach((r) => {
-                            r.classList.remove('open');
-                            const b = r.querySelector('.mq-zmap-toggle');
-                            const p = r.querySelector('.mq-zmap-picker');
-                            const ch = r.querySelector('.mq-zmap-chevron');
-                            if (b) b.setAttribute('aria-expanded', 'false');
-                            if (p) p.hidden = true;
-                            if (ch) ch.textContent = '▸';
-                        });
-                        if (!wasOpen) {
-                            row.classList.add('open');
-                            btn.setAttribute('aria-expanded', 'true');
-                            const p = row.querySelector('.mq-zmap-picker');
-                            const ch = row.querySelector('.mq-zmap-chevron');
-                            if (p) p.hidden = false;
-                            if (ch) ch.textContent = '▾';
+                        const zid = row.getAttribute('data-zmap-zone');
+                        if (wasOpen) {
+                            mqSetZmapRowsExclusiveOpen(wrap, null);
+                        } else {
+                            mqSetZmapRowsExclusiveOpen(wrap, zid);
                         }
                     });
                 }
