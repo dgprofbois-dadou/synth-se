@@ -2109,7 +2109,12 @@
         } else {
           el.classList.remove('dnd-link-node', 'dnd-link-from', 'dnd-selected');
           var isDecor = el.classList && (el.classList.contains('dnd-decor-fixed') || el.classList.contains('dnd-decor-text'));
-          if (el.classList.contains('dnd-placed')) {
+          var isDropzone = el.classList && el.classList.contains('dropzone');
+          if (isDropzone) {
+            el.style.cursor = '';
+            // syncZonesForStep repartira pointer-events ; laisser auto en attendant
+            el.style.pointerEvents = 'auto';
+          } else if (el.classList.contains('dnd-placed')) {
             el.draggable = false;
             el.style.cursor = 'pointer';
           } else if (el.classList.contains('draggable')) {
@@ -2341,7 +2346,7 @@
           stroke: 'transparent',
           'data-locked': locked ? '1' : '0'
         });
-        hit.style.pointerEvents = 'stroke';
+        hit.style.pointerEvents = linkModeActive ? 'stroke' : 'none';
         hit.style.cursor = locked ? 'not-allowed' : 'pointer';
         (function (linkIndex, isLocked) {
           hit.addEventListener('pointerdown', function (e) {
@@ -2357,6 +2362,9 @@
       });
       if (dragState && dragState.line && !dragState.line.parentNode) svg.appendChild(dragState.line);
       svg.style.pointerEvents = (linkModeActive && links.length) ? 'auto' : 'none';
+      Array.prototype.forEach.call(svg.querySelectorAll('.dnd-link-hit'), function (h) {
+        h.style.pointerEvents = linkModeActive ? 'stroke' : 'none';
+      });
     }
 
     function cancelDrag() {
@@ -2707,9 +2715,13 @@
     var verifiedOnce = feedbackMode === 'immediate';
     var gameId = gameConfig._gameId || gameContainer.getAttribute('data-dnd-gameid') || 'game';
     var linkingApi = null;
+    var lastStepActivity = 'dnd';
 
     function isLinkModeOn() {
-      return !!(linkingApi && linkingApi.isLinkModeActive && linkingApi.isLinkModeActive());
+      if (!(linkingApi && linkingApi.isLinkModeActive && linkingApi.isLinkModeActive())) return false;
+      // Étape dépôt pure : un mode flèche résiduel ne doit jamais bloquer drag/drop
+      if (stepsEnabled && lastStepActivity === 'dnd') return false;
+      return true;
     }
 
     var resultDiv = gameContainer.querySelector('.dnd-result') || gameContainer.querySelector('[id^="result"]');
@@ -2891,10 +2903,12 @@
       if (!btn && !linkingApi) return;
       var showBtn = false;
       var autoLink = false;
+      var actName = 'dnd';
       if (linkingApi) {
         if (!stepsEnabled) {
           showBtn = !!game.enableLinking;
         } else if (st && st.enabled && !st.allComplete && st.active) {
+          actName = normalizeStep(st.active, 0).activity || 'dnd';
           autoLink = stepAutoLinkMode(st.active);
           showBtn = !autoLink && stepNeedsRelier(st.active);
         }
@@ -2906,15 +2920,29 @@
       }
       if (linkingApi && linkingApi.setLinkMode) {
         try {
+          var stepKey = (st && st.active)
+            ? (String(st.active.id) + '@' + String(st.currentIndex))
+            : '';
+          var stepChanged = syncRelierForStep._stepKey !== stepKey;
+          syncRelierForStep._stepKey = stepKey;
           if (autoLink) {
+            // Étape Relier pure : forcer le mode flèche
             if (!linkingApi.isLinkModeActive()) linkingApi.setLinkMode(true);
-          } else if (!showBtn) {
+          } else if (actName === 'dnd' || !showBtn) {
+            // DnD pur (ou Relier indisponible) : jamais de mode flèche (sinon les drops sont bloqués)
+            if (linkingApi.isLinkModeActive()) linkingApi.setLinkMode(false);
+          } else if (stepChanged) {
+            // « Les deux » : à l’entrée d’étape, repartir en dépôt (le bouton réactive Relier)
             if (linkingApi.isLinkModeActive()) linkingApi.setLinkMode(false);
           }
         } catch (e) {}
       }
       gameContainer.classList.toggle('dnd-step-relier-on', !!(autoLink || showBtn));
       gameContainer.classList.toggle('dnd-step-relier-auto', !!autoLink);
+      // Filet de sécurité : classe résiduelle ne doit pas bloquer le pan / DnD
+      if (!autoLink && actName === 'dnd') {
+        gameContainer.classList.remove('dnd-link-mode');
+      }
     }
 
     /** Cartes déposées : toujours opacité pleine (jamais grisées par l’étape ou la zone). */
@@ -2956,6 +2984,11 @@
           if (!currentZoneIds.length) currentZoneIds = null;
         }
       }
+      var zoneIdSet = null;
+      if (currentZoneIds && currentZoneIds.length) {
+        zoneIdSet = {};
+        currentZoneIds.forEach(function (id) { zoneIdSet[String(id)] = true; });
+      }
       function applyFutureHidden(el, isFuture) {
         el.classList.toggle('dnd-step-future-hidden', !!isFuture);
         if (isFuture) {
@@ -2979,8 +3012,8 @@
           var zMin = ownership.zoneMinStep[zid];
           if (zMin != null && zMin > curIdx) hideChrome = true;
         }
-        if (!hideChrome && currentZoneIds && st && st.currentIndex > 0) {
-          hideChrome = currentZoneIds.indexOf(zid) < 0;
+        if (!hideChrome && zoneIdSet && st && st.currentIndex > 0) {
+          hideChrome = !zoneIdSet[zid];
         }
         z.classList.toggle('dnd-step-zone-hidden', !!hideChrome);
         z.style.pointerEvents = (linkingOnly || hideChrome) ? 'none' : 'auto';
@@ -3380,12 +3413,16 @@
           highlightStepZones(st.active);
         }
         syncStepNextBtn(st);
+        lastStepActivity = st.active
+          ? (normalizeStep(st.active, 0).activity || 'dnd')
+          : 'dnd';
         syncRelierForStep(st);
         syncZonesForStep(st);
         syncPlacedCardsAppearance();
         ev.stepsState = st;
         ev.isComplete = st.allComplete;
       } else {
+        lastStepActivity = 'dnd';
         stepsComplete = !!ev.isComplete;
         syncRelierForStep(null);
         syncZonesForStep(null);
@@ -3548,13 +3585,15 @@
       for (var i = 0; i < stack.length; i++) {
         var n = stack[i];
         var z = n && n.closest ? n.closest('.dropzone') : null;
-        if (z && gameContainer.contains(z) && !z.classList.contains('dnd-step-locked')) return z;
+        if (z && gameContainer.contains(z)
+          && !z.classList.contains('dnd-step-locked')
+          && !z.classList.contains('dnd-step-zone-hidden')) return z;
       }
       // Repli géométrique : SVG Relier / pointer-events parent peuvent masquer la dropzone
       var hit = null;
       var hitArea = Infinity;
       Array.prototype.forEach.call(gameContainer.querySelectorAll('.dropzone'), function (z) {
-        if (z.classList.contains('dnd-step-locked')) return;
+        if (z.classList.contains('dnd-step-locked') || z.classList.contains('dnd-step-zone-hidden')) return;
         var r = z.getBoundingClientRect();
         if (clientX < r.left || clientX > r.right || clientY < r.top || clientY > r.bottom) return;
         var area = Math.max(1, r.width * r.height);

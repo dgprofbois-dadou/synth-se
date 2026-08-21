@@ -847,6 +847,15 @@ test('Relier : minCorrectLinks pour passer à l’étape suivante', () => {
   assert.ok(html.includes('Réponses justes pour passer'));
 });
 
+test('Relier→DnD : isLinkModeOn ignore le mode flèche résiduel sur étape dépôt', () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'mq-dnd-engine.js'), 'utf8');
+  assert.ok(src.includes("lastStepActivity === 'dnd'"));
+  assert.ok(src.includes('syncRelierForStep._stepKey'));
+  assert.ok(src.includes("actName === 'dnd' || !showBtn"));
+  const html = fs.readFileSync(path.join(__dirname, '..', 'placement-inputs.html'), 'utf8');
+  assert.ok(html.includes("z-index:7; pointer-events:none"));
+});
+
 test('zone jeux : déplacement du cadre + 4 poignées de redim', () => {
   const html = fs.readFileSync(path.join(__dirname, '..', 'placement-inputs.html'), 'utf8');
   assert.ok(html.includes('data-corner="nw"'));

@@ -8501,7 +8501,7 @@
 
                     const targetsEl = document.createElement('div');
                     targetsEl.id = 'targets-' + gameId;
-                    targetsEl.style.cssText = 'position:absolute; inset:0; z-index:4; pointer-events:none;';
+                    targetsEl.style.cssText = 'position:absolute; inset:0; z-index:7; pointer-events:none;';
 
                     (gameConfig.dropzones || []).forEach((dz, i) => {
                         const zone = document.createElement('div');
@@ -16092,7 +16092,7 @@
                         .replace(/"/g, '&quot;');
                     out += '\n                        <div class="dnd-instructions" role="status" aria-live="polite" style="left:' + ibX + '%;top:' + ibY + '%;width:' + ibW + '%;height:' + ibH + '%;font-family:' + String(ib.font || 'Verdana, sans-serif').replace(/"/g, '&quot;') + ';font-size:' + (ib.fontSize || 22) + 'px;font-weight:' + (ib.bold !== false ? 'bold' : '600') + ';font-style:' + (ib.italic ? 'italic' : 'normal') + ';text-align:' + (ib.align || 'center') + ';background:' + (ib.bgColor || '#fff8e1') + ';color:' + (ib.color || '#78350f') + ';border-color:' + (ib.borderColor || '#f59e0b') + ';">' + instrEsc + '</div>';
                 }
-                out += '\n                        <div id="targets" style="position:absolute; inset:0; z-index:1; box-sizing:border-box; pointer-events:none;">';
+                out += '\n                        <div id="targets" style="position:absolute; inset:0; z-index:7; box-sizing:border-box; pointer-events:none;">';
                 out += (g.dropzones || []).map(function (dz, i) {
                     const dzX = ((dz.x || 0) / G_W) * 100;
                     const dzY = ((dz.y || 0) / G_H) * 100;
