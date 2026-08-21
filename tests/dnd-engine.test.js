@@ -859,6 +859,16 @@ test('admin : testDndStep / jumpToStep sans prérequis', () => {
   assert.ok(html.includes('startAtStep: startAt'));
 });
 
+test('placement exact : cartes incorrectes repositionnables (pas seulement retry)', () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'mq-dnd-engine.js'), 'utf8');
+  assert.ok(src.includes('function findPlacedCard'));
+  assert.ok(src.includes('var movable = !correctHere'));
+  assert.ok(src.includes('existingPlaced || orig'));
+  assert.ok(src.includes('dnd-step-source-hidden'));
+  // Ancien comportement limité au mode retry : ne doit plus être la seule condition
+  assert.ok(!src.includes("var movable = (cardUse === 'retry' && !correctHere)"));
+});
+
 test('Relier→DnD : isLinkModeOn ignore le mode flèche résiduel sur étape dépôt', () => {
   const src = fs.readFileSync(path.join(__dirname, '..', 'mq-dnd-engine.js'), 'utf8');
   assert.ok(src.includes("lastStepActivity === 'dnd'"));

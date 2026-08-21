@@ -72,5 +72,6 @@ Les outils canvas (zones SVG, mode de liaison, tooltip) s’affichent dès que �
 - Score = score DnD des étapes + nombre de paires correctes des étapes Relier.
 - Les **images fixes** et **textes fixes** ont un **ID** éditable (badge vert sur le canvas) et peuvent servir de nœuds Relier (`idDépart>idArrivée`).
 - En **DnD** : une carte lâchée **hors** d’une zone de dépôt revient à sa place d’origine (pas de calage au point de dépôt).
+- **Placement exact** : une carte incorrecte reste **repositionnable** (glisser ou recliquer une autre zone) ; chaque nouvel essai faux ajoute un malus. Une carte correcte se fige.
 
 Les consignes restent visibles jusqu’à la réussite du jeu (`dnd-game-complete`), puis sont masquées.

@@ -3185,6 +3185,16 @@
       if (!getZonePlacements(zone).length) zone.classList.remove('dnd-has-card');
     }
 
+    /** Clone déjà posé de cette carte (pour un déplacement zone → zone). */
+    function findPlacedCard(cardId) {
+      var sid = String(cardId);
+      var nodes = gameContainer.querySelectorAll('.dropzone .dnd-placed[data-id]');
+      for (var i = 0; i < nodes.length; i++) {
+        if (String(nodes[i].getAttribute('data-id')) === sid) return nodes[i];
+      }
+      return null;
+    }
+
     /** Carte déposée : centrée dans la zone, au-dessus du fond (sans couper l’image source). */
     function layoutPlacedCardInZone(clone) {
       if (!clone) return;
@@ -3260,8 +3270,8 @@
         }
       });
 
-      // Mode retry : glisser une mauvaise carte vers une autre zone
-      if (cardUse === 'retry' && clone.draggable) {
+      // Mode retry / unique : glisser une mauvaise carte vers une autre zone
+      if (clone.draggable || clone.classList.contains('dnd-retry-movable')) {
         clone.addEventListener('dragstart', function (e) {
           if (isLinkModeOn()) {
             e.preventDefault();
@@ -3279,8 +3289,9 @@
           linkingApi.setDragCenter(id, e.clientX, e.clientY);
         });
         clone.addEventListener('dragend', function () {
-          clone.style.opacity = '1';
-          if (linkingApi && linkingApi.endCardDrag) linkingApi.endCardDrag(id, clone);
+          // La carte a pu être déplacée (nœud retiré) : ne pas toucher un nœud détaché
+          if (clone.isConnected) clone.style.opacity = '1';
+          if (linkingApi && linkingApi.endCardDrag) linkingApi.endCardDrag(id, clone.isConnected ? clone : null);
           else if (linkingApi && linkingApi.clearDragCenter) linkingApi.clearDragCenter(id);
         });
       }
@@ -3310,12 +3321,14 @@
         if (act && act.activity === 'linking') return false;
       }
 
+      var existingPlaced = findPlacedCard(id);
       var orig = findOrig(id);
-      if (!orig) return false;
+      if (!orig && !existingPlaced) return false;
 
       var capacity = Math.max(1, parseInt(zcfg.capacity, 10) || 1);
       var current = getZonePlacements(zone);
 
+      // Déjà dans cette zone : ne rien faire (évite un remove+recreate qui « fait disparaître »)
       if (current.indexOf(id) >= 0) return false;
 
       if (current.length >= capacity) {
@@ -3327,24 +3340,24 @@
         }
       }
 
-      // Une seule présence à la fois (unique + retry)
-      if (isSingleUse(cardUse)) {
-        Array.prototype.forEach.call(gameContainer.querySelectorAll('.dropzone'), function (oz) {
-          if (oz === zone) return;
-          if (getZonePlacements(oz).indexOf(id) >= 0) {
-            removeFromZone(oz, id, false);
-          }
-        });
-      }
-
       var correctHere = isCardAcceptedInZone(game, zcfg, id);
-      var clone = orig.cloneNode(true);
-      clone.classList.remove('draggable', 'used', 'dnd-selected', 'dnd-retry-movable', 'png-wrap');
+      // Cloner d’abord (depuis la carte posée ou la source), puis retirer l’ancienne —
+      // sinon le drag HTML5 retire la source en cours de drop → image disparue.
+      var proto = existingPlaced || orig;
+      var clone = proto.cloneNode(true);
+      clone.classList.remove(
+        'draggable', 'used', 'dnd-selected', 'dnd-retry-movable', 'png-wrap',
+        'dnd-step-source-hidden', 'dnd-step-future-hidden', 'dnd-step-link-phase'
+      );
       clone.classList.add('dnd-placed');
       clone.classList.add('dnd-link-node');
       clone.removeAttribute('draggable');
-      // Retry + erreur : carte repositionnable ; sinon figée jusqu'au retrait
-      var movable = (cardUse === 'retry' && !correctHere);
+      clone.removeAttribute('aria-hidden');
+      clone.style.visibility = '';
+      clone.style.pointerEvents = 'auto';
+
+      // Carte incorrecte : toujours repositionnable (unique + retry) pour retenter
+      var movable = !correctHere;
       if (movable) {
         clone.setAttribute('draggable', 'true');
         clone.draggable = true;
@@ -3367,6 +3380,17 @@
 
       zone.classList.add('dnd-has-card');
       zone.appendChild(clone);
+
+      // Retirer les autres occurrences après insertion (déplacement zone → zone)
+      if (isSingleUse(cardUse) || existingPlaced) {
+        Array.prototype.forEach.call(gameContainer.querySelectorAll('.dropzone'), function (oz) {
+          if (oz === zone) return;
+          if (getZonePlacements(oz).indexOf(id) >= 0) {
+            removeFromZone(oz, id, false);
+          }
+        });
+      }
+
       if (isSingleUse(cardUse)) setUsed(id, true);
       clearSelection();
       if (linkingApi && linkingApi.markCardDropped) linkingApi.markCardDropped();
