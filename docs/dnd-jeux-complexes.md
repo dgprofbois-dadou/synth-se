@@ -52,6 +52,8 @@ Sans critère et sans bouton forcé → bouton **Étape suivante** obligatoire. 
 
 En mode élève, les **images / cartes / décor / zones Relier** référencés dans une étape ultérieure (`goodIds`, associations zone↔carte, paires `id>id`) restent **masqués** jusqu’à ce que l’étape en amont soit validée.
 
+Pour une **image fixe**, le panneau de config propose aussi **Visible dès** (`visibleFromStep`) : choisir à partir de quelle étape elle s’affiche (prioritaire sur le masquage automatique par critères).
+
 **Relier n’existe plus comme type de jeu global.** L’ancienne config (`gameType: linking`, case « Activer Relier », paires globales) est migrée vers une **étape Relier** au chargement, pour reprendre la config sur cette étape.
 
 Les outils canvas (zones SVG, mode de liaison, tooltip) s’affichent dès que « Jeu par étapes » est coché. Les flèches à valider se règlent dans chaque étape (`Flèches à valider`).

@@ -12548,6 +12548,13 @@
                         } else {
                             row.id = String(row.id).trim();
                         }
+                        if (row.visibleFromStep === '' || row.visibleFromStep == null) {
+                            delete row.visibleFromStep;
+                        } else {
+                            const vf = parseInt(row.visibleFromStep, 10);
+                            if (isFinite(vf) && vf >= 0) row.visibleFromStep = vf;
+                            else delete row.visibleFromStep;
+                        }
                         return row;
                     })
                     : [];
@@ -13894,11 +13901,19 @@
                     const id = String(value == null ? '' : value).trim();
                     if (!id) return;
                     arr[index].id = id;
+                } else if (property === 'visibleFromStep') {
+                    if (value === '' || value == null) {
+                        delete arr[index].visibleFromStep;
+                    } else {
+                        const n = parseInt(value, 10);
+                        if (isFinite(n) && n >= 0) arr[index].visibleFromStep = n;
+                        else delete arr[index].visibleFromStep;
+                    }
                 } else {
                     arr[index][property] = parseInt(value) || 0;
                 }
                 renderDndGamesPreview();
-                if (property === 'id') renderDecorList(gameId);
+                if (property === 'id' || property === 'visibleFromStep') renderDecorList(gameId);
                 saveLocal();
             };
             window.removeDecorImage = function (gameId, index) {
@@ -13948,6 +13963,26 @@
                 };
                 input.click();
             };
+            function mqDecorVisibleFromStepHtml(gameId, index, d) {
+                const g = state.dndGames[gameId];
+                if (!g || !g.enableSteps || !Array.isArray(g.steps) || !g.steps.length) return '';
+                const cur = (d.visibleFromStep != null && d.visibleFromStep !== '')
+                    ? String(d.visibleFromStep)
+                    : '';
+                const opts = ['<option value="">Toutes les étapes</option>'].concat(
+                    g.steps.map((s, i) => {
+                        const title = String((s && s.title) || ('Étape ' + (i + 1))).replace(/</g, '&lt;').replace(/"/g, '&quot;');
+                        const sel = cur === String(i) ? ' selected' : '';
+                        return '<option value="' + i + '"' + sel + '>À partir de l’étape ' + (i + 1)
+                            + (s && s.title ? ' — ' + title : '') + '</option>';
+                    })
+                ).join('');
+                return '<div class="mq-decor-tools" style="margin-top:4px;">'
+                    + '<label style="font-size:10px;font-weight:700;color:#64748b;white-space:nowrap;">Visible dès</label>'
+                    + '<select title="Masquée en mode élève jusqu’à cette étape" '
+                    + 'onchange="window.updateDecorPosition(\'' + gameId + '\', ' + index + ', \'visibleFromStep\', this.value)">'
+                    + opts + '</select></div>';
+            }
             function renderDecorList(gameId) {
                 const list = document.getElementById('dndGame' + mqGameNum(gameId) + 'DecorList');
                 if (!list) return;
@@ -13982,6 +14017,7 @@
                             <div class="mq-decor-z">
                                 ${mqDimPosField('z', d.z || 0, 'updateDecorPosition', gameId, index, 'z', 1)}
                             </div>
+                            ${mqDecorVisibleFromStepHtml(gameId, index, d)}
                             </div>
                         </div>
                     </div>`;
@@ -14425,6 +14461,7 @@
                 if (es) es.checked = true;
                 mqToggleStepsUI(n, true);
                 renderStepsList(gameId, { openIndex: g.steps.length - 1, exclusive: true });
+                if (typeof renderDecorList === 'function') renderDecorList(gameId);
                 scheduleSaveLocal();
             };
             window.removeDndStep = function (gameId, index) {
@@ -14437,6 +14474,7 @@
                 g.steps.splice(index, 1);
                 const remapped = captured.filter((i) => i !== index).map((i) => (i > index ? i - 1 : i));
                 renderStepsList(gameId, { openIndices: remapped });
+                if (typeof renderDecorList === 'function') renderDecorList(gameId);
                 scheduleSaveLocal();
             };
             window.moveDndStep = function (gameId, index, dir) {
@@ -14456,6 +14494,7 @@
                     return i;
                 });
                 renderStepsList(gameId, { openIndices: remapped });
+                if (typeof renderDecorList === 'function') renderDecorList(gameId);
                 scheduleSaveLocal();
             };
             window.mqSetAllDndStepsOpen = function (gameId, open) {
@@ -15815,6 +15854,7 @@
                                 g.enableLinking = false;
                             }
                             mqSyncLinkingToolsVisibility(n);
+                            if (typeof renderDecorList === 'function') renderDecorList(gid);
                         };
                         const es = document.getElementById('dndGame' + n + 'EnableSteps');
                         const g0 = state.dndGames[gid];

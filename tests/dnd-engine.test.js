@@ -652,6 +652,35 @@ test('étapes : masquage éléments des étapes futures (ownership)', () => {
   assert.strictEqual(Engine.isZoneVisibleAtStep(g, '20', 1), true);
 });
 
+test('étapes : visibleFromStep sur image fixe (décor)', () => {
+  const g = Engine.applyGameDefaults({
+    enableSteps: true,
+    decorImages: [
+      { id: 'decor-a', src: '', x: 0, y: 0, width: 10, height: 10 },
+      { id: 'decor-b', src: '', x: 0, y: 0, width: 10, height: 10, visibleFromStep: 1 },
+      { id: 'decor-c', src: '', x: 0, y: 0, width: 10, height: 10, visibleFromStep: 2 },
+      { id: 'decor-d', src: '', x: 0, y: 0, width: 10, height: 10, visibleFromStep: 0 }
+    ],
+    steps: [
+      { title: 'E1', activity: 'dnd', goodIds: '1', zoneIds: ['10'], linkPairs: [{ from: 'decor-c', to: 'x' }] },
+      { title: 'E2', activity: 'dnd', goodIds: '2', zoneIds: ['20'] },
+      { title: 'E3', activity: 'linking', linkPairs: [{ from: 'decor-d', to: '3' }] }
+    ]
+  });
+  assert.strictEqual(Engine.minStepIndexForElement(g, 'decor-a'), null);
+  assert.strictEqual(Engine.isElementVisibleAtStep(g, 'decor-a', 0), true);
+  assert.strictEqual(Engine.minStepIndexForElement(g, 'decor-b'), 1);
+  assert.strictEqual(Engine.isElementVisibleAtStep(g, 'decor-b', 0), false);
+  assert.strictEqual(Engine.isElementVisibleAtStep(g, 'decor-b', 1), true);
+  // visibleFromStep=2 prime sur le critère Relier de l’étape 1
+  assert.strictEqual(Engine.minStepIndexForElement(g, 'decor-c'), 2);
+  assert.strictEqual(Engine.isElementVisibleAtStep(g, 'decor-c', 0), false);
+  assert.strictEqual(Engine.isElementVisibleAtStep(g, 'decor-c', 2), true);
+  // visibleFromStep=0 : visible dès le début malgré paire à l’étape 3
+  assert.strictEqual(Engine.minStepIndexForElement(g, 'decor-d'), 0);
+  assert.strictEqual(Engine.isElementVisibleAtStep(g, 'decor-d', 0), true);
+});
+
 test('UI Relier uniquement par étape dans placement-inputs.html', () => {
   const html = fs.readFileSync(path.join(__dirname, '..', 'placement-inputs.html'), 'utf8');
   assert.ok(html.includes('value="linking"'));

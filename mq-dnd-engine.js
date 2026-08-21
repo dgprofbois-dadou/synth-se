@@ -1359,6 +1359,14 @@
         if (zoneMinStep[zs] == null || i < zoneMinStep[zs]) zoneMinStep[zs] = i;
       });
     });
+    // Images fixes : visibleFromStep (0-based) prime sur les critères d’étapes
+    (game && game.decorImages || []).forEach(function (d) {
+      if (!d || d.id == null || String(d.id).trim() === '') return;
+      if (d.visibleFromStep === '' || d.visibleFromStep == null) return;
+      var n = parseInt(d.visibleFromStep, 10);
+      if (!isFinite(n) || n < 0) return;
+      elementMinStep[String(d.id).trim()] = n;
+    });
     return { elementMinStep: elementMinStep, zoneMinStep: zoneMinStep };
   }
 
