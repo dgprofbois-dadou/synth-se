@@ -74,4 +74,4 @@ Les outils canvas (zones SVG, mode de liaison, tooltip) s’affichent dès que �
 - En **DnD** : une carte lâchée **hors** d’une zone de dépôt revient à sa place d’origine (pas de calage au point de dépôt).
 - **Placement exact** : une carte incorrecte reste **repositionnable** (glisser ou recliquer une autre zone) ; chaque nouvel essai faux ajoute un malus. Une carte correcte se fige.
 
-Les consignes restent visibles jusqu’à la réussite du jeu (`dnd-game-complete`), puis sont masquées.
+En mode élève et dans l’export, les consignes sont affichées en **haut à gauche de l’écran** (`position: absolute` sur le viewport / canvas), visibles pendant tout le jeu (pan / zoom compris), puis masquées à la réussite (`dnd-game-complete`).

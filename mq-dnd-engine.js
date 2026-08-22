@@ -1043,22 +1043,93 @@
       + '</svg>';
   }
 
+  function findInstructionsHudHost(gameContainer) {
+    if (typeof document === 'undefined') return null;
+    var vp = document.getElementById('viewport');
+    if (vp) return vp;
+    var canvas = document.getElementById('canvas-container') || document.querySelector('.canvas-container');
+    if (canvas) return canvas;
+    return gameContainer || null;
+  }
+
+  function findInstructionsEl(gameContainer) {
+    if (gameContainer) {
+      var inside = gameContainer.querySelector('.dnd-instructions');
+      if (inside) return inside;
+    }
+    if (typeof document === 'undefined') return null;
+    var gid = gameContainer && (gameContainer.getAttribute('data-dnd-gameid') || gameContainer.id || '');
+    var host = findInstructionsHudHost(gameContainer);
+    if (host && gid) {
+      var byGame = host.querySelector('.dnd-instructions[data-dnd-instr-for="' + gid + '"]');
+      if (byGame) return byGame;
+    }
+    if (host) {
+      var inHost = host.querySelector('.dnd-instructions');
+      if (inHost) return inHost;
+    }
+    return document.querySelector('.dnd-instructions');
+  }
+
+  function clearInstructionsHud(gameId) {
+    if (typeof document === 'undefined') return;
+    var sel = gameId
+      ? '.dnd-instructions-hud[data-dnd-instr-for="' + String(gameId) + '"]'
+      : '.dnd-instructions-hud';
+    Array.prototype.slice.call(document.querySelectorAll(sel)).forEach(function (n) {
+      if (n.parentNode) n.parentNode.removeChild(n);
+    });
+  }
+
+  function mountInstructionsHud(el, gameContainer) {
+    if (!el) return el;
+    var host = findInstructionsHudHost(gameContainer);
+    if (!host) host = gameContainer;
+    if (!host) return el;
+    var gid = gameContainer && (gameContainer.getAttribute('data-dnd-gameid') || gameContainer.id || '');
+    if (gid) {
+      el.setAttribute('data-dnd-instr-for', gid);
+      if (typeof document !== 'undefined') {
+        Array.prototype.slice.call(document.querySelectorAll('.dnd-instructions-hud[data-dnd-instr-for="' + gid + '"]')).forEach(function (old) {
+          if (old !== el && old.parentNode) old.parentNode.removeChild(old);
+        });
+      }
+    }
+    if (el.classList && el.classList.add) el.classList.add('dnd-instructions-hud');
+    else el.className = String(el.className || '') + ' dnd-instructions-hud';
+    if (el.parentNode !== host) host.appendChild(el);
+    return el;
+  }
+
   function applyInstructionsBoxToElement(el, game) {
     if (!el || !game) return;
     var box = normalizeInstructionsBox(game.instructionsBox, game);
     game.instructionsBox = box;
-    var gw = Math.max(1, parseInt(game.width, 10) || 800);
-    var gh = Math.max(1, parseInt(game.height, 10) || 400);
-    el.style.left = ((box.x / gw) * 100) + '%';
-    el.style.top = ((box.y / gh) * 100) + '%';
-    el.style.width = ((box.width / gw) * 100) + '%';
-    el.style.height = ((box.height / gh) * 100) + '%';
-    el.style.right = 'auto';
+    var hud = !!(el.classList && el.classList.contains && el.classList.contains('dnd-instructions-hud'));
+    if (hud) {
+      el.style.position = 'absolute';
+      el.style.left = '12px';
+      el.style.top = '12px';
+      el.style.right = 'auto';
+      el.style.bottom = 'auto';
+      el.style.width = 'auto';
+      el.style.height = 'auto';
+      el.style.maxWidth = 'min(560px, calc(100% - 24px))';
+      el.style.maxHeight = 'min(240px, 36vh)';
+    } else {
+      var gw = Math.max(1, parseInt(game.width, 10) || 800);
+      var gh = Math.max(1, parseInt(game.height, 10) || 400);
+      el.style.left = ((box.x / gw) * 100) + '%';
+      el.style.top = ((box.y / gh) * 100) + '%';
+      el.style.width = ((box.width / gw) * 100) + '%';
+      el.style.height = ((box.height / gh) * 100) + '%';
+      el.style.right = 'auto';
+    }
     el.style.fontFamily = box.font;
     el.style.fontSize = box.fontSize + 'px';
     el.style.fontWeight = box.bold ? 'bold' : '600';
     el.style.fontStyle = box.italic ? 'italic' : 'normal';
-    el.style.textAlign = box.align || 'center';
+    el.style.textAlign = box.align || (hud ? 'left' : 'center');
     el.style.background = box.bgColor;
     el.style.color = box.color;
     el.style.borderColor = box.borderColor;
@@ -2563,7 +2634,7 @@
       if (!hybrid) {
         var resultDiv = gameContainer.querySelector('.dnd-result') || gameContainer.querySelector('[id^="result"]');
         var scoreContainer = gameContainer.querySelector('.score-malus-container') || gameContainer.querySelector('[id^="score-malus"]');
-        var instructionsEl = gameContainer.querySelector('.dnd-instructions');
+        var instructionsEl = findInstructionsEl(gameContainer);
         if (ev.isComplete) {
           gameContainer.classList.add('dnd-game-complete');
           if (instructionsEl) { instructionsEl.hidden = true; instructionsEl.style.display = 'none'; }
@@ -2661,7 +2732,7 @@
     var gameId = gameConfig._gameId || gameContainer.getAttribute('data-dnd-gameid') || 'game';
     game._gameId = gameId;
 
-    var instructionsEl = gameContainer.querySelector('.dnd-instructions');
+    var instructionsEl = findInstructionsEl(gameContainer);
     var instructionsText = String(game.instructions || '').trim();
     if (!instructionsText && game.showInstructions !== false) {
       instructionsText = 'Maintenez le clic droit sur une image et glissez jusqu’à l’arrivée.';
@@ -2671,9 +2742,9 @@
       instructionsEl = document.createElement('div');
       instructionsEl.className = 'dnd-instructions';
       instructionsEl.setAttribute('role', 'status');
-      gameContainer.appendChild(instructionsEl);
     }
     if (instructionsEl) {
+      if (showInstructions) mountInstructionsHud(instructionsEl, gameContainer);
       applyInstructionsBoxToElement(instructionsEl, game);
       if (showInstructions) {
         instructionsEl.textContent = instructionsText;
@@ -2734,7 +2805,7 @@
     var resultDiv = gameContainer.querySelector('.dnd-result') || gameContainer.querySelector('[id^="result"]');
     var scoreContainer = gameContainer.querySelector('.score-malus-container') ||
       gameContainer.querySelector('[id^="score-malus"]');
-    var instructionsEl = gameContainer.querySelector('.dnd-instructions');
+    var instructionsEl = findInstructionsEl(gameContainer);
     var stepsEnabled = !!(game.enableSteps && game.steps && game.steps.length);
     var lastStepIndex = -1;
     var lastActiveStepId = null;
@@ -2869,8 +2940,8 @@
         instructionsEl.className = 'dnd-instructions';
         instructionsEl.setAttribute('role', 'status');
         instructionsEl.setAttribute('aria-live', 'polite');
-        gameContainer.appendChild(instructionsEl);
       }
+      mountInstructionsHud(instructionsEl, gameContainer);
       applyInstructionsBoxToElement(instructionsEl, game);
       return instructionsEl;
     }
@@ -4158,6 +4229,10 @@
     stepInstructionLabel: stepInstructionLabel,
     normalizeInstructionsBox: normalizeInstructionsBox,
     applyInstructionsBoxToElement: applyInstructionsBoxToElement,
+    findInstructionsHudHost: findInstructionsHudHost,
+    findInstructionsEl: findInstructionsEl,
+    mountInstructionsHud: mountInstructionsHud,
+    clearInstructionsHud: clearInstructionsHud,
     normalizeRelierBtn: normalizeRelierBtn,
     applyRelierBtnLayout: applyRelierBtnLayout,
     relierLogoSvg: relierLogoSvg,

@@ -1089,6 +1089,22 @@
             white-space: pre-wrap;
             overflow: auto;
         }
+        .dnd-instructions.dnd-instructions-hud {
+            position: absolute;
+            top: 12px;
+            left: 12px;
+            right: auto;
+            bottom: auto;
+            z-index: 250;
+            width: auto;
+            height: auto;
+            max-width: min(560px, calc(100% - 24px));
+            max-height: min(240px, 36vh);
+            text-align: left;
+        }
+        body[data-mode="admin"] .dnd-instructions-hud {
+            display: none !important;
+        }
         .dnd-game-complete .dnd-instructions,
         .dnd-instructions.dnd-instructions-done {
             display: none !important;
@@ -5166,6 +5182,9 @@
                     state.dndTestJump = null;
                     state.dndPlayApis = {};
                     mqHideDndTestBar();
+                    if (window.MqDndEngine && MqDndEngine.clearInstructionsHud) {
+                        MqDndEngine.clearInstructionsHud();
+                    }
                     const dndContainer = document.getElementById('dndGamesPreview');
                     if (dndContainer) {
                         dndContainer.innerHTML = '';
@@ -8389,6 +8408,9 @@
                 if (!container) return;
                 if (state.mode !== 'student') return;
 
+                if (window.MqDndEngine && MqDndEngine.clearInstructionsHud) {
+                    MqDndEngine.clearInstructionsHud();
+                }
                 container.innerHTML = '';
                 container.style.position = 'absolute';
                 container.style.display = 'block';
@@ -8445,10 +8467,14 @@
                                 ? MqDndEngine.stepInstructionLabel(st0, 0, gameConfig.steps.length)
                                 : (st0 ? ((st0.title || 'Étape 1') + ' (1/' + gameConfig.steps.length + ')') : '');
                             instrEl.textContent = (label0 ? label0 + '\n' : '') + instrText;
+                            if (window.MqDndEngine && MqDndEngine.mountInstructionsHud) {
+                                MqDndEngine.mountInstructionsHud(instrEl, gameEl);
+                            } else {
+                                gameEl.appendChild(instrEl);
+                            }
                             if (window.MqDndEngine && MqDndEngine.applyInstructionsBoxToElement) {
                                 MqDndEngine.applyInstructionsBoxToElement(instrEl, gameConfig);
                             }
-                            gameEl.appendChild(instrEl);
                         }
                     }
 
@@ -18421,12 +18447,12 @@
                     + '<input id="dndGame' + n + 'InstrColor" type="color" value="#78350f" title="Texte" style="width:28px;height:22px;padding:0;border:1px solid #ccc;">'
                     + '<input id="dndGame' + n + 'InstrBorder" type="color" value="#f59e0b" title="Bordure" style="width:28px;height:22px;padding:0;border:1px solid #ccc;">'
                     + '</div>'
-                    + '<p style="margin:8px 0 0;font-size:10px;color:#64748b;">Glissez la zone jaune sur le canvas, ou réglez X/Y/L/H ici.</p>'
+                    + '<p style="margin:8px 0 0;font-size:10px;color:#64748b;">Police et couleurs s’appliquent à l’affichage élève (haut-gauche de l’écran). La zone jaune est un aperçu admin.</p>'
                     + '</details>'
                     + '<div class="row mq-dnd-instr-simple" style="flex-direction:column;align-items:stretch;gap:4px;">'
                     + '<label style="width:auto;font-size:12px;font-weight:bold;">Consignes (affichées pendant le jeu)</label>'
                     + '<textarea id="dndGame' + n + 'Instructions" rows="3" placeholder="Ex : Placez chaque étiquette dans la bonne zone." style="width:100%;resize:vertical;font-size:12px;padding:6px;border:1px solid #ccc;border-radius:6px;box-sizing:border-box;"></textarea>'
-                    + '<p style="margin:0;font-size:10px;color:#64748b;">Visible jusqu’à la réussite. Pour plusieurs consignes, activez « Jeu par étapes ».</p>'
+                    + '<p style="margin:0;font-size:10px;color:#64748b;">En mode élève : affichée en haut à gauche de l’écran (position absolute), visible pendant tout le jeu. Pour plusieurs consignes, activez « Jeu par étapes ».</p>'
                     + '</div>'
                     + '<div class="row mq-dnd-steps-only" style="display:none;flex-direction:column;align-items:stretch;gap:6px;">'
                     + '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">'

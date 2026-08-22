@@ -269,6 +269,7 @@ test('UI consignes dans placement-inputs.html', () => {
   assert.ok(html.includes('Instructions'));
   assert.ok(html.includes('ShowInstructions'));
   assert.ok(html.includes('dnd-instructions'));
+  assert.ok(html.includes('dnd-instructions-hud'));
   assert.ok(html.includes('Consignes (affichées pendant le jeu)'));
   assert.ok(html.includes('EnableSteps'));
   assert.ok(html.includes('Jeu par étapes'));
@@ -280,6 +281,26 @@ test('UI consignes dans placement-inputs.html', () => {
   assert.ok(html.includes('mqWrapDndSubRowFold'));
   assert.ok(html.includes('Ajouter sans remplacer'));
   assert.ok(html.includes('btnAddGridGame'));
+});
+
+test('consigne HUD haut-gauche', () => {
+  assert.strictEqual(typeof Engine.findInstructionsHudHost, 'function');
+  assert.strictEqual(typeof Engine.mountInstructionsHud, 'function');
+  assert.strictEqual(typeof Engine.clearInstructionsHud, 'function');
+  const el = {
+    style: {},
+    classList: {
+      _c: { 'dnd-instructions-hud': true },
+      contains: function (c) { return !!this._c[c]; },
+      add: function (c) { this._c[c] = true; }
+    }
+  };
+  Engine.applyInstructionsBoxToElement(el, { width: 800, height: 400, instructionsBox: { fontSize: 18, color: '#111111' } });
+  assert.strictEqual(el.style.position, 'absolute');
+  assert.strictEqual(el.style.left, '12px');
+  assert.strictEqual(el.style.top, '12px');
+  assert.ok(String(el.style.maxWidth).indexOf('560px') >= 0);
+  assert.strictEqual(el.style.color, '#111111');
 });
 
 console.log('\n=== Test étapes / consignes ===');
