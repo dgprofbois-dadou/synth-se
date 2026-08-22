@@ -5480,6 +5480,26 @@
                 return n;
             }
 
+            /** Met à jour pageIndex + localX/localY d’un jeu DnD (toujours, même si le stamp global échoue). */
+            function mqStampGameBinding(g) {
+                if (!g) return;
+                if (!Number.isFinite(g.x)) g.x = 0;
+                if (!Number.isFinite(g.y)) g.y = 0;
+                const layouts = window._mqStageLayouts || [];
+                if (!layouts.length) {
+                    if (g.pageIndex == null) g.pageIndex = 0;
+                    g.localX = Math.round(g.x || 0);
+                    g.localY = Math.round(g.y || 0);
+                    return;
+                }
+                const cx = (g.x || 0) + (g.width || 0) / 2;
+                const cy = (g.y || 0) + (g.height || 0) / 2;
+                const { index, layout } = mqFindPageForPoint(cx, cy);
+                g.pageIndex = index;
+                g.localX = Math.round((g.x || 0) - (layout.stageX || 0));
+                g.localY = Math.round((g.y || 0) - (layout.stageY || 0));
+            }
+
             /** Enregistre pageIndex + coords locales pour chaque élément (lien durable page 1 / page 2). */
             function mqStampPageBindings() {
                 if (!mqStageDimensionsReliable()) return false;
@@ -5499,6 +5519,13 @@
                     state.boxes.forEach((b) => {
                         if (b.pageIndex != null) anyBound = true;
                         maxY = Math.max(maxY, (b.y || 0) + (b.h || 0) / 2);
+                    });
+                    // Inclure les jeux DnD : sinon un jeu page 2 ne suffit pas à autoriser le stamp
+                    mqGameIds().forEach((gid) => {
+                        const g = state.dndGames[gid];
+                        if (!g) return;
+                        if (g.pageIndex != null) anyBound = true;
+                        maxY = Math.max(maxY, (g.y || 0) + (g.height || 0) / 2);
                     });
                     if (!anyBound && fullH > p1H * 1.35 && maxY < p1H && (state.hotspots.length + state.boxes.length) > 0) {
                         return false;
@@ -5523,14 +5550,7 @@
                     b.localY = Math.round((b.y || 0) - layout.stageY);
                 });
                 mqGameIds().forEach((gid) => {
-                    const g = state.dndGames[gid];
-                    if (!g) return;
-                    const cx = (g.x || 0) + (g.width || 0) / 2;
-                    const cy = (g.y || 0) + (g.height || 0) / 2;
-                    const { index, layout } = mqFindPageForPoint(cx, cy);
-                    g.pageIndex = index;
-                    g.localX = Math.round((g.x || 0) - layout.stageX);
-                    g.localY = Math.round((g.y || 0) - layout.stageY);
+                    mqStampGameBinding(state.dndGames[gid]);
                 });
                 return true;
             }
@@ -5605,7 +5625,20 @@
                     if (g.localX != null && g.localY != null) {
                         const nx = Math.round(Number(g.localX) + lay.stageX);
                         const ny = Math.round(Number(g.localY) + lay.stageY);
-                        if (nx !== g.x || ny !== g.y) { g.x = nx; g.y = ny; n++; }
+                        // Si x/y absolus sont déjà sur la bonne page mais divergent du local,
+                        // faire confiance aux absolus (évite un localX/Y périmé après un déplacement).
+                        const absPage = mqFindPageForPoint(
+                            (g.x || 0) + (g.width || 0) / 2,
+                            (g.y || 0) + (g.height || 0) / 2
+                        );
+                        if (absPage.index === idx
+                            && Number.isFinite(g.x) && Number.isFinite(g.y)
+                            && (Math.abs((g.x || 0) - nx) > 1 || Math.abs((g.y || 0) - ny) > 1)) {
+                            g.localX = Math.round((g.x || 0) - lay.stageX);
+                            g.localY = Math.round((g.y || 0) - lay.stageY);
+                        } else if (nx !== g.x || ny !== g.y) {
+                            g.x = nx; g.y = ny; n++;
+                        }
                     } else {
                         const cur = mqFindPageForPoint(
                             (g.x || 0) + (g.width || 0) / 2,
@@ -12665,10 +12698,19 @@
                 g.zoneWidth = parseInt(g.zoneWidth, 10) || defaults.zoneWidth || 250;
                 g.zoneHeight = parseInt(g.zoneHeight, 10) || defaults.zoneHeight || 250;
                 g.zoneGap = parseInt(g.zoneGap, 10) || defaults.zoneGap || 10;
-                if (typeof g.x !== 'number') g.x = defaults.x;
-                if (typeof g.y !== 'number') g.y = defaults.y;
-                if (typeof g.width !== 'number') g.width = defaults.width;
-                if (typeof g.height !== 'number') g.height = defaults.height;
+                if (typeof g.x !== 'number' || !Number.isFinite(g.x)) g.x = defaults.x;
+                if (typeof g.y !== 'number' || !Number.isFinite(g.y)) g.y = defaults.y;
+                if (typeof g.width !== 'number' || !Number.isFinite(g.width)) g.width = defaults.width;
+                if (typeof g.height !== 'number' || !Number.isFinite(g.height)) g.height = defaults.height;
+                // Conserver / normaliser les bindings de page (évite un reset au reload)
+                if (typeof g.localX === 'number' && Number.isFinite(g.localX)
+                    && typeof g.localY === 'number' && Number.isFinite(g.localY)) {
+                    /* ok */
+                } else if (saved && typeof saved.localX === 'number' && typeof saved.localY === 'number') {
+                    g.localX = saved.localX;
+                    g.localY = saved.localY;
+                }
+                if (g.pageIndex == null && saved && saved.pageIndex != null) g.pageIndex = saved.pageIndex;
                 if (!g.bgColor) g.bgColor = defaults.bgColor;
                 const preservedGoodIds = (saved && saved.goodIds != null) ? saved.goodIds : g.goodIds;
                 if (window.MqDndEngine) {
@@ -15511,13 +15553,20 @@
                     (e.clientY || 0) - (mqDndUiDragEl.startY || 0)
                 ) < 6;
                 const hadGameGesture = !!(mqDndUiDragGame || mqDndUiResizeGame);
+                const finishedGameId = mqDndUiDragGame || (mqDndUiResizeGame && mqDndUiResizeGame.gameId);
                 mqDndUiDragEl = null;
                 mqDndUiResizeEl = null;
                 mqDndUiDragGame = null;
                 mqDndUiResizeGame = null;
                 mqClearDndUiDragChrome();
                 if (!movedEl && !hadGameGesture) return;
-                try { saveLocal(); } catch (err) { console.warn(err); }
+                if (hadGameGesture && finishedGameId && state.dndGames[finishedGameId]) {
+                    try { mqStampGameBinding(state.dndGames[finishedGameId]); } catch (err) { /* ignore */ }
+                }
+                try {
+                    const r = saveLocal();
+                    if (r && r.skipped && typeof scheduleSaveLocal === 'function') scheduleSaveLocal();
+                } catch (err) { console.warn(err); }
                 if (movedEl && movedEl.type === 'decor') renderDecorList(movedEl.gameId);
                 if (movedEl && movedEl.type === 'decorText') renderDecorTextList(movedEl.gameId);
                 if (movedEl && movedEl.type === 'linkZone') {
@@ -15665,8 +15714,14 @@
                         const game = state.dndGames[mqDndUiDragGame];
                         if (!game) return;
                         const stageRect = stage.getBoundingClientRect();
-                        game.x = Math.round((e.clientX - stageRect.left - state.tx) / state.scale - mqDndUiDragGameOffX);
-                        game.y = Math.round((e.clientY - stageRect.top - state.ty) / state.scale - mqDndUiDragGameOffY);
+                        const sc = state.scale || 1;
+                        let nx = Math.round((e.clientX - stageRect.left - state.tx) / sc - mqDndUiDragGameOffX);
+                        let ny = Math.round((e.clientY - stageRect.top - state.ty) / sc - mqDndUiDragGameOffY);
+                        if (!Number.isFinite(nx)) nx = game.x || 0;
+                        if (!Number.isFinite(ny)) ny = game.y || 0;
+                        game.x = nx;
+                        game.y = ny;
+                        mqStampGameBinding(game);
                         mqApplyGameContainerBox(mqDndUiDragGame);
                     } else if (mqDndUiResizeGame) {
                         const info = mqDndUiResizeGame;
@@ -15690,10 +15745,11 @@
                             if (corner.indexOf('n') >= 0) y = info.origY + (info.origH - minH);
                             h = minH;
                         }
-                        game.x = Math.round(x);
-                        game.y = Math.round(y);
-                        game.width = Math.round(w);
-                        game.height = Math.round(h);
+                        game.x = Number.isFinite(x) ? Math.round(x) : (game.x || 0);
+                        game.y = Number.isFinite(y) ? Math.round(y) : (game.y || 0);
+                        game.width = Number.isFinite(w) ? Math.round(w) : (game.width || 200);
+                        game.height = Number.isFinite(h) ? Math.round(h) : (game.height || 150);
+                        mqStampGameBinding(game);
                         mqApplyGameContainerBox(info.gameId);
                     }
                 });
@@ -17562,12 +17618,15 @@
                     const newY = (e.clientY - stageRect.top) / state.scale - dragOffsetY;
 
                     // Mettre à jour la position dans le state
-                    state.dndGames[gameId].x = Math.max(0, Math.round(newX));
-                    state.dndGames[gameId].y = Math.max(0, Math.round(newY));
+                    const gMove = state.dndGames[gameId];
+                    if (!gMove) return;
+                    gMove.x = Math.max(0, Math.round(newX));
+                    gMove.y = Math.max(0, Math.round(newY));
+                    mqStampGameBinding(gMove);
 
                     // Mise à jour visuelle immédiate
-                    el.style.left = state.dndGames[gameId].x + 'px';
-                    el.style.top = state.dndGames[gameId].y + 'px';
+                    el.style.left = gMove.x + 'px';
+                    el.style.top = gMove.y + 'px';
                 });
 
                 document.addEventListener('mouseup', () => {
@@ -17576,7 +17635,10 @@
                         document.body.style.userSelect = '';
 
                         // Sauvegarder la nouvelle position
-                        saveLocal();
+                        const gEnd = state.dndGames[draggedGame.gameId];
+                        if (gEnd) mqStampGameBinding(gEnd);
+                        const r = saveLocal();
+                        if (r && r.skipped && typeof scheduleSaveLocal === 'function') scheduleSaveLocal();
 
                         draggedGame = null;
                     }
