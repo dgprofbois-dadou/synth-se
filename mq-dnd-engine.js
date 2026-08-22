@@ -1097,8 +1097,76 @@
     }
     if (el.classList && el.classList.add) el.classList.add('dnd-instructions-hud');
     else el.className = String(el.className || '') + ' dnd-instructions-hud';
+    if (el.classList && el.classList.remove) el.classList.remove('dnd-instructions-active');
     if (el.parentNode !== host) host.appendChild(el);
+    attachInstructionsFocusGuard();
     return el;
+  }
+
+  var instrFocusBound = false;
+  var OTHER_ACTIVITY_SEL = [
+    '.box', '.input-wrapper', 'input', 'textarea', 'select',
+    '#left', '#mqRail', '#topbar', '.controls', '.pdf-buttons',
+    '.hotspot-group', '#hotspots', '#hotspots-ui', '.mq-topbar'
+  ].join(',');
+
+  function pointInRect(x, y, r) {
+    return !!r && x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+  }
+
+  function eventHitsDndGame(e, gameEl) {
+    if (!e || !gameEl) return false;
+    var t = e.target;
+    if (t && t.closest && t.closest('.drag-game') === gameEl) return true;
+    if (typeof e.clientX !== 'number' || typeof e.clientY !== 'number') return false;
+    if (!gameEl.getBoundingClientRect) return false;
+    return pointInRect(e.clientX, e.clientY, gameEl.getBoundingClientRect());
+  }
+
+  function gameFromPointerEvent(e) {
+    if (!e || typeof document === 'undefined') return null;
+    var t = e.target;
+    if (t && t.closest) {
+      if (t.closest(OTHER_ACTIVITY_SEL) && !t.closest('.drag-game')) return null;
+      var inside = t.closest('.drag-game');
+      if (inside) return inside;
+    }
+    var x = e.clientX;
+    var y = e.clientY;
+    if (typeof x !== 'number' || typeof y !== 'number') return null;
+    var hit = null;
+    Array.prototype.forEach.call(document.querySelectorAll('.drag-game'), function (el) {
+      if (pointInRect(x, y, el.getBoundingClientRect())) hit = el;
+    });
+    return hit;
+  }
+
+  function setInstructionsHudActive(gameEl, on) {
+    if (typeof document === 'undefined') return;
+    var gid = gameEl && (gameEl.getAttribute('data-dnd-gameid') || gameEl.id || '');
+    Array.prototype.forEach.call(document.querySelectorAll('.dnd-instructions-hud'), function (el) {
+      if (el.classList && el.classList.contains('dnd-instructions-done')) {
+        el.classList.remove('dnd-instructions-active');
+        return;
+      }
+      var mine = !gid || el.getAttribute('data-dnd-instr-for') === gid || el.getAttribute('data-dnd-instr-for') === String(gameEl && gameEl.id || '');
+      if (on && mine) el.classList.add('dnd-instructions-active');
+      else el.classList.remove('dnd-instructions-active');
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('.dnd-game-focused'), function (el) {
+      if (!on || el !== gameEl) el.classList.remove('dnd-game-focused');
+    });
+    if (on && gameEl && gameEl.classList) gameEl.classList.add('dnd-game-focused');
+  }
+
+  function attachInstructionsFocusGuard() {
+    if (typeof document === 'undefined' || instrFocusBound) return;
+    instrFocusBound = true;
+    document.addEventListener('pointerdown', function (e) {
+      var game = gameFromPointerEvent(e);
+      if (game) setInstructionsHudActive(game, true);
+      else setInstructionsHudActive(null, false);
+    }, true);
   }
 
   function applyInstructionsBoxToElement(el, game) {
@@ -4233,6 +4301,10 @@
     findInstructionsEl: findInstructionsEl,
     mountInstructionsHud: mountInstructionsHud,
     clearInstructionsHud: clearInstructionsHud,
+    attachInstructionsFocusGuard: attachInstructionsFocusGuard,
+    setInstructionsHudActive: setInstructionsHudActive,
+    eventHitsDndGame: eventHitsDndGame,
+    pointInRect: pointInRect,
     normalizeRelierBtn: normalizeRelierBtn,
     applyRelierBtnLayout: applyRelierBtnLayout,
     relierLogoSvg: relierLogoSvg,

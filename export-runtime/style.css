@@ -159,6 +159,9 @@ input::placeholder {
     max-height: min(240px, 36vh);
     text-align: left;
 }
+.dnd-instructions.dnd-instructions-hud:not(.dnd-instructions-active) {
+    display: none !important;
+}
 .canvas-container > .dnd-instructions-hud {
     top: 64px;
 }

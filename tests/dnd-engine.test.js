@@ -287,6 +287,16 @@ test('consigne HUD haut-gauche', () => {
   assert.strictEqual(typeof Engine.findInstructionsHudHost, 'function');
   assert.strictEqual(typeof Engine.mountInstructionsHud, 'function');
   assert.strictEqual(typeof Engine.clearInstructionsHud, 'function');
+  assert.strictEqual(typeof Engine.attachInstructionsFocusGuard, 'function');
+  assert.ok(Engine.pointInRect(20, 20, { left: 10, right: 40, top: 10, bottom: 40 }));
+  assert.ok(!Engine.pointInRect(5, 20, { left: 10, right: 40, top: 10, bottom: 40 }));
+  assert.ok(Engine.eventHitsDndGame(
+    { clientX: 15, clientY: 15, target: null },
+    { getBoundingClientRect: function () { return { left: 10, right: 40, top: 10, bottom: 40 }; } }
+  ));
+  const html = fs.readFileSync(path.join(__dirname, '..', 'placement-inputs.html'), 'utf8');
+  assert.ok(html.includes('dnd-instructions-active'));
+  assert.ok(html.includes('dnd-instructions-hud:not(.dnd-instructions-active)'));
   const el = {
     style: {},
     classList: {

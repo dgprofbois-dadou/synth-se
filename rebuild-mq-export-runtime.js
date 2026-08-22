@@ -121,6 +121,9 @@ function rebuild() {
   max-height: min(240px, 36vh);
   text-align: left;
 }
+.dnd-instructions.dnd-instructions-hud:not(.dnd-instructions-active) {
+  display: none !important;
+}
 .canvas-container > .dnd-instructions-hud {
   top: 64px;
 }
@@ -372,6 +375,9 @@ g.dnd-link-zone.dnd-link-node.dnd-link-from {
   max-height: min(240px, 36vh);
   text-align: left;
 }
+.dnd-instructions.dnd-instructions-hud:not(.dnd-instructions-active) {
+  display: none !important;
+}
 .canvas-container > .dnd-instructions-hud {
   top: 64px;
 }
@@ -396,7 +402,17 @@ g.dnd-link-zone.dnd-link-node.dnd-link-from {
   max-height: min(240px, 36vh);
   text-align: left;
 }
+.dnd-instructions.dnd-instructions-hud:not(.dnd-instructions-active) {
+  display: none !important;
+}
 .canvas-container > .dnd-instructions-hud { top: 64px; }
+`;
+  }
+  if (styleCss.indexOf('dnd-instructions-active') < 0) {
+    styleCss += `
+.dnd-instructions.dnd-instructions-hud:not(.dnd-instructions-active) {
+  display: none !important;
+}
 `;
   }
   if (styleCss.indexOf('.dnd-links-layer') < 0) {

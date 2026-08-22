@@ -1102,6 +1102,9 @@
             max-height: min(240px, 36vh);
             text-align: left;
         }
+        .dnd-instructions.dnd-instructions-hud:not(.dnd-instructions-active) {
+            display: none !important;
+        }
         body[data-mode="admin"] .dnd-instructions-hud {
             display: none !important;
         }
@@ -18452,7 +18455,7 @@
                     + '<div class="row mq-dnd-instr-simple" style="flex-direction:column;align-items:stretch;gap:4px;">'
                     + '<label style="width:auto;font-size:12px;font-weight:bold;">Consignes (affichées pendant le jeu)</label>'
                     + '<textarea id="dndGame' + n + 'Instructions" rows="3" placeholder="Ex : Placez chaque étiquette dans la bonne zone." style="width:100%;resize:vertical;font-size:12px;padding:6px;border:1px solid #ccc;border-radius:6px;box-sizing:border-box;"></textarea>'
-                    + '<p style="margin:0;font-size:10px;color:#64748b;">En mode élève : affichée en haut à gauche de l’écran (position absolute), visible pendant tout le jeu. Pour plusieurs consignes, activez « Jeu par étapes ».</p>'
+                    + '<p style="margin:0;font-size:10px;color:#64748b;">En mode élève : apparaît en haut à gauche seulement après un clic dans la zone du jeu, puis reste visible tant que le jeu est actif. Pour plusieurs consignes, activez « Jeu par étapes ».</p>'
                     + '</div>'
                     + '<div class="row mq-dnd-steps-only" style="display:none;flex-direction:column;align-items:stretch;gap:6px;">'
                     + '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">'
