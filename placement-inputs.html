@@ -10853,16 +10853,42 @@
                 return group.length >= 2 ? group : null;
             }
             window.mqSetDndSel = function (sel, opts) {
+                opts = opts || {};
+                const prev = mqDndSel;
                 mqDndSel = sel ? mqDndNormalizeSel(sel) : null;
-                if (!(opts && opts.keepMulti)) mqDndClearMulti();
+                if (!opts.keepMulti) mqDndClearMulti();
                 mqRefreshDndSelectionHighlight();
                 if (mqDndSel && mqDndSel.type === 'dropzone' && typeof window.mqRefreshDropzoneInspector === 'function') {
                     window.mqRefreshDropzoneInspector(mqDndSel.gameId, parseInt(mqDndSel.index, 10));
                 }
                 if (mqDndSel && (mqDndSel.type === 'draggable' || mqDndSel.type === 'decor' || mqDndSel.type === 'decorText')) {
+                    if (opts.skipReveal) return;
+                    const same = !!(prev && mqDndSel
+                        && prev.gameId === mqDndSel.gameId
+                        && prev.type === mqDndSel.type
+                        && String(prev.index) === String(mqDndSel.index));
+                    // Pendant une saisie dans le panneau gauche, ne pas re-scroller vers la carte image
+                    if (same && mqLeftEditableFocused()) return;
                     mqRevealItemCard(mqDndSel.gameId, mqDndSel.type, mqDndSel.index);
                 }
             };
+            /** Champ éditable du panneau gauche actuellement focusé (sinon null). */
+            function mqLeftEditableFocused() {
+                const ae = document.activeElement;
+                if (!ae || !ae.closest) return null;
+                const left = document.getElementById('left');
+                if (!left || !left.contains(ae)) return null;
+                const tag = ae.tagName;
+                if (tag === 'TEXTAREA' || tag === 'SELECT') return ae;
+                if (tag === 'INPUT') {
+                    const t = String(ae.type || 'text').toLowerCase();
+                    if (t === 'button' || t === 'submit' || t === 'checkbox' || t === 'radio'
+                        || t === 'file' || t === 'hidden' || t === 'reset') return null;
+                    return ae;
+                }
+                if (ae.isContentEditable) return ae;
+                return null;
+            }
             /** Défile uniquement #left (et listes internes), sans remonter tout le panneau. */
             function mqScrollLeftToEl(el) {
                 if (!el) return;
@@ -10946,12 +10972,15 @@
                 };
                 const list = document.getElementById(ids[type]);
                 if (!list) return;
-                mqEnsureDndInspectorTab();
                 const idx = String(index);
+                const openCard = list.querySelector('.mq-drag-card[data-index="' + idx + '"]');
+                // Saisie ailleurs dans #left : ne pas fermer/ouvrir/scroller les cartes
+                const editing = mqLeftEditableFocused();
+                if (editing && (!openCard || !openCard.contains(editing))) return;
+                mqEnsureDndInspectorTab();
                 list.querySelectorAll('.mq-drag-card').forEach((card) => {
                     mqSetItemCardOpen(card, card.getAttribute('data-index') === idx);
                 });
-                const openCard = list.querySelector('.mq-drag-card[data-index="' + idx + '"]');
                 if (openCard) mqScrollLeftToEl(openCard);
             }
             window.mqRevealItemCard = mqRevealItemCard;
@@ -15436,12 +15465,12 @@
                 attachDndTooltips();
                 mqBindLinkZoneAdminHover();
 
-                // Restaurer la sélection (contour + panneau gauche) — multi-sélection Maj+clic incluse
+                // Restaurer la sélection canvas uniquement (pas de reveal panneau :
+                // sinon chaque saisie dans #left re-scrolle vers la carte image sélectionnée)
                 if (mqDndMultiSel && mqDndMultiSel.length) {
                     mqRefreshDndSelectionHighlight();
                 } else if (mqDndSel && mqDndSel.gameId) {
-                    const still = document.querySelector(mqDndSelector(mqDndSel));
-                    if (still && window.mqSetDndSel) window.mqSetDndSel(mqDndSel);
+                    mqRefreshDndSelectionHighlight();
                 }
             }
 
