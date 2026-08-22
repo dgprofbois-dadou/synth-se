@@ -1476,6 +1476,22 @@
         .mq-dnd-step-kind.is-both { background: #ede9fe; color: #5b21b6; }
         .mq-dnd-step-body { display: none; padding: 0 8px 8px; }
         .mq-dnd-step-card[data-open="1"] .mq-dnd-step-body { display: block; }
+        .mq-dnd-step-eye {
+            font-size: 12px;
+            line-height: 1;
+            padding: 2px 6px;
+            cursor: pointer;
+            background: #f8fafc;
+            border: 1px solid #cbd5e1;
+            border-radius: 4px;
+            flex: 0 0 auto;
+        }
+        .mq-dnd-step-eye:hover { background: #e2e8f0; }
+        .mq-dnd-step-eye.is-off {
+            opacity: 0.5;
+            background: #e2e8f0;
+            border-color: #94a3b8;
+        }
         .mq-dnd-steps-fold-btn {
             font-size: 10px !important;
             padding: 3px 8px !important;
@@ -4491,6 +4507,8 @@
                 hsTransform: null,   // { hsId } quand le mode Transform (poignées) est actif
                 draggingScale: null, // état du redimensionnement en cours via une poignée
                 adminSpellcheck: localStorage.getItem('mq_admin_spellcheck_v1') !== '0',
+                /** Masquage admin par étape (session) : { gameId: number[] } */
+                dndAdminHiddenSteps: {},
 
                 // Configuration des jeux DnD
                 dndGames: {
@@ -14589,9 +14607,11 @@
                 const list = document.getElementById('dndGame' + n + 'StepsList');
                 const captured = mqCaptureOpenStepIndices(list) || [];
                 g.steps.splice(index, 1);
+                mqRemapAdminHiddenSteps(gameId, (i) => (i === index ? null : (i > index ? i - 1 : i)));
                 const remapped = captured.filter((i) => i !== index).map((i) => (i > index ? i - 1 : i));
                 renderStepsList(gameId, { openIndices: remapped });
                 if (typeof renderDecorList === 'function') renderDecorList(gameId);
+                if (typeof renderDndGamesPreview === 'function') renderDndGamesPreview();
                 scheduleSaveLocal();
             };
             /** Mode élève sur une étape précise (ignore les prérequis des étapes précédentes). */
@@ -14687,6 +14707,11 @@
                 const tmp = g.steps[index];
                 g.steps[index] = g.steps[j];
                 g.steps[j] = tmp;
+                mqRemapAdminHiddenSteps(gameId, (i) => {
+                    if (i === index) return j;
+                    if (i === j) return index;
+                    return i;
+                });
                 const remapped = captured.map((i) => {
                     if (i === index) return j;
                     if (i === j) return index;
@@ -14856,6 +14881,66 @@
                 if (toggle) toggle.setAttribute('aria-expanded', open ? 'false' : 'true');
                 if (ch) ch.textContent = open ? '▸' : '▾';
             }
+            /** Indices d’étapes masquées sur le canvas admin (config temporaire, non exportée). */
+            function mqAdminHiddenStepSet(gameId) {
+                if (!state.dndAdminHiddenSteps) state.dndAdminHiddenSteps = {};
+                if (!state.dndAdminHiddenSteps[gameId]) state.dndAdminHiddenSteps[gameId] = [];
+                return state.dndAdminHiddenSteps[gameId];
+            }
+            function mqIsAdminStepHidden(gameId, stepIndex) {
+                return mqAdminHiddenStepSet(gameId).indexOf(stepIndex) >= 0;
+            }
+            /** IDs d’images / zones à masquer sur le canvas admin selon les étapes « œil ». */
+            function mqAdminHiddenMask(gameId, g) {
+                const hiddenSteps = mqAdminHiddenStepSet(gameId).slice();
+                const out = { elementIds: new Set(), zoneIds: new Set(), hiddenSteps: new Set(hiddenSteps) };
+                if (!g || !hiddenSteps.length || !g.enableSteps || !Array.isArray(g.steps) || !g.steps.length) return out;
+                const eng = window.MqDndEngine;
+                hiddenSteps.forEach((stepIdx) => {
+                    const step = g.steps[stepIdx];
+                    if (!step) return;
+                    if (eng && eng.idsReferencedByStep) {
+                        Object.keys(eng.idsReferencedByStep(step)).forEach((id) => out.elementIds.add(String(id)));
+                    }
+                    if (eng && eng.effectiveStepZoneIds) {
+                        eng.effectiveStepZoneIds(step).forEach((zid) => out.zoneIds.add(String(zid)));
+                    }
+                });
+                if (eng && eng.buildStepOwnership) {
+                    const own = eng.buildStepOwnership(g);
+                    Object.keys(own.elementMinStep || {}).forEach((id) => {
+                        const min = own.elementMinStep[id];
+                        if (min != null && out.hiddenSteps.has(min)) out.elementIds.add(String(id));
+                    });
+                    Object.keys(own.zoneMinStep || {}).forEach((zid) => {
+                        const min = own.zoneMinStep[zid];
+                        if (min != null && out.hiddenSteps.has(min)) out.zoneIds.add(String(zid));
+                    });
+                }
+                return out;
+            }
+            window.toggleAdminStepVisibility = function (gameId, stepIndex) {
+                const idx = parseInt(stepIndex, 10) || 0;
+                const arr = mqAdminHiddenStepSet(gameId);
+                const pos = arr.indexOf(idx);
+                if (pos >= 0) arr.splice(pos, 1);
+                else arr.push(idx);
+                arr.sort((a, b) => a - b);
+                renderStepsList(gameId);
+                if (typeof renderDndGamesPreview === 'function') renderDndGamesPreview();
+            };
+            /** Réindexe les masquages admin après déplacement / suppression d’étape. */
+            function mqRemapAdminHiddenSteps(gameId, mapFn) {
+                const arr = mqAdminHiddenStepSet(gameId);
+                if (!arr.length) return;
+                const next = [];
+                arr.forEach((i) => {
+                    const ni = mapFn(i);
+                    if (ni != null && ni >= 0 && next.indexOf(ni) < 0) next.push(ni);
+                });
+                next.sort((a, b) => a - b);
+                state.dndAdminHiddenSteps[gameId] = next;
+            }
             function renderStepsList(gameId, opts) {
                 const n = mqGameNum(gameId);
                 const list = document.getElementById('dndGame' + n + 'StepsList');
@@ -14894,6 +14979,11 @@
                     const zoneMapHtml = showDnd ? mqStepZoneMapHTML(gameId, s, index) : '';
                     const isOpen = mqStepCardShouldOpen(index, opts, captured);
                     const actMeta = mqStepActivityMeta(activity);
+                    const stepHiddenOnCanvas = mqIsAdminStepHidden(gameId, index);
+                    const eyeClass = 'mq-dnd-step-eye' + (stepHiddenOnCanvas ? ' is-off' : '');
+                    const eyeTitle = stepHiddenOnCanvas
+                        ? 'Afficher images et zones de cette étape sur le canvas'
+                        : 'Masquer images et zones de cette étape sur le canvas (config)';
                     return ''
                         + '<div data-step-idx="' + index + '" class="mq-dnd-step-card" data-open="' + (isOpen ? '1' : '0') + '">'
                         + '<div class="mq-dnd-step-head">'
@@ -14905,6 +14995,7 @@
                         + '<input data-field="title" type="text" value="' + String(s.title || '').replace(/"/g, '&quot;') + '" placeholder="Titre de l’étape" style="flex:1;font-size:12px;padding:4px;">'
                         + '<button type="button" title="Monter" onclick="window.moveDndStep(\'' + gameId + '\',' + index + ',-1)" style="font-size:11px;">↑</button>'
                         + '<button type="button" title="Descendre" onclick="window.moveDndStep(\'' + gameId + '\',' + index + ',1)" style="font-size:11px;">↓</button>'
+                        + '<button type="button" class="' + eyeClass + '" title="' + eyeTitle + '" onclick="window.toggleAdminStepVisibility(\'' + gameId + '\',' + index + ')">👁</button>'
                         + '<button type="button" class="mq-dnd-step-test" title="Tester cette étape en mode élève (sans prérequis)" onclick="window.testDndStep(\'' + gameId + '\',' + index + ')" style="font-size:11px;padding:2px 6px;cursor:pointer;background:#1565c0;color:#fff;border:none;border-radius:4px;font-weight:700;">▶</button>'
                         + '<button type="button" onclick="window.removeDndStep(\'' + gameId + '\',' + index + ')" style="font-size:11px;color:#fff;background:#ff4444;border:none;border-radius:4px;padding:2px 6px;">✕</button>'
                         + '</div>'
@@ -15243,6 +15334,7 @@
                 mqGameIds().forEach((gameId) => {
                     const g = state.dndGames[gameId];
                     if (!g || !g.enabled) return;
+                    const adminHide = mqAdminHiddenMask(gameId, g);
                     const handleColor = (mqGameNum(gameId) % 2 === 1) ? '#4a90e2' : '#4ade80';
                     const tb = g.titleBox || { x: 10, y: 10, width: 600, height: 80 };
                     html += `
@@ -15303,6 +15395,7 @@
                             const a = byId[String(l.from)];
                             const b = byId[String(l.to)];
                             if (!a || !b) return;
+                            if (adminHide.elementIds.has(String(l.from)) || adminHide.elementIds.has(String(l.to))) return;
                             const x1 = (a.x || 0) + (a.width || 60) / 2;
                             const y1 = (a.y || 0) + (a.height || 60) / 2;
                             const x2 = (b.x || 0) + (b.width || 60) / 2;
@@ -15319,11 +15412,12 @@
                     }
 
                     (g.draggables || []).forEach((d, idx) => {
+                        const idLabel = String(d.id != null ? d.id : (idx + 1));
+                        if (adminHide.elementIds.has(idLabel)) return;
                         const x = d.x || (10 + idx * 70);
                         const y = d.y || 120;
                         const w = d.width || 250;
                         const h = d.height || 250;
-                        const idLabel = String(d.id != null ? d.id : (idx + 1));
                         const safeId = idLabel.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
                         const tipOn = (window.MqDndEngine && MqDndEngine.dragShowsTooltip)
                             ? MqDndEngine.dragShowsTooltip(d, g)
@@ -15344,6 +15438,8 @@
                     });
 
                     (g.dropzones || []).forEach((dz, idx) => {
+                        const zid = String(mqDropzoneId(dz, idx));
+                        if (adminHide.zoneIds.has(zid)) return;
                         const badge = mqDropzoneCanvasLabel(dz, idx);
                         const safeBadge = badge.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
                         const zw = (Number(dz.width) > 0) ? dz.width : (g.zoneWidth || 80);
@@ -15359,6 +15455,7 @@
 
                     (g.decorImages || []).forEach((dc, idx) => {
                         const idLabel = String(dc.id != null && String(dc.id).trim() !== '' ? dc.id : ('decor-' + (idx + 1)));
+                        if (adminHide.elementIds.has(idLabel)) return;
                         const safeId = idLabel.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
                         html += `
                             <div class="dnd-element dnd-decor" data-game="${gameId}" data-type="decor" data-index="${idx}"
@@ -15372,6 +15469,7 @@
 
                     (g.decorTexts || []).forEach((dt, idx) => {
                         const idLabel = String(dt.id != null && String(dt.id).trim() !== '' ? dt.id : ('dtext-' + (idx + 1)));
+                        if (adminHide.elementIds.has(idLabel)) return;
                         const safeId = idLabel.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
                         html += `
                             <div class="dnd-element dnd-decor-text" data-game="${gameId}" data-type="decorText" data-index="${idx}"
@@ -15397,6 +15495,7 @@
                             const z = row.z;
                             const idx = row.idx;
                             const idLabel = String(z.id != null && String(z.id).trim() !== '' ? z.id : ('zone-' + (idx + 1)));
+                            if (adminHide.elementIds.has(idLabel)) return;
                             const safeId = idLabel.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
                             const bb = mqLinkZoneBBox(z.points);
                             const bx = Math.max(0, bb.x);
