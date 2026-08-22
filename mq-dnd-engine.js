@@ -2632,6 +2632,13 @@
     return {
       refresh: function () { drawLinks(evaluateLinks(game, links)); },
       getLinks: function () { return links.slice(); },
+      /** Pose des flèches sans validation ni son (test admin étape N). */
+      seedLinks: function (pairs) {
+        links = (pairs || []).map(function (l) {
+          return { from: String(l.from), to: String(l.to) };
+        }).filter(function (l) { return l.from && l.to && l.from !== l.to; });
+        refreshStandalone();
+      },
       getErrors: function () { return linkErrors; },
       setVerified: function (v) { verifiedOnce = !!v; },
       isLinkModeActive: function () { return linkModeActive; },
@@ -2735,6 +2742,106 @@
     var showInstructions = game.showInstructions !== false;
 
     /** Marque les étapes 0..idx-1 comme faites et place le jeu sur l’étape idx (test admin). */
+    function clearAllPlacementsQuiet() {
+      Array.prototype.slice.call(gameContainer.querySelectorAll('.dropzone .dnd-placed')).forEach(function (n) {
+        var id = n.getAttribute('data-id');
+        var zone = n.closest('.dropzone');
+        if (zone && id) removeFromZone(zone, id, true);
+      });
+      used.clear();
+      if (linkingApi && linkingApi.seedLinks) linkingApi.seedLinks([]);
+    }
+
+    function pickAvailableCardId(ids) {
+      for (var i = 0; i < (ids || []).length; i++) {
+        var id = String(ids[i]);
+        if (findOrig(id) && !findPlacedCard(id)) return id;
+      }
+      return null;
+    }
+
+    function pickCardForZoneConfig(zcfg, poolIds) {
+      var pool = (poolIds && poolIds.length) ? poolIds : ((zcfg && zcfg.acceptedIds) || []);
+      for (var i = 0; i < pool.length; i++) {
+        var id = String(pool[i]);
+        if (isCardAcceptedInZone(game, zcfg, id) && findOrig(id) && !findPlacedCard(id)) return id;
+      }
+      if (zcfg && zcfg.acceptedIds) {
+        for (var j = 0; j < zcfg.acceptedIds.length; j++) {
+          var id2 = String(zcfg.acceptedIds[j]);
+          if (findOrig(id2) && !findPlacedCard(id2)) return id2;
+        }
+      }
+      return null;
+    }
+
+    function findZoneElForCard(cardId) {
+      var zones = game.dropzones || [];
+      for (var i = 0; i < zones.length; i++) {
+        if (!isCardAcceptedInZone(game, zones[i], cardId)) continue;
+        var z = zoneById(zones[i].id);
+        if (!z) continue;
+        var cap = Math.max(1, parseInt(zones[i].capacity, 10) || 1);
+        if (getZonePlacements(z).length < cap) return z;
+      }
+      return null;
+    }
+
+    function autoSeedStepDnd(step) {
+      step = normalizeStep(step, 0);
+      var zm = normalizeZoneMap(step.zoneMap);
+      var zmKeys = Object.keys(zm).filter(Boolean);
+      if (zmKeys.length) {
+        zmKeys.forEach(function (zid) {
+          var cardId = pickAvailableCardId(normalizeZoneMapIds(zm[zid]));
+          if (!cardId) return;
+          var zone = zoneById(zid);
+          if (zone) placeInZone(zone, cardId, { allowMove: true, autoSeed: true, skipRefresh: true });
+        });
+        return;
+      }
+      var zoneIds = effectiveStepZoneIds(step);
+      var goodIds = parseIdList(step.goodIds);
+      if (zoneIds.length) {
+        zoneIds.forEach(function (zid) {
+          var zone = zoneById(zid);
+          var zcfg = findZoneConfig(zid);
+          if (!zone || !zcfg) return;
+          var cardId = pickCardForZoneConfig(zcfg, goodIds);
+          if (cardId) placeInZone(zone, cardId, { allowMove: true, autoSeed: true, skipRefresh: true });
+        });
+        return;
+      }
+      if (goodIds.length) {
+        goodIds.forEach(function (cid) {
+          var zone = findZoneElForCard(cid);
+          if (zone) placeInZone(zone, cid, { allowMove: true, autoSeed: true, skipRefresh: true });
+        });
+      }
+    }
+
+    /** Simule les étapes précédentes : cartes dans leurs zones + flèches Relier. */
+    function autoSeedPriorSteps(targetIdx) {
+      if (!stepsEnabled || targetIdx <= 0) return;
+      var steps = normalizeSteps(game.steps);
+      var seedLinks = [];
+      for (var si = 0; si < targetIdx && si < steps.length; si++) {
+        var step = normalizeStep(steps[si], si);
+        var act = step.activity || 'dnd';
+        if (act === 'dnd' || act === 'both') autoSeedStepDnd(step);
+        if (act === 'linking' || act === 'both') {
+          (step.linkPairs || []).forEach(function (l) {
+            if (l && l.from != null && l.to != null) {
+              seedLinks.push({ from: String(l.from), to: String(l.to) });
+            }
+          });
+        }
+      }
+      if (linkingApi && linkingApi.seedLinks && seedLinks.length) {
+        linkingApi.seedLinks(seedLinks);
+      }
+    }
+
     function jumpToStep(stepIndex) {
       if (!stepsEnabled) return false;
       var steps = normalizeSteps(game.steps);
@@ -2750,6 +2857,8 @@
       lastActiveStepId = null;
       lastStepIndex = -1;
       if (syncRelierForStep) syncRelierForStep._stepKey = '';
+      clearAllPlacementsQuiet();
+      autoSeedPriorSteps(idx);
       refreshUI();
       return true;
     }
@@ -3311,7 +3420,7 @@
       if (isSingleUse(cardUse) && used.has(id) && !opts.allowMove) return false;
 
       // Étapes : pendant Relier pur, pas de dépôt (les IDs d’étape ne restreignent pas les zones)
-      if (stepsEnabled) {
+      if (stepsEnabled && !opts.autoSeed) {
         var stPlace = getStepsState(game, collectPlacements(gameContainer, game));
         stPlace.statuses.forEach(function (s, i) {
           var sid = String((stPlace.steps[i] && stPlace.steps[i].id) || i);
@@ -3403,24 +3512,26 @@
 
       // Malus à chaque dépôt incorrect (tous modes), y compris repositionnements
       var flashOk = null;
-      if (!correctHere) {
-        nbErreurs += 1;
-        if (feedbackMode === 'immediate') {
+      if (!opts.autoSeed) {
+        if (!correctHere) {
+          nbErreurs += 1;
+          if (feedbackMode === 'immediate') {
+            applyZoneFeedback(zone, zcfg, true);
+            flashOk = false;
+            if (typeof hooks.playSound === 'function') hooks.playSound('error');
+            if (typeof hooks.showFloating === 'function') hooks.showFloating(zone, 'error');
+          }
+        } else if (feedbackMode === 'immediate') {
           applyZoneFeedback(zone, zcfg, true);
-          flashOk = false;
-          if (typeof hooks.playSound === 'function') hooks.playSound('error');
-          if (typeof hooks.showFloating === 'function') hooks.showFloating(zone, 'error');
+          flashOk = true;
+          if (typeof hooks.playSound === 'function') hooks.playSound('success');
+          if (typeof hooks.showFloating === 'function') hooks.showFloating(zone, 'success');
         }
-      } else if (feedbackMode === 'immediate') {
-        applyZoneFeedback(zone, zcfg, true);
-        flashOk = true;
-        if (typeof hooks.playSound === 'function') hooks.playSound('success');
-        if (typeof hooks.showFloating === 'function') hooks.showFloating(zone, 'success');
       }
 
-      refreshUI();
+      if (!opts.skipRefresh) refreshUI();
       // Flash après refreshUI pour que l’animation ne soit pas écrasée
-      if (flashOk != null) pulseZoneFlash(zone, flashOk);
+      if (flashOk != null && !opts.autoSeed) pulseZoneFlash(zone, flashOk);
       return true;
     }
 

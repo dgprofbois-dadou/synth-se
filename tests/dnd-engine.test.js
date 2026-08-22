@@ -850,6 +850,9 @@ test('Relier : minCorrectLinks pour passer à l’étape suivante', () => {
 test('admin : testDndStep / jumpToStep sans prérequis', () => {
   const src = fs.readFileSync(path.join(__dirname, '..', 'mq-dnd-engine.js'), 'utf8');
   assert.ok(src.includes('function jumpToStep'));
+  assert.ok(src.includes('function autoSeedPriorSteps'));
+  assert.ok(src.includes('seedLinks'));
+  assert.ok(src.includes('autoSeed: true'));
   assert.ok(src.includes('startAtStep'));
   assert.ok(src.includes('jumpToStep: jumpToStep'));
   const html = fs.readFileSync(path.join(__dirname, '..', 'placement-inputs.html'), 'utf8');
