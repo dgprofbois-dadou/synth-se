@@ -1047,7 +1047,10 @@
     if (typeof document === 'undefined') return null;
     var vp = document.getElementById('viewport');
     if (vp) return vp;
-    var canvas = document.getElementById('canvas-container') || document.querySelector('.canvas-container');
+    var canvas = document.getElementById('canvas-container');
+    if (!canvas && typeof document.querySelector === 'function') {
+      canvas = document.querySelector('.canvas-container');
+    }
     if (canvas) return canvas;
     return gameContainer || null;
   }
@@ -1100,10 +1103,55 @@
     if (el.classList && el.classList.remove) el.classList.remove('dnd-instructions-active');
     if (el.parentNode !== host) host.appendChild(el);
     attachInstructionsFocusGuard();
+    attachInstructionsHudLayoutSync();
+    syncInstructionsHudLayout(host);
     return el;
   }
 
-  var instrFocusBound = false;
+  function measureControlsOffset(host) {
+    if (typeof document === 'undefined' || typeof document.querySelector !== 'function') return 12;
+    var controls = document.querySelector('.controls');
+    if (!controls || !controls.getBoundingClientRect) return 12;
+    var cRect = controls.getBoundingClientRect();
+    if (cRect.height <= 0) return 12;
+    // Barre score / PDF en bas sur mobile : ne pas décaler la consigne vers le bas.
+    if (cRect.top > ((typeof window !== 'undefined' && window.innerHeight) ? window.innerHeight * 0.45 : 300)) {
+      return 12;
+    }
+    var hostTop = 0;
+    if (host && host.getBoundingClientRect) {
+      hostTop = host.getBoundingClientRect().top;
+    }
+    return Math.max(12, Math.ceil(cRect.bottom - hostTop + 8));
+  }
+
+  var instrLayoutBound = false;
+
+  function syncInstructionsHudLayout(optHost) {
+    if (typeof document === 'undefined' || typeof document.querySelectorAll !== 'function') return;
+    var host = optHost || findInstructionsHudHost(null);
+    var topPx = measureControlsOffset(host);
+    if (host && host.style) host.style.setProperty('--mq-instr-hud-top', topPx + 'px');
+    Array.prototype.forEach.call(document.querySelectorAll('.dnd-instructions-hud'), function (el) {
+      el.style.top = topPx + 'px';
+    });
+  }
+
+  function attachInstructionsHudLayoutSync() {
+    if (typeof window === 'undefined' || instrLayoutBound) return;
+    instrLayoutBound = true;
+    var resync = function () { syncInstructionsHudLayout(); };
+    window.addEventListener('resize', resync);
+    if (typeof document !== 'undefined' && document.fonts && document.fonts.ready) {
+      document.fonts.ready.then(resync).catch(function () {});
+    }
+    if (typeof document !== 'undefined') {
+      document.addEventListener('DOMContentLoaded', resync);
+    }
+    setTimeout(resync, 0);
+    setTimeout(resync, 250);
+  }
+
   var OTHER_ACTIVITY_SEL = [
     '.box', '.input-wrapper', 'input', 'textarea', 'select',
     '#left', '#mqRail', '#topbar', '.controls', '.pdf-buttons',
@@ -1157,6 +1205,7 @@
       if (!on || el !== gameEl) el.classList.remove('dnd-game-focused');
     });
     if (on && gameEl && gameEl.classList) gameEl.classList.add('dnd-game-focused');
+    if (on) syncInstructionsHudLayout();
   }
 
   function attachInstructionsFocusGuard() {
@@ -1177,13 +1226,16 @@
     if (hud) {
       el.style.position = 'absolute';
       el.style.left = '12px';
-      el.style.top = '12px';
       el.style.right = 'auto';
       el.style.bottom = 'auto';
       el.style.width = 'auto';
       el.style.height = 'auto';
       el.style.maxWidth = 'min(560px, calc(100% - 24px))';
       el.style.maxHeight = 'min(240px, 36vh)';
+      if (typeof document !== 'undefined' && typeof document.querySelectorAll === 'function') {
+        syncInstructionsHudLayout(findInstructionsHudHost(el.closest && el.closest('.drag-game')));
+      }
+      if (!el.style.top) el.style.top = measureControlsOffset(null) + 'px';
     } else {
       var gw = Math.max(1, parseInt(game.width, 10) || 800);
       var gh = Math.max(1, parseInt(game.height, 10) || 400);
@@ -4302,6 +4354,9 @@
     mountInstructionsHud: mountInstructionsHud,
     clearInstructionsHud: clearInstructionsHud,
     attachInstructionsFocusGuard: attachInstructionsFocusGuard,
+    attachInstructionsHudLayoutSync: attachInstructionsHudLayoutSync,
+    syncInstructionsHudLayout: syncInstructionsHudLayout,
+    measureControlsOffset: measureControlsOffset,
     setInstructionsHudActive: setInstructionsHudActive,
     eventHitsDndGame: eventHitsDndGame,
     pointInRect: pointInRect,

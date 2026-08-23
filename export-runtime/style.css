@@ -148,11 +148,11 @@ input::placeholder {
 }
 .dnd-instructions.dnd-instructions-hud {
     position: absolute;
-    top: 12px;
+    top: var(--mq-instr-hud-top, 12px);
     left: 12px;
     right: auto;
     bottom: auto;
-    z-index: 250;
+    z-index: 180;
     width: auto;
     height: auto;
     max-width: min(560px, calc(100% - 24px));
@@ -161,9 +161,6 @@ input::placeholder {
 }
 .dnd-instructions.dnd-instructions-hud:not(.dnd-instructions-active) {
     display: none !important;
-}
-.canvas-container > .dnd-instructions-hud {
-    top: 64px;
 }
 .dnd-game-complete .dnd-instructions,
 .dnd-instructions.dnd-instructions-done {
@@ -779,9 +776,6 @@ input.correct {
 }
 
 @media (max-width: 900px) {
-    .canvas-container > .dnd-instructions-hud {
-        top: 12px;
-    }
     .controls {
         top: auto;
         bottom: max(72px, calc(12px + env(safe-area-inset-bottom, 0px)));

@@ -1091,11 +1091,11 @@
         }
         .dnd-instructions.dnd-instructions-hud {
             position: absolute;
-            top: 12px;
+            top: var(--mq-instr-hud-top, 12px);
             left: 12px;
             right: auto;
             bottom: auto;
-            z-index: 250;
+            z-index: 180;
             width: auto;
             height: auto;
             max-width: min(560px, calc(100% - 24px));

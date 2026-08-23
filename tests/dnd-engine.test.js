@@ -288,6 +288,9 @@ test('consigne HUD haut-gauche', () => {
   assert.strictEqual(typeof Engine.mountInstructionsHud, 'function');
   assert.strictEqual(typeof Engine.clearInstructionsHud, 'function');
   assert.strictEqual(typeof Engine.attachInstructionsFocusGuard, 'function');
+  assert.strictEqual(typeof Engine.syncInstructionsHudLayout, 'function');
+  assert.strictEqual(typeof Engine.measureControlsOffset, 'function');
+  assert.strictEqual(Engine.measureControlsOffset(null), 12);
   assert.ok(Engine.pointInRect(20, 20, { left: 10, right: 40, top: 10, bottom: 40 }));
   assert.ok(!Engine.pointInRect(5, 20, { left: 10, right: 40, top: 10, bottom: 40 }));
   assert.ok(Engine.eventHitsDndGame(
@@ -297,6 +300,7 @@ test('consigne HUD haut-gauche', () => {
   const html = fs.readFileSync(path.join(__dirname, '..', 'placement-inputs.html'), 'utf8');
   assert.ok(html.includes('dnd-instructions-active'));
   assert.ok(html.includes('dnd-instructions-hud:not(.dnd-instructions-active)'));
+  assert.ok(html.includes('--mq-instr-hud-top'));
   const el = {
     style: {},
     classList: {
