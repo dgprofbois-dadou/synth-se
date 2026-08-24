@@ -850,6 +850,18 @@ test('ancienne config Relier jeu → étape Relier (reprise)', () => {
   assert.strictEqual(Engine.gameNeedsRelier(g), true);
 });
 
+test('cssPxNumber ignore les pourcentages (HTML export Relier)', () => {
+  assert.ok(Number.isNaN(Engine.cssPxNumber('15%')));
+  assert.ok(Number.isNaN(Engine.cssPxNumber('20.5%')));
+  assert.strictEqual(Engine.cssPxNumber('120px'), 120);
+  assert.strictEqual(Engine.cssPxNumber('120'), 120);
+  assert.ok(!Engine.htmlStyleBox({ style: { left: '15%', top: '10%', width: '20%', height: '25%' }, offsetWidth: 200, offsetHeight: 100 }));
+  const pxBox = Engine.htmlStyleBox({ style: { left: '80px', top: '40px', width: '50px', height: '20px' }, offsetWidth: 50, offsetHeight: 20 });
+  assert.strictEqual(pxBox.x, 80);
+  assert.strictEqual(pxBox.y, 40);
+  assert.strictEqual(pxBox.width, 50);
+});
+
 test('Relier : images / textes fixes sont des nœuds (id decor-N)', () => {
   const g = Engine.applyGameDefaults({
     enableSteps: true,

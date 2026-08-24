@@ -33,6 +33,25 @@
     return JSON.parse(JSON.stringify(v == null ? null : v));
   }
 
+  /** left/top/width en px uniquement — parseFloat('15%') === 15 casserait les flèches Relier en HTML export. */
+  function cssPxNumber(value) {
+    if (value == null || value === '') return NaN;
+    var m = /^(-?\d+(?:\.\d+)?)(px)?$/i.exec(String(value).trim());
+    if (!m) return NaN;
+    var n = parseFloat(m[1]);
+    return isFinite(n) ? n : NaN;
+  }
+
+  function htmlStyleBox(el) {
+    if (!el || !el.style) return null;
+    var left = cssPxNumber(el.style.left);
+    var top = cssPxNumber(el.style.top);
+    var w = (el.offsetWidth > 0) ? el.offsetWidth : cssPxNumber(el.style.width);
+    var h = (el.offsetHeight > 0) ? el.offsetHeight : cssPxNumber(el.style.height);
+    if (isNaN(left) || isNaN(top) || !(w > 0 || h > 0)) return null;
+    return { x: left, y: top, width: w || 0, height: h || 0 };
+  }
+
   function normalizeGameType(t) {
     var v = String(t || 'selection').toLowerCase();
     return GAME_TYPES.indexOf(v) >= 0 ? v : 'selection';
@@ -1967,17 +1986,16 @@
           }
         }
       } catch (errBb) { /* ignore */ }
-      var left = parseFloat(el.style.left);
-      var top = parseFloat(el.style.top);
-      var w = el.offsetWidth || parseFloat(el.style.width) || 0;
-      var h = el.offsetHeight || parseFloat(el.style.height) || 0;
-      if (!isNaN(left) && !isNaN(top) && (w > 0 || h > 0)) {
-        return { x: left + w / 2, y: top + h / 2 };
+      var styleBox = htmlStyleBox(el);
+      if (styleBox) {
+        return { x: styleBox.x + styleBox.width / 2, y: styleBox.y + styleBox.height / 2 };
       }
       // Remonter offsetLeft/Top jusqu’au conteneur de jeu
       var x = 0;
       var y = 0;
       var cur = el;
+      var w = el.offsetWidth || 0;
+      var h = el.offsetHeight || 0;
       while (cur && cur !== gameContainer) {
         x += cur.offsetLeft || 0;
         y += cur.offsetTop || 0;
@@ -2006,13 +2024,8 @@
           }
         }
       } catch (errA) { /* ignore */ }
-      var left = parseFloat(el.style.left);
-      var top = parseFloat(el.style.top);
-      var w = el.offsetWidth || parseFloat(el.style.width) || 0;
-      var h = el.offsetHeight || parseFloat(el.style.height) || 0;
-      if (!isNaN(left) && !isNaN(top) && (w > 0 || h > 0)) {
-        return { x: left, y: top, width: w, height: h };
-      }
+      var styleBox = htmlStyleBox(el);
+      if (styleBox) return styleBox;
       try {
         var r = el.getBoundingClientRect();
         var cr = gameContainer.getBoundingClientRect();
@@ -2202,8 +2215,8 @@
     }
     function applyFreeMoveToEl(el, center) {
       if (!el || !center) return;
-      var w = el.offsetWidth || parseFloat(el.style.width) || 0;
-      var h = el.offsetHeight || parseFloat(el.style.height) || 0;
+      var w = (el.offsetWidth > 0) ? el.offsetWidth : (cssPxNumber(el.style && el.style.width) || 0);
+      var h = (el.offsetHeight > 0) ? el.offsetHeight : (cssPxNumber(el.style && el.style.height) || 0);
       var nx = Math.round(center.x - w / 2);
       var ny = Math.round(center.y - h / 2);
       el.style.position = 'absolute';
@@ -4325,6 +4338,8 @@
     MQ_DND_MAX_ZONES: MQ_DND_MAX_ZONES,
     GAME_TYPES: GAME_TYPES,
     parseIdList: parseIdList,
+    cssPxNumber: cssPxNumber,
+    htmlStyleBox: htmlStyleBox,
     normalizeGameType: normalizeGameType,
     normalizeFeedbackMode: normalizeFeedbackMode,
     normalizeCardUse: normalizeCardUse,
