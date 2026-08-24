@@ -1962,14 +1962,21 @@
     function localPoint(clientX, clientY) {
       return clientToLocal(clientX, clientY);
     }
-    /** Centre d’un nœud en coords layout (même repère que left/top des images). */
+    /** Centre d’un nœud en coords layout (clientWidth du jeu — fiable avec left/% et pan/zoom). */
     function nodeCenter(el) {
       if (!el) return { x: 0, y: 0 };
       var nid = el.getAttribute && el.getAttribute('data-id');
       if (nid && dragCenterOverrides[nid]) {
         return { x: dragCenterOverrides[nid].x, y: dragCenterOverrides[nid].y };
       }
-      // Zones SVG Relier (<g> / <polygon>) — centroïde si possible
+      // Prioritaire : écran → layout (ne jamais se fier à left/% ni offsetLeft sous transform CSS)
+      try {
+        var er = el.getBoundingClientRect();
+        if (er && isFinite(er.left) && isFinite(er.top) && (er.width > 0.5 || er.height > 0.5)) {
+          return clientToLocal(er.left + er.width / 2, er.top + er.height / 2);
+        }
+      } catch (errRect) { /* ignore */ }
+      // Fallback SVG (g/polygon parfois sans bbox écran utile)
       try {
         var geo = el;
         if (el.tagName === 'g') {
@@ -1977,71 +1984,61 @@
         }
         if (geo && geo.tagName === 'polygon' && geo.getAttribute('points')) {
           var cent = polygonCentroidFromPointsAttr(geo.getAttribute('points'));
-          if (cent) return cent;
+          if (cent) return scaleSvgUserPoint(geo, cent);
         }
         if (geo && typeof geo.getBBox === 'function' && (geo.ownerSVGElement || geo.tagName === 'svg')) {
           var bb = geo.getBBox();
           if (bb && isFinite(bb.x) && (bb.width > 0 || bb.height > 0 || (bb.x !== 0 || bb.y !== 0))) {
-            return { x: bb.x + bb.width / 2, y: bb.y + bb.height / 2 };
+            return scaleSvgUserPoint(geo, { x: bb.x + bb.width / 2, y: bb.y + bb.height / 2 });
           }
         }
       } catch (errBb) { /* ignore */ }
-      var styleBox = htmlStyleBox(el);
-      if (styleBox) {
-        return { x: styleBox.x + styleBox.width / 2, y: styleBox.y + styleBox.height / 2 };
-      }
-      // Remonter offsetLeft/Top jusqu’au conteneur de jeu
-      var x = 0;
-      var y = 0;
-      var cur = el;
-      var w = el.offsetWidth || 0;
-      var h = el.offsetHeight || 0;
-      while (cur && cur !== gameContainer) {
-        x += cur.offsetLeft || 0;
-        y += cur.offsetTop || 0;
-        var op = cur.offsetParent;
-        if (!op || (op !== gameContainer && !gameContainer.contains(op))) {
-          break;
-        }
-        cur = op;
-      }
-      if (cur === gameContainer || gameContainer.contains(cur)) {
-        return { x: x + w / 2, y: y + h / 2 };
-      }
-      // Dernier recours : projection écran
-      var er = el.getBoundingClientRect();
-      return clientToLocal(er.left + er.width / 2, er.top + er.height / 2);
+      return { x: 0, y: 0 };
+    }
+    /** Points viewBox (zones Relier) → pixels layout du jeu. */
+    function scaleSvgUserPoint(geo, pt) {
+      if (!pt) return { x: 0, y: 0 };
+      var owner = (geo && geo.ownerSVGElement) || (geo && geo.tagName === 'svg' ? geo : null);
+      if (!owner) return { x: pt.x, y: pt.y };
+      var gw = gameContainer.clientWidth || 1;
+      var gh = gameContainer.clientHeight || 1;
+      var vb = owner.viewBox && owner.viewBox.baseVal;
+      var vw = (vb && vb.width > 0) ? vb.width : (parseFloat(owner.getAttribute('width')) || gw);
+      var vh = (vb && vb.height > 0) ? vb.height : (parseFloat(owner.getAttribute('height')) || gh);
+      if (!(vw > 0) || !(vh > 0)) return { x: pt.x, y: pt.y };
+      return { x: pt.x * gw / vw, y: pt.y * gh / vh };
     }
     function nodeBBoxForLink(el) {
       if (!el) return null;
+      try {
+        var r = el.getBoundingClientRect();
+        if (r && isFinite(r.left) && (r.width > 0.5 || r.height > 0.5)) {
+          var cr = gameContainer.getBoundingClientRect();
+          var gw = gameContainer.clientWidth || 1;
+          var gh = gameContainer.clientHeight || 1;
+          var rw = cr.width || 1;
+          var rh = cr.height || 1;
+          return {
+            x: ((r.left - cr.left) / rw) * gw,
+            y: ((r.top - cr.top) / rh) * gh,
+            width: (r.width / rw) * gw,
+            height: (r.height / rh) * gh
+          };
+        }
+      } catch (errB) { /* ignore */ }
       try {
         var geo = el;
         if (el.tagName === 'g') geo = el.querySelector('polygon, path, polyline') || el;
         if (geo && typeof geo.getBBox === 'function' && (geo.ownerSVGElement || geo.tagName === 'svg')) {
           var bb = geo.getBBox();
           if (bb && isFinite(bb.width) && isFinite(bb.height)) {
-            return { x: bb.x, y: bb.y, width: bb.width, height: bb.height };
+            var p0 = scaleSvgUserPoint(geo, { x: bb.x, y: bb.y });
+            var p1 = scaleSvgUserPoint(geo, { x: bb.x + bb.width, y: bb.y + bb.height });
+            return { x: p0.x, y: p0.y, width: Math.max(0, p1.x - p0.x), height: Math.max(0, p1.y - p0.y) };
           }
         }
       } catch (errA) { /* ignore */ }
-      var styleBox = htmlStyleBox(el);
-      if (styleBox) return styleBox;
-      try {
-        var r = el.getBoundingClientRect();
-        var cr = gameContainer.getBoundingClientRect();
-        var gw = gameContainer.clientWidth || 1;
-        var gh = gameContainer.clientHeight || 1;
-        var rw = cr.width || 1;
-        var rh = cr.height || 1;
-        return {
-          x: ((r.left - cr.left) / rw) * gw,
-          y: ((r.top - cr.top) / rh) * gh,
-          width: (r.width / rw) * gw,
-          height: (r.height / rh) * gh
-        };
-      } catch (errB) {
-        return null;
-      }
+      return null;
     }
     /** Point d'accroche aimanté : centre ou bord décalé si la zone est grande / plusieurs liens. */
     function linkEndpointForNode(el, peerX, peerY, slot, total) {

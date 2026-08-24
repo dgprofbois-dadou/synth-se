@@ -862,6 +862,17 @@ test('cssPxNumber ignore les pourcentages (HTML export Relier)', () => {
   assert.strictEqual(pxBox.width, 50);
 });
 
+test('Relier nodeCenter : getBoundingClientRect prioritaire (pas offsetLeft sous transform)', () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'mq-dnd-engine.js'), 'utf8');
+  const start = src.indexOf('function nodeCenter(el)');
+  assert.ok(start > 0);
+  const chunk = src.slice(start, start + 2200);
+  assert.ok(chunk.includes('getBoundingClientRect'));
+  assert.ok(chunk.includes('clientToLocal'));
+  assert.ok(!chunk.includes('cur.offsetLeft'));
+  assert.ok(chunk.includes('scaleSvgUserPoint'));
+});
+
 test('Relier : images / textes fixes sont des nœuds (id decor-N)', () => {
   const g = Engine.applyGameDefaults({
     enableSteps: true,
