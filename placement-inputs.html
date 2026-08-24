@@ -8431,11 +8431,10 @@
                 }
 
                 mqGameIds().forEach((gameId, index) => {
-                    const gameConfig = state.dndGames[gameId];
+                    const rawGameConfig = state.dndGames[gameId];
+                    if (!rawGameConfig || !rawGameConfig.enabled) return;
+                    const gameConfig = mqPreparePlayableDndGameConfig(rawGameConfig, gameId);
                     if (!gameConfig || !gameConfig.enabled) return;
-                    if (window.MqDndEngine && MqDndEngine.applyGameDefaults) {
-                        MqDndEngine.applyGameDefaults(gameConfig);
-                    }
 
                     const gameEl = document.createElement('div');
                     gameEl.className = 'drag-game';
@@ -8639,11 +8638,6 @@
                     gameEl.appendChild(scoreContainer);
 
                     container.appendChild(gameEl);
-
-                    if (gameConfig.enableSteps) mqApplyStepZoneMaps(gameId);
-                    if (window.MqDndEngine && MqDndEngine.applyGameDefaults) {
-                        MqDndEngine.applyGameDefaults(gameConfig);
-                    }
 
                     const cfg = Object.assign({}, gameConfig, { _gameId: gameId });
                     const jump = state.dndTestJump;
@@ -16303,7 +16297,7 @@
             // Charger l'UI au démarrage
             loadDndGamesUI();
 
-            function mqPrepareDndGameForExport(g, gameId) {
+            function mqPreparePlayableDndGameConfig(g, gameId) {
                 if (!g) return g;
                 const out = JSON.parse(JSON.stringify(g));
                 if (window.MqDndEngine) {
@@ -16313,6 +16307,10 @@
                     }
                 }
                 return out;
+            }
+
+            function mqPrepareDndGameForExport(g, gameId) {
+                return mqPreparePlayableDndGameConfig(g, gameId);
             }
 
                         function mqBuildExportDndGameHtml(g, gameId, pageCtx) {

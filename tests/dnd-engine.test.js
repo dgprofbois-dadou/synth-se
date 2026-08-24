@@ -207,7 +207,9 @@ console.log('\n=== Test 8 — présence page 2 dans générateur ===');
 test('mqBuildExportDndGameHtml et PAGE 2 dans placement-inputs.html', () => {
   const html = fs.readFileSync(path.join(__dirname, '..', 'placement-inputs.html'), 'utf8');
   assert.ok(html.includes('function mqBuildExportDndGameHtml'));
+  assert.ok(html.includes('function mqPreparePlayableDndGameConfig'));
   assert.ok(html.includes('mqPrepareDndGameForExport'));
+  assert.ok(html.includes('const gameConfig = mqPreparePlayableDndGameConfig(rawGameConfig, gameId);'));
   assert.ok(html.includes('flushProjectStateBeforeSave'));
   assert.ok(html.includes('decorImages'));
   assert.ok(html.includes('JEUX DnD PAGE 2'));
