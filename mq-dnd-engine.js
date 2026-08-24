@@ -1208,8 +1208,10 @@
     if (on) syncInstructionsHudLayout();
   }
 
+  var instrFocusBound = false;
+
   function attachInstructionsFocusGuard() {
-    if (typeof document === 'undefined' || instrFocusBound) return;
+    if (typeof document === 'undefined' || !document || typeof document.addEventListener !== 'function' || instrFocusBound) return;
     instrFocusBound = true;
     document.addEventListener('pointerdown', function (e) {
       var game = gameFromPointerEvent(e);

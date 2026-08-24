@@ -321,6 +321,8 @@ test('consigne HUD haut-gauche', () => {
   assert.ok(html.includes('dnd-instructions-active'));
   assert.ok(html.includes('dnd-instructions-hud:not(.dnd-instructions-active)'));
   assert.ok(html.includes('--mq-instr-hud-top'));
+  const src = fs.readFileSync(path.join(__dirname, '..', 'mq-dnd-engine.js'), 'utf8');
+  assert.ok(src.includes('var instrFocusBound = false'));
   const el = {
     style: {},
     classList: {
