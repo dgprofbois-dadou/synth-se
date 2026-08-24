@@ -717,7 +717,6 @@
     const MIN_SCALE = 0.1;
     const MAX_SCALE = 6;
     const PAN_THRESHOLD = 6;
-    const CLAMP_MARGIN = 120;
 
     const activePointers = new Map();
     let panPointerId = null;
@@ -790,10 +789,14 @@
       refreshBaseSize();
       const contentW = BASE_W * scale;
       const contentH = BASE_H * scale;
-      const minX = Math.min(0, w - contentW) - CLAMP_MARGIN;
-      const maxX = Math.max(0, w - contentW) + CLAMP_MARGIN;
-      const minY = Math.min(0, h - contentH) - CLAMP_MARGIN;
-      const maxY = Math.max(0, h - contentH) + CLAMP_MARGIN;
+      // Comme placement-inputs.html : autoriser le centrage de n’importe quel bord
+      // (l’ancien clamp ne laissait que 120 px, le bord gauche restait collé).
+      const slackX = Math.max(w / 2, 80);
+      const slackY = Math.max(h / 2, 80);
+      const minX = w - contentW - slackX;
+      const maxX = slackX;
+      const minY = h - contentH - slackY;
+      const maxY = slackY;
       offsetX = Math.max(minX, Math.min(maxX, offsetX));
       offsetY = Math.max(minY, Math.min(maxY, offsetY));
     }

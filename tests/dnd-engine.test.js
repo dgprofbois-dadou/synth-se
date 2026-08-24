@@ -217,6 +217,13 @@ test('mqBuildExportDndGameHtml et PAGE 2 dans placement-inputs.html', () => {
   assert.ok(html.includes('mq-dnd-engine.js'));
 });
 
+test('PAN export : slack de centrage des bords (pas clamp 120 px)', () => {
+  const js = fs.readFileSync(path.join(__dirname, '..', 'export-runtime', 'script.js'), 'utf8');
+  assert.ok(js.includes('slackX'));
+  assert.ok(js.includes('w / 2'));
+  assert.ok(!js.includes('const CLAMP_MARGIN = 120'));
+});
+
 test('enrichStepsFromDropzones remplit zoneMap depuis dropzones', () => {
   const g = Engine.applyGameDefaults({
     enableSteps: true,
