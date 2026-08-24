@@ -605,6 +605,15 @@
     if (jsonEl) {
       try { cfg = JSON.parse(jsonEl.textContent || '{}'); } catch (e) { console.warn('dnd config', e); }
     }
+    if (cfg && window.MqDndEngine) {
+      const Eng = window.MqDndEngine;
+      if (typeof Eng.applyGameDefaults === 'function') {
+        cfg = Eng.applyGameDefaults(cfg);
+      }
+      if (cfg.enableSteps && typeof Eng.enrichStepsFromDropzones === 'function') {
+        Eng.enrichStepsFromDropzones(cfg);
+      }
+    }
     if (!cfg) {
       const good = (gameEl.getAttribute('data-dnd-good') || '').split(',').map(function (x) { return x.trim(); }).filter(Boolean);
       const targetCount = parseInt(gameEl.getAttribute('data-dnd-target') || String(good.length), 10);

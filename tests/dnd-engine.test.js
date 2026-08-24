@@ -207,9 +207,27 @@ console.log('\n=== Test 8 — présence page 2 dans générateur ===');
 test('mqBuildExportDndGameHtml et PAGE 2 dans placement-inputs.html', () => {
   const html = fs.readFileSync(path.join(__dirname, '..', 'placement-inputs.html'), 'utf8');
   assert.ok(html.includes('function mqBuildExportDndGameHtml'));
+  assert.ok(html.includes('mqPrepareDndGameForExport'));
+  assert.ok(html.includes('flushProjectStateBeforeSave'));
+  assert.ok(html.includes('decorImages'));
   assert.ok(html.includes('JEUX DnD PAGE 2'));
   assert.ok(html.includes('dnd-config-'));
   assert.ok(html.includes('mq-dnd-engine.js'));
+});
+
+test('enrichStepsFromDropzones remplit zoneMap depuis dropzones', () => {
+  const g = Engine.applyGameDefaults({
+    enableSteps: true,
+    steps: [{ id: '1', title: 'E1', zoneIds: ['1'], goodIds: '', zoneMap: {} }],
+    dropzones: [{ id: 1, acceptedIds: ['a', 'b'] }],
+    draggables: [{ id: 'a' }, { id: 'b' }, { id: 'c' }]
+  });
+  Engine.enrichStepsFromDropzones(g);
+  assert.deepStrictEqual(g.steps[0].zoneMap['1'], ['a', 'b']);
+  assert.ok(String(g.steps[0].goodIds).split(',').indexOf('a') >= 0);
+  const own = Engine.buildStepOwnership(g);
+  assert.strictEqual(own.elementMinStep['a'], 0);
+  assert.strictEqual(own.elementMinStep['c'], undefined);
 });
 
 console.log('\n=== Test 9 — tactile (API sélection) ===');

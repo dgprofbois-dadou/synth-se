@@ -16303,8 +16303,21 @@
             // Charger l'UI au démarrage
             loadDndGamesUI();
 
+            function mqPrepareDndGameForExport(g, gameId) {
+                if (!g) return g;
+                const out = JSON.parse(JSON.stringify(g));
+                if (window.MqDndEngine) {
+                    if (MqDndEngine.applyGameDefaults) MqDndEngine.applyGameDefaults(out);
+                    if (out.enableSteps && MqDndEngine.enrichStepsFromDropzones) {
+                        MqDndEngine.enrichStepsFromDropzones(out);
+                    }
+                }
+                return out;
+            }
+
                         function mqBuildExportDndGameHtml(g, gameId, pageCtx) {
                 if (!g || !g.enabled) return '';
+                g = mqPrepareDndGameForExport(g, gameId);
                 const n = mqGameNum(gameId);
                 const sfx = (n === 1) ? '' : String(n);
                 const goodIds = g.goodIds || '';
@@ -16392,7 +16405,18 @@
                             row: dz.row,
                             column: dz.column
                         };
-                    })
+                    }),
+                    decorImages: (g.decorImages || []).map(function (dc) {
+                        if (!dc || dc.id == null || String(dc.id).trim() === '') return null;
+                        const row = { id: String(dc.id).trim() };
+                        if (dc.visibleFromStep != null && dc.visibleFromStep !== '') {
+                            row.visibleFromStep = dc.visibleFromStep;
+                        }
+                        return row;
+                    }).filter(Boolean),
+                    draggables: (g.draggables || []).map(function (d) {
+                        return d && d.id != null ? { id: String(d.id) } : null;
+                    }).filter(Boolean)
                 };
                 const cfgJson = JSON.stringify(cfg).replace(/</g, '\\u003c');
                 let out = '';
@@ -16440,8 +16464,7 @@
                     return '<div class="dropzone" data-pos="' + (i + 1) + '" data-zone-id="' + zid + '"'
                         + (dz.groupId ? ' data-group-id="' + String(dz.groupId).replace(/"/g, '&quot;') + '"' : '')
                         + (dz.label ? ' data-label="' + String(dz.label).replace(/"/g, '&quot;') + '"' : '')
-                        + ' style="position:absolute; left:' + dzX + '%; top:' + dzY + '%; width:' + dzW + '%; height:' + dzH + '%; font-size:' + Math.round((dz.height || g.zoneHeight || 80) * 0.4) + 'px; align-items:flex-start; justify-content:flex-start; display:flex; flex-wrap:wrap; gap:4px; box-sizing:border-box; pointer-events:auto;">'
-                        + '<span class="dnd-dropzone-id-badge">ID ' + String(zid).replace(/</g, '&lt;') + '</span></div>';
+                        + ' style="position:absolute; left:' + dzX + '%; top:' + dzY + '%; width:' + dzW + '%; height:' + dzH + '%; font-size:' + Math.round((dz.height || g.zoneHeight || 80) * 0.4) + 'px; align-items:flex-start; justify-content:flex-start; display:flex; flex-wrap:wrap; gap:4px; box-sizing:border-box; pointer-events:auto;"></div>';
                 }).join('');
                 out += '</div>';
                 out += '\n                        <div id="source' + sfx + '" style="position:absolute; inset:0; z-index:8; box-sizing:border-box; pointer-events:none;">';
@@ -16667,6 +16690,8 @@
                 }
 
                 btnGen.addEventListener('click', async () => {
+
+                    try { flushProjectStateBeforeSave(); } catch (e) { console.warn('flushProjectStateBeforeSave', e); }
 
                     const exportRuntime = await mqLoadExportRuntime();
                     if (!exportRuntime || !exportRuntime.scriptJs) {

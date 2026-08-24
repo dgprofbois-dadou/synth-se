@@ -1423,6 +1423,41 @@
     return zoneIds;
   }
 
+  /** Complète zoneMap / goodIds des étapes à partir des dropzones (export HTML, runtime). */
+  function enrichStepsFromDropzones(g) {
+    if (!g || !g.enableSteps || !Array.isArray(g.steps) || !g.steps.length) return g;
+    if (!Array.isArray(g.dropzones)) g.dropzones = [];
+    g.steps = normalizeSteps(g.steps).map(function (step, i) {
+      var ns = normalizeStep(step, i);
+      var map = normalizeZoneMap(ns.zoneMap);
+      effectiveStepZoneIds(ns).forEach(function (zid) {
+        var sid = String(zid);
+        if (normalizeZoneMapIds(map[sid]).length) return;
+        g.dropzones.forEach(function (dz, di) {
+          var dzid = dz.id != null ? String(dz.id) : String(di + 1);
+          if (dzid !== sid) return;
+          var acc = Array.isArray(dz.acceptedIds) ? dz.acceptedIds : [];
+          if (acc.length) map[sid] = acc.map(String);
+        });
+      });
+      var goodIds = String(ns.goodIds || '').trim();
+      if (!goodIds) {
+        var idSet = {};
+        Object.keys(map).forEach(function (k) {
+          normalizeZoneMapIds(map[k]).forEach(function (id) { idSet[id] = true; });
+        });
+        (ns.linkPairs || []).forEach(function (l) {
+          if (l && l.from != null) idSet[String(l.from)] = true;
+          if (l && l.to != null) idSet[String(l.to)] = true;
+        });
+        goodIds = Object.keys(idSet).join(',');
+      }
+      return normalizeStep(Object.assign({}, ns, { zoneMap: map, goodIds: goodIds }), i);
+    });
+    applyStepZoneMapsToDropzones(g);
+    return g;
+  }
+
   function stepInstructionLabel(step, index, total) {
     step = normalizeStep(step, index);
     var n = (typeof index === 'number' ? index : 0) + 1;
@@ -2898,6 +2933,7 @@
     if (!gameContainer || !gameConfig) return null;
     hooks = hooks || {};
     var gamePeek = applyGameDefaults(cloneJson(gameConfig));
+    if (gamePeek.enableSteps) enrichStepsFromDropzones(gamePeek);
     if (isLinking(gamePeek)) {
       if (!(gamePeek.enableSteps && gamePeek.steps && gamePeek.steps.length)) {
         return initPlayableLinkingGame(gameContainer, gameConfig, hooks);
@@ -4346,6 +4382,7 @@
     evaluateStep: evaluateStep,
     getStepsState: getStepsState,
     effectiveStepZoneIds: effectiveStepZoneIds,
+    enrichStepsFromDropzones: enrichStepsFromDropzones,
     stepInstructionLabel: stepInstructionLabel,
     normalizeInstructionsBox: normalizeInstructionsBox,
     applyInstructionsBoxToElement: applyInstructionsBoxToElement,
