@@ -625,6 +625,13 @@ test('linkSplinePath produit un tracé SVG lissé', () => {
   assert.ok(curved.indexOf('Q') >= 0);
 });
 
+test('Relier : tracé sans aimantation (flèche suit le curseur)', () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'mq-dnd-engine.js'), 'utf8');
+  const chunk = src.slice(src.indexOf('function moveDrag(clientX, clientY)'), src.indexOf('function endDrag(clientX, clientY)'));
+  assert.ok(chunk.includes('previewRoutePath(c0.x, c0.y, pt.x, pt.y)'));
+  assert.ok(!chunk.includes('previewEndpoints(dragState.fromEl'));
+});
+
 test('linkAnchorPoint décale les arrivées sur grandes zones', () => {
   const bbox = { x: 100, y: 50, width: 120, height: 80 };
   const single = Engine.linkAnchorPoint(0, 90, bbox, 0, 1);

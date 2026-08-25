@@ -2678,6 +2678,7 @@
     function moveDrag(clientX, clientY) {
       if (!dragState || !dragState.line) return;
       var pt = localPoint(clientX, clientY);
+      // Survol léger (sans aimantation) : la flèche suit le curseur, pas les bords des cibles
       var target = pickBestLinkAt(clientX, clientY);
       if (target && target !== dragState.fromEl) {
         if (dragState.hoverEl && dragState.hoverEl !== target && dragState.hoverEl !== dragState.fromEl) {
@@ -2691,10 +2692,8 @@
         }
         dragState.hoverEl = null;
       }
-      var ends = previewEndpoints(dragState.fromEl, target && target !== dragState.fromEl ? target : null);
-      var end = target && target !== dragState.fromEl ? ends.to : pt;
-      var c0 = ends.from;
-      dragState.line.setAttribute('d', linkPolylineToPath(previewRoutePath(c0.x, c0.y, end.x, end.y)));
+      var c0 = nodeCenter(dragState.fromEl);
+      dragState.line.setAttribute('d', linkPolylineToPath(previewRoutePath(c0.x, c0.y, pt.x, pt.y)));
       showTip(DRAW_LINK_TIP, pt.x, pt.y);
     }
 
