@@ -2305,7 +2305,7 @@
       tip = document.createElement('div');
       tip.className = 'dnd-link-tooltip';
       tip.setAttribute('role', 'status');
-      tip.style.cssText = 'position:absolute;z-index:20;pointer-events:none;display:none;max-width:280px;padding:8px 12px;border-radius:10px;background:rgba(30,30,30,0.92);color:#fff;font-size:14px;font-weight:600;line-height:1.3;box-shadow:0 4px 14px rgba(0,0,0,0.25);transform:none;white-space:pre-wrap;text-align:center;';
+      tip.style.cssText = 'position:absolute;z-index:20;pointer-events:none;display:none;max-width:360px;padding:10px 16px;border-radius:10px;background:rgba(30,30,30,0.92);color:#fff;font-size:20px;font-weight:600;line-height:1.35;box-shadow:0 4px 14px rgba(0,0,0,0.25);transform:none;white-space:pre-wrap;text-align:center;';
       gameContainer.appendChild(tip);
     }
     function showTip(text, x, y) {
