@@ -8634,7 +8634,10 @@
                     const scoreContainer = document.createElement('div');
                     scoreContainer.id = 'score-malus-' + gameId;
                     scoreContainer.className = 'score-malus-container';
-                    scoreContainer.style.cssText = 'position:absolute; left:0; right:0; bottom:1%; display:flex; justify-content:center; gap:15px; font-weight:bold; font-size:50px; z-index:4; pointer-events:none;';
+                    const sb = (window.MqDndEngine && MqDndEngine.normalizeScoreBox)
+                        ? MqDndEngine.normalizeScoreBox(gameConfig.scoreBox, gameConfig)
+                        : { x: 0, y: 0, width: 320, height: 48, fontSize: 22, font: 'Verdana, sans-serif', bgColor: 'rgba(255,255,255,0.92)', color: '#2e7d32', borderColor: '#81c784' };
+                    scoreContainer.style.cssText = 'position:absolute; left:' + (sb.x || 0) + 'px; top:' + (sb.y || 0) + 'px; width:' + (sb.width || 320) + 'px; height:' + (sb.height || 48) + 'px; display:flex; align-items:center; justify-content:center; gap:12px; font-weight:bold; font-family:' + (sb.font || 'Verdana, sans-serif') + '; font-size:' + (sb.fontSize || 22) + 'px; color:' + (sb.color || '#2e7d32') + '; background:' + (sb.bgColor || 'rgba(255,255,255,0.92)') + '; border:2px solid ' + (sb.borderColor || '#81c784') + '; border-radius:12px; box-sizing:border-box; padding:6px 12px; z-index:11; pointer-events:none;';
                     gameEl.appendChild(scoreContainer);
 
                     container.appendChild(gameEl);
@@ -16347,6 +16350,9 @@
                     instructionsBox: (window.MqDndEngine && MqDndEngine.normalizeInstructionsBox)
                         ? MqDndEngine.normalizeInstructionsBox(g.instructionsBox, g)
                         : (g.instructionsBox || null),
+                    scoreBox: (window.MqDndEngine && MqDndEngine.normalizeScoreBox)
+                        ? MqDndEngine.normalizeScoreBox(g.scoreBox, g)
+                        : (g.scoreBox || null),
                     enableSteps: !!g.enableSteps,
                     steps: (g.enableSteps && Array.isArray(g.steps)) ? g.steps.map(function (s, i) {
                         const ns = (window.MqDndEngine && MqDndEngine.normalizeStep)
@@ -16559,7 +16565,14 @@
                     })()
                     : '';
                 out += '\n                        <div class="dnd-result" id="result' + sfx + '" style="position:absolute;left:0;right:0;bottom:12%;text-align:center;font-weight:bold;z-index:4;pointer-events:none;"></div>';
-                out += '\n                        <div id="score-malus-container' + sfx + '" class="score-malus-container" style="position:absolute; left:0; right:0; bottom:1%; display:flex; justify-content:center; gap:2%; font-weight:bold; font-size:' + Math.round((g.height || 400) * 0.07) + 'px; color:#2e7d32; z-index:4;"></div>';
+                const sb = (window.MqDndEngine && MqDndEngine.normalizeScoreBox)
+                    ? MqDndEngine.normalizeScoreBox(g.scoreBox, g)
+                    : Object.assign({ x: Math.round((G_W - 320) / 2), y: Math.max(0, G_H - 56), width: 320, height: 48, fontSize: 22, font: 'Verdana, sans-serif', bgColor: 'rgba(255,255,255,0.92)', color: '#2e7d32', borderColor: '#81c784' }, g.scoreBox || {});
+                const sbX = ((sb.x || 0) / G_W) * 100;
+                const sbY = ((sb.y || 0) / G_H) * 100;
+                const sbW = ((sb.width || 320) / G_W) * 100;
+                const sbH = ((sb.height || 48) / G_H) * 100;
+                out += '\n                        <div id="score-malus-container' + sfx + '" class="score-malus-container" style="position:absolute; left:' + sbX + '%; top:' + sbY + '%; width:' + sbW + '%; height:' + sbH + '%; display:flex; align-items:center; justify-content:center; gap:10px; font-weight:bold; font-family:' + String(sb.font || 'Verdana, sans-serif').replace(/"/g, '&quot;') + '; font-size:' + (sb.fontSize || 22) + 'px; color:' + (sb.color || '#2e7d32') + '; background:' + (sb.bgColor || 'rgba(255,255,255,0.92)') + '; border:2px solid ' + (sb.borderColor || '#81c784') + '; border-radius:12px; box-sizing:border-box; padding:4px 10px; z-index:11; pointer-events:none;"></div>';
                 out += '\n                    </div>';
                 return out;
             }

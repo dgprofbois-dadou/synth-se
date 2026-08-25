@@ -1017,13 +1017,14 @@ test('feedback dépôt : flash zone pâle + floating erreur', () => {
 
 test('Relier→DnD : isLinkModeOn ignore le mode flèche résiduel sur étape dépôt', () => {
   const src = fs.readFileSync(path.join(__dirname, '..', 'mq-dnd-engine.js'), 'utf8');
-  assert.ok(src.includes("lastStepActivity === 'dnd'"));
+  assert.ok(src.includes("lastStepActivity !== 'linking'"));
   assert.ok(src.includes('syncRelierForStep._stepKey'));
   assert.ok(src.includes('linkingApi.setLinkMode(false)'));
   assert.ok(src.includes('if (!hybrid)'));
   assert.ok(/if \(!hybrid\)[\s\S]{0,400}dragstart/.test(src));
+  assert.ok(src.includes("targetsLayer.style.zIndex = linkingOnly ? '7' : '10'"));
   const html = fs.readFileSync(path.join(__dirname, '..', 'placement-inputs.html'), 'utf8');
-  assert.ok(html.includes("z-index:7; pointer-events:none"));
+  assert.ok(html.includes("z-index:7; box-sizing:border-box; pointer-events:none"));
 });
 
 test('Étape DnD après Relier : cartes requises par l’étape restent draggables', () => {
@@ -1048,6 +1049,19 @@ test('Étape DnD après Relier : cartes requises par l’étape restent draggabl
   const refs = Engine.idsReferencedByStep(st2.active);
   assert.ok(refs.b);
   assert.ok(!refs.c);
+});
+
+test('scoreBox absolu normalisé (taille lisible, pas height*0.07)', () => {
+  const sb = Engine.normalizeScoreBox({}, { width: 1400, height: 1100 });
+  assert.ok(sb.fontSize <= 28);
+  assert.ok(sb.width < 1400);
+  assert.ok(sb.y > 900);
+  const g = Engine.applyGameDefaults({ width: 1000, height: 800 });
+  assert.ok(g.scoreBox);
+  assert.strictEqual(g.scoreBox.fontSize, 22);
+  const html = fs.readFileSync(path.join(__dirname, '..', 'placement-inputs.html'), 'utf8');
+  assert.ok(html.includes('normalizeScoreBox'));
+  assert.ok(!html.includes("(g.height || 400) * 0.07"));
 });
 
 test('zone jeux : déplacement du cadre + 4 poignées de redim', () => {

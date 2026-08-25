@@ -451,17 +451,23 @@ input::placeholder {
 }
 
 #score-malus-container,
-#score-malus-container2 {
+#score-malus-container2,
+.score-malus-container {
     display: flex;
+    align-items: center;
     justify-content: center;
-    gap: 12px;
-    margin-top: 8px;
+    gap: 10px;
     font-weight: bold;
-    font-size: 12px;
+    font-size: 22px;
+    line-height: 1.2;
+    box-sizing: border-box;
+    pointer-events: none;
+    z-index: 11;
 }
 
-#malus-display {
-    color: red;
+#malus-display,
+.malus-display {
+    color: #d32f2f;
 }
 
 .hidden {

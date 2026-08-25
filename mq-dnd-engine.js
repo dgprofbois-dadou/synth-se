@@ -623,6 +623,7 @@
     if (typeof g.enableSteps !== 'boolean') g.enableSteps = false;
     g.steps = normalizeSteps(g.steps);
     g.instructionsBox = normalizeInstructionsBox(g.instructionsBox, g);
+    g.scoreBox = normalizeScoreBox(g.scoreBox, g);
     migrateDraggableTooltips(g);
     if (g.enableSteps && (!g.steps || !g.steps.length) && String(g.instructions || '').trim()) {
       g.steps = [normalizeStep({
@@ -931,6 +932,30 @@
       bgColor: src.bgColor != null && String(src.bgColor).trim() ? String(src.bgColor) : '#fff8e1',
       color: src.color != null && String(src.color).trim() ? String(src.color) : '#78350f',
       borderColor: src.borderColor != null && String(src.borderColor).trim() ? String(src.borderColor) : '#f59e0b'
+    };
+  }
+
+  /** Boîte score / malus (absolu, comme la consigne). */
+  function normalizeScoreBox(raw, game) {
+    var src = raw && typeof raw === 'object' ? raw : {};
+    var gw = Math.max(200, parseInt(game && game.width, 10) || 800);
+    var gh = Math.max(100, parseInt(game && game.height, 10) || 400);
+    var fontSize = Math.max(12, parseInt(src.fontSize, 10) || 22);
+    var width = typeof src.width === 'number' ? Math.max(120, src.width) : Math.min(420, Math.max(220, Math.round(gw * 0.42)));
+    var height = typeof src.height === 'number' ? Math.max(36, src.height) : Math.max(44, Math.round(fontSize * 2.2));
+    var x = typeof src.x === 'number' ? Math.round(src.x) : Math.round((gw - width) / 2);
+    var y = typeof src.y === 'number' ? Math.round(src.y) : Math.max(0, gh - height - Math.round(gh * 0.02));
+    return {
+      x: x,
+      y: y,
+      width: width,
+      height: height,
+      font: src.font != null && String(src.font).trim() ? String(src.font) : 'Verdana, sans-serif',
+      fontSize: fontSize,
+      bold: src.bold === false ? false : true,
+      bgColor: src.bgColor != null && String(src.bgColor).trim() ? String(src.bgColor) : 'rgba(255,255,255,0.92)',
+      color: src.color != null && String(src.color).trim() ? String(src.color) : '#2e7d32',
+      borderColor: src.borderColor != null && String(src.borderColor).trim() ? String(src.borderColor) : '#81c784'
     };
   }
 
@@ -2992,8 +3017,8 @@
 
     function isLinkModeOn() {
       if (!(linkingApi && linkingApi.isLinkModeActive && linkingApi.isLinkModeActive())) return false;
-      // Étape dépôt pure : un mode flèche résiduel ne doit jamais bloquer drag/drop
-      if (stepsEnabled && lastStepActivity === 'dnd') return false;
+      // Étape dépôt (dnd ou mixte) : un mode flèche résiduel ne doit jamais bloquer drag/drop
+      if (stepsEnabled && lastStepActivity !== 'linking') return false;
       return true;
     }
 
@@ -3329,8 +3354,8 @@
       }
       gameContainer.classList.toggle('dnd-step-relier-on', !!(autoLink || showBtn));
       gameContainer.classList.toggle('dnd-step-relier-auto', !!autoLink);
-      // Filet de sécurité : classe résiduelle ne doit pas bloquer le pan / DnD
-      if (!autoLink && actName === 'dnd') {
+      // Filet de sécurité : hors Relier auto, la classe ne doit pas bloquer le pan / DnD
+      if (!autoLink && actName !== 'linking') {
         gameContainer.classList.remove('dnd-link-mode');
       }
     }
@@ -3393,6 +3418,7 @@
           el.removeAttribute('aria-hidden');
         }
       }
+      var unlockedZoneCount = 0;
       Array.prototype.forEach.call(gameContainer.querySelectorAll('.dropzone'), function (z) {
         z.classList.toggle('dnd-step-locked', linkingOnly);
         z.style.removeProperty('opacity');
@@ -3406,8 +3432,30 @@
           hideChrome = !zoneIdSet[zid];
         }
         z.classList.toggle('dnd-step-zone-hidden', !!hideChrome);
-        z.style.pointerEvents = (linkingOnly || hideChrome) ? 'none' : 'auto';
+        var peOff = linkingOnly || hideChrome;
+        z.style.pointerEvents = peOff ? 'none' : 'auto';
+        if (!peOff) unlockedZoneCount += 1;
       });
+      // Filet : étape DnD dont les zoneIds ne matchent aucune dropzone → tout débloquer
+      // (sinon l’élève voit le décor imprimé mais ne peut rien déposer)
+      if (!linkingOnly && zoneIdSet && unlockedZoneCount === 0 && st && !st.allComplete) {
+        Array.prototype.forEach.call(gameContainer.querySelectorAll('.dropzone'), function (z) {
+          var zid = String(z.getAttribute('data-zone-id') || '');
+          if (hideFuture && ownership) {
+            var zMin2 = ownership.zoneMinStep[zid];
+            if (zMin2 != null && zMin2 > curIdx) return;
+          }
+          z.classList.remove('dnd-step-zone-hidden', 'dnd-step-locked');
+          z.style.pointerEvents = 'auto';
+        });
+      }
+      // Couche cibles au-dessus des sources hors Relier : le DnD HTML5 rate souvent
+      // les dropzones sous un parent pointer-events:none (couche #source).
+      var targetsLayer = gameContainer.querySelector('[id^="targets"]');
+      if (targetsLayer) {
+        targetsLayer.style.pointerEvents = 'none';
+        targetsLayer.style.zIndex = linkingOnly ? '7' : '10';
+      }
       Array.prototype.forEach.call(gameContainer.querySelectorAll('.draggable'), function (el) {
         if (el.classList.contains('dnd-placed')) return;
         var id = String(el.getAttribute('data-id') || '');
@@ -3464,6 +3512,10 @@
           } else {
             gEl.style.pointerEvents = blockLinkHit ? 'none' : 'auto';
           }
+        });
+        Array.prototype.forEach.call(linkLayer.querySelectorAll('polygon, path, circle, rect'), function (shape) {
+          if (blockLinkHit) shape.setAttribute('pointer-events', 'none');
+          else if (shape.classList && shape.classList.contains('lz-fill')) shape.setAttribute('pointer-events', 'all');
         });
       }
       Array.prototype.forEach.call(gameContainer.querySelectorAll('.dnd-decor-fixed[data-id], .dnd-decor-text[data-id]'), function (el) {
@@ -4427,6 +4479,7 @@
     enrichStepsFromDropzones: enrichStepsFromDropzones,
     stepInstructionLabel: stepInstructionLabel,
     normalizeInstructionsBox: normalizeInstructionsBox,
+    normalizeScoreBox: normalizeScoreBox,
     applyInstructionsBoxToElement: applyInstructionsBoxToElement,
     findInstructionsHudHost: findInstructionsHudHost,
     findInstructionsEl: findInstructionsEl,
