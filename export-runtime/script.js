@@ -704,6 +704,11 @@
     Engine.initPlayableDndGame(gameContainer, cfg, {
       playSound: playSound,
       showFloating: showFloatingFeedback,
+      onLinkRejected: function (from, to) {
+        try {
+          showFloatingFeedback('Flèche refusée : ' + from + ' → ' + to, false);
+        } catch (e) { /* ignore */ }
+      },
       onReady: function (info) {
         window.dndMaxScores[info.gameId] = info.maxScore;
         window.dndScores[info.gameId] = window.dndScores[info.gameId] || 0;

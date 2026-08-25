@@ -1032,7 +1032,8 @@ test('feedback dépôt : flash zone pâle + floating erreur', () => {
 
 test('Relier→DnD : isLinkModeOn ignore le mode flèche résiduel sur étape dépôt', () => {
   const src = fs.readFileSync(path.join(__dirname, '..', 'mq-dnd-engine.js'), 'utf8');
-  assert.ok(src.includes("lastStepActivity !== 'linking'"));
+  // Étape « dnd » pure : Relier résiduel coupé ; « both » / « linking » restent OK
+  assert.ok(src.includes("lastStepActivity === 'dnd'"));
   assert.ok(src.includes('syncRelierForStep._stepKey'));
   assert.ok(src.includes('linkingApi.setLinkMode(false)'));
   assert.ok(src.includes('if (!hybrid)'));

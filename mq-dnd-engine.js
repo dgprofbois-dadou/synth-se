@@ -2519,6 +2519,11 @@
         linkErrors += 1;
         if (typeof opts.addErrors === 'function') opts.addErrors(1);
         if (typeof hooks.playSound === 'function') hooks.playSound('error');
+        if (typeof hooks.onLinkRejected === 'function') {
+          try { hooks.onLinkRejected(from, to); } catch (errRej) { /* ignore */ }
+        } else if (typeof hooks.showFloating === 'function') {
+          try { hooks.showFloating('Flèche refusée : ' + from + ' → ' + to + ' (ID d’arrivée ≠ liste)', false); } catch (errFloat) { /* ignore */ }
+        }
       } else if (typeof hooks.playSound === 'function') {
         hooks.playSound('ok');
       }
@@ -3037,8 +3042,9 @@
 
     function isLinkModeOn() {
       if (!(linkingApi && linkingApi.isLinkModeActive && linkingApi.isLinkModeActive())) return false;
-      // Étape dépôt (dnd ou mixte) : un mode flèche résiduel ne doit jamais bloquer drag/drop
-      if (stepsEnabled && lastStepActivity !== 'linking') return false;
+      // Étape dépôt pure : un mode flèche résiduel ne doit jamais bloquer drag/drop
+      // « both » et « linking » autorisent le mode Relier actif
+      if (stepsEnabled && lastStepActivity === 'dnd') return false;
       return true;
     }
 

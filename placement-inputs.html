@@ -8652,6 +8652,12 @@
                             playSound: typeof playSound === 'function' ? playSound : null,
                             showFloating: typeof showFloatingFeedback === 'function' ? showFloatingFeedback : null,
                             startAtStep: startAt,
+                            onLinkRejected: function (from, to) {
+                                const msg = 'Flèche refusée : ' + from + ' → ' + to
+                                    + ' — l’ID d’arrivée ne correspond pas aux « Flèches à valider » (vérifiez le renommage de la zone).';
+                                if (window.mqToast) window.mqToast(msg, { warn: true });
+                                else if (typeof showFloatingFeedback === 'function') showFloatingFeedback(msg, false);
+                            },
                             onScore: function (info) {
                                 if (!state.dndGames.dndResults) state.dndGames.dndResults = {};
                                 state.dndGames.dndResults[gameId] = (info.displayScore != null) ? info.displayScore : info.score;
@@ -14284,13 +14290,59 @@
             }
 
             // ===== Zones SVG Relier =====
+            /** Met à jour les flèches (étapes + allowedLinks) quand on renomme une zone SVG Relier. */
+            function mqRewriteLinkPairIds(gameId, oldId, newId) {
+                const g = state.dndGames[gameId];
+                if (!g || !oldId || !newId || oldId === newId) return 0;
+                let n = 0;
+                const rewrite = (pairs) => {
+                    if (!Array.isArray(pairs)) return pairs;
+                    return pairs.map((p) => {
+                        if (!p) return p;
+                        let from = String(p.from != null ? p.from : '');
+                        let to = String(p.to != null ? p.to : '');
+                        let changed = false;
+                        if (from === oldId) { from = newId; changed = true; }
+                        if (to === oldId) { to = newId; changed = true; }
+                        if (changed) n += 1;
+                        return { from, to };
+                    });
+                };
+                if (Array.isArray(g.allowedLinks)) g.allowedLinks = rewrite(g.allowedLinks);
+                (g.steps || []).forEach((s) => {
+                    if (!s) return;
+                    if (Array.isArray(s.linkPairs)) s.linkPairs = rewrite(s.linkPairs);
+                    if (Array.isArray(s.allowedLinks)) s.allowedLinks = rewrite(s.allowedLinks);
+                });
+                if (window.MqDndEngine && MqDndEngine.effectiveAllowedLinks && g.enableSteps) {
+                    g.allowedLinks = MqDndEngine.effectiveAllowedLinks(g);
+                }
+                return n;
+            }
             window.updateLinkZone = function (gameId, index, property, value) {
                 const arr = state.dndGames[gameId].linkZones;
                 if (!arr || !arr[index]) return;
                 if (property === 'id') {
                     const id = String(value == null ? '' : value).trim();
                     if (!id) return;
+                    const prev = String(arr[index].id || '').trim();
+                    if (arr.some((z, i) => i !== index && String(z.id) === id)) {
+                        if (window.mqToast) window.mqToast('ID « ' + id + ' » déjà utilisé par une autre zone.', { warn: true });
+                        renderLinkZoneList(gameId);
+                        return;
+                    }
                     arr[index].id = id;
+                    if (prev && prev !== id) {
+                        const n = mqRewriteLinkPairIds(gameId, prev, id);
+                        if (typeof renderStepsList === 'function') {
+                            try { renderStepsList(gameId); } catch (e) { /* ignore */ }
+                        }
+                        if (window.mqToast) {
+                            window.mqToast(n
+                                ? ('Zone renommée « ' + prev + ' » → « ' + id + ' » (' + n + ' flèche(s) mises à jour)')
+                                : ('Zone renommée « ' + id + ' » — pensez à mettre à jour les flèches id>id'));
+                        }
+                    }
                 } else if (property === 'label') {
                     arr[index].label = String(value || '');
                 }
