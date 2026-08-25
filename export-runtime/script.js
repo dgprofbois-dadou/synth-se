@@ -127,7 +127,20 @@
     }
   }
 
+  /** Envoie Moodle : HTTP(S) uniquement (pas file:// ni ouverture locale du HTML exporté). */
+  function mqCanSendMoodleScore() {
+    if (!window.__mqAllowMoodleScore) return false;
+    var proto = window.location.protocol;
+    if (proto !== 'http:' && proto !== 'https:') return false;
+    try {
+      var params = new URLSearchParams(window.location.search);
+      if (params.has('admin') || params.has('prof')) return false;
+    } catch (_) { /* ignore */ }
+    return true;
+  }
+
   function envoyerScoreAMoodle(scoreFinal) {
+    if (!mqCanSendMoodleScore()) return;
     let finalCourseId = 1; // ID du cours Moodle (très important pour le contexte)
     let finalCmid = 1;     // ID du module
 
@@ -225,6 +238,9 @@
       }
 
       scriptUrl = moodleDir + '/local/suivisynthese/ajax_score.php';
+      if (/^https?:\/\//i.test(window.location.origin)) {
+        scriptUrl = window.location.origin + scriptUrl;
+      }
 
       fetch(scriptUrl, {
         method: 'POST',
@@ -318,7 +334,7 @@
     // --- ENVOI MOODLE AVEC DEBOUNCE ANTI-SPAM ---
     // On attend 1.5 secondes après la dernière modification du score pour envoyer
     clearTimeout(scoreTimeout);
-    if (window.__mqAllowMoodleScore) {
+    if (mqCanSendMoodleScore()) {
       scoreTimeout = setTimeout(() => {
         envoyerScoreAMoodle(totalPoints);
       }, 1500);
