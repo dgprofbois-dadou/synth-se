@@ -632,6 +632,20 @@ test('Relier : tracé sans aimantation (flèche suit le curseur)', () => {
   assert.ok(!chunk.includes('previewEndpoints(dragState.fromEl'));
 });
 
+test('Relier : relâchement = cible sous le curseur (pas survol d’une zone croisée)', () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'mq-dnd-engine.js'), 'utf8');
+  const chunk = src.slice(src.indexOf('function endDrag(clientX, clientY)'), src.indexOf('function hitTipFromEvent'));
+  assert.ok(chunk.includes('nodeFromPoint(clientX, clientY)'));
+  assert.ok(!chunk.includes('dragState.hoverEl ||'));
+  assert.ok(src.includes('le centre le plus proche'));
+});
+
+test('Relier : routage accepte un croisement plutôt qu’un détour extrême', () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'mq-dnd-engine.js'), 'utf8');
+  assert.ok(src.includes('crossings * 14'));
+  assert.ok(!src.includes('bestCross'));
+});
+
 test('linkAnchorPoint décale les arrivées sur grandes zones', () => {
   const bbox = { x: 100, y: 50, width: 120, height: 80 };
   const single = Engine.linkAnchorPoint(0, 90, bbox, 0, 1);
@@ -926,7 +940,8 @@ test('Relier : images / textes fixes sont des nœuds (id decor-N)', () => {
   assert.strictEqual(ev.score, 1);
   const engineSrc = fs.readFileSync(path.join(__dirname, '..', 'mq-dnd-engine.js'), 'utf8');
   assert.ok(engineSrc.includes('.dnd-decor-fixed[data-id], .dnd-decor-text[data-id]'));
-  assert.ok(engineSrc.includes('zoneArea <= decorArea * 0.85'));
+  assert.ok(engineSrc.includes('bestZoneDist <= bestDecorDist * 1.15'));
+  assert.ok(engineSrc.includes('le centre le plus proche'));
   const html = fs.readFileSync(path.join(__dirname, '..', 'placement-inputs.html'), 'utf8');
   assert.ok(html.includes('drag-game.dnd-link-mode .dnd-decor-fixed[data-id]'));
   assert.ok(html.includes('dnd-link-node'));

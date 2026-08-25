@@ -447,26 +447,30 @@
     (others || []).forEach(function (other) {
       if (other) crossings += countPolylineCrossings(poly, other);
     });
-    score += crossings * 50;
-    score += Math.max(0, poly.length - 3) * 10;
-    score += polylineDeviation(poly) * 0.28;
+    // Croisements : pénalité douce (évite les détours extrêmes qui « recollent » sur une mauvaise zone)
+    score += crossings * 14;
+    score += Math.max(0, poly.length - 3) * 8;
+    score += polylineDeviation(poly) * 0.45;
     score += polylineBacktrack(poly) * 120;
     score += polylineOppositeBulge(poly) * 90;
+    // Préférer le tracé le plus court / direct
+    if (poly && poly.length >= 2) {
+      var len = 0;
+      for (var i = 1; i < poly.length; i++) {
+        len += Math.hypot(poly[i].x - poly[i - 1].x, poly[i].y - poly[i - 1].y);
+      }
+      var chord = Math.hypot(poly[poly.length - 1].x - poly[0].x, poly[poly.length - 1].y - poly[0].y) || 1;
+      score += (len / chord - 1) * 35;
+    }
     return score;
   }
 
   function pickBestRouteCandidate(candidates, others) {
     var best = candidates[0];
     var bestScore = Infinity;
-    var bestCross = Infinity;
     candidates.forEach(function (poly) {
-      var cross = 0;
-      (others || []).forEach(function (other) {
-        if (other) cross += countPolylineCrossings(poly, other);
-      });
       var s = scoreRouteCandidate(poly, others);
-      if (cross < bestCross || (cross === bestCross && s < bestScore)) {
-        bestCross = cross;
+      if (s < bestScore) {
         bestScore = s;
         best = poly;
       }
@@ -2126,8 +2130,10 @@
       }
     }
     /**
-     * Zones SVG superposées : privilégie la plus petite (plus précise).
-     * Cartes déposées / draggables restent prioritaires sur les zones.
+     * Zones SVG superposées : parmi les nœuds sous le curseur, privilégie
+     * le centre le plus proche (pas la plus petite zone — sinon un polygone
+     * voisin « vole » l’arrivée quand on croise / vise une grande zone).
+     * Cartes déposées / draggables restent prioritaires.
      */
     function pickBestLinkAt(clientX, clientY) {
       var stack = [];
@@ -2140,12 +2146,21 @@
         var one = document.elementFromPoint(clientX, clientY);
         if (one) stack = [one];
       }
+      var local = localPoint(clientX, clientY);
       var placed = null;
       var drag = null;
-      var decor = null;
+      var bestDecor = null;
+      var bestDecorDist = Infinity;
       var bestZone = null;
-      var bestArea = Infinity;
+      var bestZoneDist = Infinity;
       var seen = {};
+      function nodeDist(el) {
+        if (!el) return Infinity;
+        var c = nodeCenter(el);
+        var dx = c.x - local.x;
+        var dy = c.y - local.y;
+        return dx * dx + dy * dy;
+      }
       for (var i = 0; i < stack.length; i++) {
         var node = stack[i];
         if (!node || !node.closest || !gameContainer.contains(node)) continue;
@@ -2162,16 +2177,23 @@
         var dc = node.closest('.dnd-decor-fixed[data-id], .dnd-decor-text[data-id]');
         if (dc && gameContainer.contains(dc) && !seen['c:' + dc.getAttribute('data-id')]) {
           seen['c:' + dc.getAttribute('data-id')] = 1;
-          if (!decor) decor = dc;
+          var dDecor = nodeDist(dc);
+          if (dDecor < bestDecorDist) {
+            bestDecorDist = dDecor;
+            bestDecor = dc;
+          }
         }
         var lz = node.closest('[data-link-node][data-id]');
         if (lz && gameContainer.contains(lz)) {
           var lid = String(lz.getAttribute('data-id') || '');
           if (lid && !seen['z:' + lid]) {
             seen['z:' + lid] = 1;
-            var area = linkNodeArea(lz);
-            if (area < bestArea) {
-              bestArea = area;
+            var dZone = nodeDist(lz);
+            // En cas d’égalité proche, la zone plus petite départage (zone imbriquée)
+            if (!bestZone
+                || dZone < bestZoneDist - 0.5
+                || (Math.abs(dZone - bestZoneDist) <= 0.5 && linkNodeArea(lz) < linkNodeArea(bestZone))) {
+              bestZoneDist = dZone;
               bestZone = lz;
             }
           }
@@ -2184,14 +2206,12 @@
       }
       if (placed) return placed;
       if (drag) return drag;
-      // Zone SVG plus petite prioritaire si elle recouvre l’image fixe ; sinon l’image fixe.
-      if (bestZone && decor && bestZone !== decor) {
-        var zoneArea = linkNodeArea(bestZone);
-        var decorArea = linkNodeArea(decor);
-        if (zoneArea <= decorArea * 0.85) return bestZone;
-        return decor;
+      if (bestZone && bestDecor) {
+        // Si les deux sont sous le curseur, garder le plus proche du pointeur
+        if (bestZoneDist <= bestDecorDist * 1.15) return bestZone;
+        return bestDecor;
       }
-      if (decor) return decor;
+      if (bestDecor) return bestDecor;
       if (bestZone) return bestZone;
       // Fallback : dropzone vide (id de zone)
       for (var j = 0; j < stack.length; j++) {
@@ -2726,8 +2746,8 @@
       if (!dragState) return;
       var fromId = dragState.fromId;
       var fromEl = dragState.fromEl;
-      // Préférer la cible accrochée pendant le drag (évite un trait final différent)
-      var target = dragState.hoverEl || nodeFromPoint(clientX, clientY);
+      // Toujours la cible SOUS le curseur au relâchement (pas le survol d’une zone croisée en chemin)
+      var target = nodeFromPoint(clientX, clientY);
       if (target === fromEl) target = null;
       var toId = target ? target.getAttribute('data-id') : null;
       if (toId && String(toId) !== String(fromId)) {
