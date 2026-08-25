@@ -768,7 +768,9 @@
     const INTERACTIVE_SELECTOR = [
       'input', 'textarea', 'button', 'select', 'a', 'label',
       '.input-wrapper',
-      '.draggable', '.dropzone', '.dnd-placed', '.png-wrap',
+      '.draggable:not(.dnd-step-source-hidden):not(.dnd-step-future-hidden):not(.used)',
+      '.dropzone:not(.dnd-step-locked):not(.dnd-step-zone-hidden)',
+      '.dnd-placed', '.png-wrap',
       '[data-link-node]', '.dnd-link-zone', '.dnd-link-zone-hit',
       '.dnd-relier-btn', '.dnd-verify-btn', '.dnd-next-step-btn', '.dnd-step-next-btn',
       '.pdf-buttons', '.controls', '.mobile-zoom-bar',
@@ -796,6 +798,8 @@
 
     function isInteractiveTarget(t, ev) {
       if (!t || !t.closest) return false;
+      // Alt ou bouton du milieu : toujours pan (pour recentrer le côté gauche)
+      if (ev && (ev.altKey || ev.button === 1)) return false;
       // Mode Relier actif : clic gauche = pan (les flèches se tracent au clic droit)
       if (t.closest('.dnd-link-mode')) {
         return !!(t.closest('.dnd-relier-btn, .dnd-verify-btn, .dnd-next-step-btn, .dnd-step-next-btn, button, input, textarea, select, a, label, .pdf-buttons, .controls, .mobile-zoom-bar, #btnFullscreen'));
@@ -820,10 +824,9 @@
       refreshBaseSize();
       const contentW = BASE_W * scale;
       const contentH = BASE_H * scale;
-      // Comme placement-inputs.html : autoriser le centrage de n’importe quel bord
-      // (l’ancien clamp ne laissait que 120 px, le bord gauche restait collé).
-      const slackX = Math.max(w / 2, 80);
-      const slackY = Math.max(h / 2, 80);
+      // Slack large : permettre de centrer le bord gauche (ou n’importe quel coin) à l’écran
+      const slackX = Math.max(w * 0.85, 160);
+      const slackY = Math.max(h * 0.85, 160);
       const minX = w - contentW - slackX;
       const maxX = slackX;
       const minY = h - contentH - slackY;
@@ -940,7 +943,8 @@
     window.addEventListener('load', () => fit());
 
     canvasContainer.addEventListener('pointerdown', (e) => {
-      if (e.button !== 0) return;
+      // Clic gauche, ou milieu (pan forcé), ou Alt+clic (pan forcé)
+      if (e.button !== 0 && e.button !== 1) return;
       if (isInteractiveTarget(e.target, e)) return;
 
       activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -960,6 +964,14 @@
       isPanning = false;
       downX = lastX = e.clientX;
       downY = lastY = e.clientY;
+      if (e.button === 1 || e.altKey) {
+        // Pan immédiat (sans attendre le seuil) pour recentrer facilement
+        isPanning = true;
+        pendingPan = false;
+        try { canvasContainer.setPointerCapture(e.pointerId); } catch { }
+        canvasContainer.style.cursor = 'grabbing';
+        e.preventDefault();
+      }
     }, { passive: false });
 
     canvasContainer.addEventListener('pointermove', (e) => {

@@ -232,8 +232,16 @@ test('export runtime : infobulles DnD par délégation (img enfant + thème jeu)
 test('PAN export : slack de centrage des bords (pas clamp 120 px)', () => {
   const js = fs.readFileSync(path.join(__dirname, '..', 'export-runtime', 'script.js'), 'utf8');
   assert.ok(js.includes('slackX'));
-  assert.ok(js.includes('w / 2'));
+  assert.ok(js.includes('w * 0.85') || js.includes('w / 2'));
+  assert.ok(js.includes('altKey') || js.includes('button === 1'));
   assert.ok(!js.includes('const CLAMP_MARGIN = 120'));
+});
+
+test('sanitizeStepTitle répare les titres corrompus', () => {
+  assert.strictEqual(Engine.sanitizeStepTitle('srgÉsdrgh<rtape 1', 0), 'Étape 1');
+  assert.strictEqual(Engine.sanitizeStepTitle('Étape 2', 1), 'Étape 2');
+  assert.strictEqual(Engine.sanitizeStepTitle('Mon étape spéciale', 2), 'Mon étape spéciale');
+  assert.strictEqual(Engine.normalizeStep({ title: 'srgÉsdrgh<rtape 1' }, 0).title, 'Étape 1');
 });
 
 test('enrichStepsFromDropzones remplit zoneMap depuis dropzones', () => {
@@ -350,11 +358,12 @@ test('consigne HUD haut-gauche', () => {
       add: function (c) { this._c[c] = true; }
     }
   };
-  Engine.applyInstructionsBoxToElement(el, { width: 800, height: 400, instructionsBox: { fontSize: 18, color: '#111111' } });
+  Engine.applyInstructionsBoxToElement(el, { width: 800, height: 400, instructionsBox: { fontSize: 35, color: '#111111' } });
   assert.strictEqual(el.style.position, 'absolute');
   assert.strictEqual(el.style.left, '12px');
   assert.strictEqual(el.style.top, '12px');
-  assert.ok(String(el.style.maxWidth).indexOf('560px') >= 0);
+  assert.ok(String(el.style.maxWidth).indexOf('340px') >= 0);
+  assert.strictEqual(el.style.fontSize, '16px');
   assert.strictEqual(el.style.color, '#111111');
 });
 

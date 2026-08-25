@@ -1280,8 +1280,13 @@
       el.style.bottom = 'auto';
       el.style.width = 'auto';
       el.style.height = 'auto';
-      el.style.maxWidth = 'min(560px, calc(100% - 24px))';
-      el.style.maxHeight = 'min(240px, 36vh)';
+      // HUD compact : ne pas reprendre la taille « éditeur » (sinon consigne énorme sur le jeu)
+      el.style.maxWidth = 'min(340px, calc(100% - 24px))';
+      el.style.maxHeight = 'min(110px, 22vh)';
+      el.style.padding = '8px 12px';
+      el.style.lineHeight = '1.3';
+      el.style.zIndex = '180';
+      el.style.pointerEvents = 'none';
       if (typeof document !== 'undefined' && typeof document.querySelectorAll === 'function') {
         syncInstructionsHudLayout(findInstructionsHudHost(el.closest && el.closest('.drag-game')));
       }
@@ -1296,7 +1301,8 @@
       el.style.right = 'auto';
     }
     el.style.fontFamily = box.font;
-    el.style.fontSize = box.fontSize + 'px';
+    // HUD : plafonner la police (la boîte éditeur peut être à 35 px)
+    el.style.fontSize = (hud ? Math.min(16, box.fontSize) : box.fontSize) + 'px';
     el.style.fontWeight = box.bold ? 'bold' : '600';
     el.style.fontStyle = box.italic ? 'italic' : 'normal';
     el.style.textAlign = box.align || (hud ? 'left' : 'center');
@@ -1353,6 +1359,25 @@
     return out;
   }
 
+  function sanitizeStepTitle(raw, index) {
+    var fallback = 'Étape ' + ((typeof index === 'number' ? index : 0) + 1);
+    var rawStr = String(raw == null ? '' : raw);
+    var t = rawStr;
+    t = t.replace(/<[^>]*>/g, ' ');
+    t = t.replace(/&lt;/gi, ' ').replace(/&gt;/gi, ' ').replace(/&quot;/gi, '"').replace(/&#39;/g, "'").replace(/&amp;/gi, '&');
+    t = t.replace(/[<>]/g, ' ');
+    t = t.replace(/[\u0000-\u001F\u007F]/g, '').replace(/\s+/g, ' ').trim();
+    if (!t) return fallback;
+    // Titres corrompus du type "srgÉsdrgh<rtape 1" → Étape 1
+    var garbled = /srg|sdrgh/i.test(rawStr) || /<[a-z]*tape/i.test(rawStr) || /&lt;\s*rtape/i.test(rawStr);
+    if (garbled) {
+      var tapeNum = rawStr.match(/tape\s*(\d+)/i) || t.match(/tape\s*(\d+)/i);
+      if (tapeNum) return 'Étape ' + tapeNum[1];
+    }
+    if (t.length > 80) t = t.slice(0, 80).trim();
+    return t;
+  }
+
   function normalizeStep(raw, index) {
     var s = raw && typeof raw === 'object' ? raw : {};
     var linkPairs = normalizeAllowedLinks(s.linkPairs || s.allowedLinks || s.links || []);
@@ -1368,7 +1393,7 @@
     if (!isFinite(minCorrectLinks) || minCorrectLinks < 0) minCorrectLinks = 0;
     return {
       id: s.id != null ? String(s.id) : String(index + 1),
-      title: s.title != null ? String(s.title) : ('Étape ' + (index + 1)),
+      title: sanitizeStepTitle(s.title, index),
       instructions: s.instructions != null ? String(s.instructions) : '',
       activity: activity,
       stepGameType: activity === 'linking' ? 'linking' : stepGameType,
@@ -4535,6 +4560,7 @@
     migrateLegacyLinkingToSteps: migrateLegacyLinkingToSteps,
     computeDndBaseMaxScore: computeDndBaseMaxScore,
     normalizeStep: normalizeStep,
+    sanitizeStepTitle: sanitizeStepTitle,
     normalizeZoneMap: normalizeZoneMap,
     normalizeZoneMapIds: normalizeZoneMapIds,
     normalizeSteps: normalizeSteps,

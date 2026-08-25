@@ -1098,9 +1098,13 @@
             z-index: 180;
             width: auto;
             height: auto;
-            max-width: min(560px, calc(100% - 24px));
-            max-height: min(240px, 36vh);
+            max-width: min(340px, calc(100% - 24px));
+            max-height: min(110px, 22vh);
+            padding: 8px 12px;
+            font-size: 16px;
+            line-height: 1.3;
             text-align: left;
+            pointer-events: none;
         }
         .dnd-instructions.dnd-instructions-hud:not(.dnd-instructions-active) {
             display: none !important;
@@ -14609,7 +14613,10 @@
                 const list = document.getElementById('dndGame' + n + 'StepsList');
                 if (!list) return [];
                 return Array.from(list.querySelectorAll('[data-step-idx]')).map((card, i) => {
-                    const title = (card.querySelector('[data-field="title"]') || {}).value || ('Étape ' + (i + 1));
+                    const titleRaw = (card.querySelector('[data-field="title"]') || {}).value || ('Étape ' + (i + 1));
+                    const title = (window.MqDndEngine && MqDndEngine.sanitizeStepTitle)
+                        ? MqDndEngine.sanitizeStepTitle(titleRaw, i)
+                        : titleRaw;
                     const instructions = (card.querySelector('[data-field="instructions"]') || {}).value || '';
                     const activityEl = card.querySelector('[data-field="activity"]');
                     const activity = (activityEl && activityEl.value) || 'dnd';

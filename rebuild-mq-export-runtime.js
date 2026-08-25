@@ -117,8 +117,12 @@ function rebuild() {
   z-index: 180;
   width: auto;
   height: auto;
-  max-width: min(560px, calc(100% - 24px));
-  max-height: min(240px, 36vh);
+  max-width: min(340px, calc(100% - 24px));
+  max-height: min(110px, 22vh);
+  padding: 8px 12px;
+  font-size: 16px;
+  line-height: 1.3;
+  pointer-events: none;
   text-align: left;
 }
 .dnd-instructions.dnd-instructions-hud:not(.dnd-instructions-active) {
@@ -368,8 +372,12 @@ g.dnd-link-zone.dnd-link-node.dnd-link-from {
   z-index: 180;
   width: auto;
   height: auto;
-  max-width: min(560px, calc(100% - 24px));
-  max-height: min(240px, 36vh);
+  max-width: min(340px, calc(100% - 24px));
+  max-height: min(110px, 22vh);
+  padding: 8px 12px;
+  font-size: 16px;
+  line-height: 1.3;
+  pointer-events: none;
   text-align: left;
 }
 .dnd-instructions.dnd-instructions-hud:not(.dnd-instructions-active) {
@@ -392,8 +400,12 @@ g.dnd-link-zone.dnd-link-node.dnd-link-from {
   z-index: 180;
   width: auto;
   height: auto;
-  max-width: min(560px, calc(100% - 24px));
-  max-height: min(240px, 36vh);
+  max-width: min(340px, calc(100% - 24px));
+  max-height: min(110px, 22vh);
+  padding: 8px 12px;
+  font-size: 16px;
+  line-height: 1.3;
+  pointer-events: none;
   text-align: left;
 }
 .dnd-instructions.dnd-instructions-hud:not(.dnd-instructions-active) {
