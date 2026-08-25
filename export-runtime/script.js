@@ -282,7 +282,10 @@
     });
 
     // Affichage texte
-    if (scoreDisplay) scoreDisplay.textContent = String(totalPoints);
+    if (scoreDisplay) {
+      var shown = Math.round(totalPoints * 10) / 10;
+      scoreDisplay.textContent = String(shown);
+    }
 
     // Calcul total pour la barre
     let maxPoints = allInputs.length;
@@ -719,10 +722,12 @@
       },
       onScore: function (info) {
         window.__mqAllowMoodleScore = true;
-        window.dndScores[info.gameId] = info.score;
+        var pts = (info.displayScore != null) ? info.displayScore
+          : (info.score != null ? info.score : 0);
+        window.dndScores[info.gameId] = pts;
         window.dndMaxScores[info.gameId] = info.maxScore;
-        if (info.gameId === 'game1') window.game1Score = info.score;
-        if (info.gameId === 'game2') window.game2Score = info.score;
+        if (info.gameId === 'game1') window.game1Score = pts;
+        if (info.gameId === 'game2') window.game2Score = pts;
         updateGlobalScore();
       }
     });

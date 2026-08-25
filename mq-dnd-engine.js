@@ -944,16 +944,27 @@
     };
   }
 
-  /** Boîte score / malus (absolu, comme la consigne). */
+  /** Boîte score / malus (absolu). Taille proportionnelle au jeu pour rester lisible après zoom/fit. */
   function normalizeScoreBox(raw, game) {
     var src = raw && typeof raw === 'object' ? raw : {};
     var gw = Math.max(200, parseInt(game && game.width, 10) || 800);
     var gh = Math.max(100, parseInt(game && game.height, 10) || 400);
-    var fontSize = Math.max(12, parseInt(src.fontSize, 10) || 22);
-    var width = typeof src.width === 'number' ? Math.max(120, src.width) : Math.min(420, Math.max(220, Math.round(gw * 0.42)));
-    var height = typeof src.height === 'number' ? Math.max(36, src.height) : Math.max(44, Math.round(fontSize * 2.2));
+    // ~2.5 % de la hauteur du jeu (ex. 3564 → ~89 px) pour rester lisible une fois le plan réduit
+    var minReadable = Math.max(22, Math.min(96, Math.round(gh * 0.025)));
+    var fontSize = parseInt(src.fontSize, 10);
+    if (!isFinite(fontSize) || fontSize < minReadable) fontSize = minReadable;
+    var width = typeof src.width === 'number' ? Math.round(src.width) : Math.min(Math.round(gw * 0.42), Math.max(280, Math.round(fontSize * 16)));
+    var height = typeof src.height === 'number' ? Math.round(src.height) : Math.max(44, Math.round(fontSize * 2.4));
+    if (width < fontSize * 12) width = Math.round(fontSize * 16);
+    if (height < fontSize * 1.8) height = Math.round(fontSize * 2.4);
+    width = Math.max(160, Math.min(gw - 16, width));
+    height = Math.max(36, Math.min(gh - 16, height));
     var x = typeof src.x === 'number' ? Math.round(src.x) : Math.round((gw - width) / 2);
     var y = typeof src.y === 'number' ? Math.round(src.y) : Math.max(0, gh - height - Math.round(gh * 0.02));
+    if (x < 0) x = 0;
+    if (y < 0) y = 0;
+    if (x + width > gw) x = Math.max(0, gw - width);
+    if (y + height > gh) y = Math.max(0, gh - height);
     return {
       x: x,
       y: y,
@@ -966,6 +977,61 @@
       color: src.color != null && String(src.color).trim() ? String(src.color) : '#2e7d32',
       borderColor: src.borderColor != null && String(src.borderColor).trim() ? String(src.borderColor) : '#81c784'
     };
+  }
+
+  /** Applique scoreBox au conteneur score + aligne le message résultat juste au-dessus. */
+  function applyScoreBoxToElements(scoreEl, resultEl, game) {
+    if (!game) return;
+    var box = normalizeScoreBox(game.scoreBox, game);
+    game.scoreBox = box;
+    var gw = Math.max(1, parseInt(game.width, 10) || 800);
+    var gh = Math.max(1, parseInt(game.height, 10) || 400);
+    if (scoreEl) {
+      scoreEl.style.position = 'absolute';
+      scoreEl.style.left = ((box.x / gw) * 100) + '%';
+      scoreEl.style.top = ((box.y / gh) * 100) + '%';
+      scoreEl.style.width = ((box.width / gw) * 100) + '%';
+      scoreEl.style.height = ((box.height / gh) * 100) + '%';
+      scoreEl.style.right = 'auto';
+      scoreEl.style.bottom = 'auto';
+      scoreEl.style.display = 'flex';
+      scoreEl.style.flexDirection = 'row';
+      scoreEl.style.flexWrap = 'nowrap';
+      scoreEl.style.alignItems = 'center';
+      scoreEl.style.justifyContent = 'center';
+      scoreEl.style.gap = '12px';
+      scoreEl.style.whiteSpace = 'nowrap';
+      scoreEl.style.overflow = 'visible';
+      scoreEl.style.boxSizing = 'border-box';
+      scoreEl.style.padding = '6px 14px';
+      scoreEl.style.borderRadius = '12px';
+      scoreEl.style.border = '2px solid ' + box.borderColor;
+      scoreEl.style.background = box.bgColor;
+      scoreEl.style.color = box.color;
+      scoreEl.style.fontFamily = box.font;
+      scoreEl.style.fontSize = box.fontSize + 'px';
+      scoreEl.style.fontWeight = box.bold ? 'bold' : '600';
+      scoreEl.style.zIndex = '11';
+      scoreEl.style.pointerEvents = 'none';
+      scoreEl.style.lineHeight = '1.2';
+    }
+    if (resultEl) {
+      var resH = Math.max(box.fontSize * 1.5, 36);
+      var resY = Math.max(0, box.y - resH - 8);
+      resultEl.style.position = 'absolute';
+      resultEl.style.left = ((box.x / gw) * 100) + '%';
+      resultEl.style.top = ((resY / gh) * 100) + '%';
+      resultEl.style.width = ((box.width / gw) * 100) + '%';
+      resultEl.style.right = 'auto';
+      resultEl.style.bottom = 'auto';
+      resultEl.style.textAlign = 'center';
+      resultEl.style.fontWeight = 'bold';
+      resultEl.style.fontSize = Math.max(16, Math.round(box.fontSize * 0.85)) + 'px';
+      resultEl.style.fontFamily = box.font;
+      resultEl.style.zIndex = '11';
+      resultEl.style.pointerEvents = 'none';
+      resultEl.style.lineHeight = '1.25';
+    }
   }
 
   /** Bouton Relier (flèche) : position + taille carrée. */
@@ -2924,15 +2990,25 @@
           }
         }
         var maxScore = ev.maxScore;
-        var scoreFinal = Math.max(0, ev.score - linkErrors * 0.5);
+        var scoreFinal = Math.max(0, Math.round((ev.score - linkErrors * 0.5) * 10) / 10);
         if (scoreContainer && game.showScore !== false) {
           var malusHtml = (game.showMalus !== false && linkErrors > 0)
-            ? '<span class="dnd-malus" style="color:#d32f2f;">−' + (linkErrors * 0.5) + '</span>'
+            ? '<span class="malus-display" style="color:#d32f2f;white-space:nowrap;">Malus: −' + (linkErrors * 0.5).toFixed(1) + '</span>'
             : '';
-          scoreContainer.innerHTML = '<span class="dnd-score">' + scoreFinal + (maxScore ? ' / ' + maxScore : '') + '</span> ' + malusHtml;
+          scoreContainer.innerHTML =
+            '<span class="score-display" style="color:#2e7d32;white-space:nowrap;">Score: ' + scoreFinal + ' / ' + maxScore + '</span>' + malusHtml;
+          applyScoreBoxToElements(scoreContainer, resultDiv, game);
         }
         if (typeof hooks.onScore === 'function') {
-          hooks.onScore({ gameId: gameId, score: scoreFinal, maxScore: maxScore, errors: linkErrors, isComplete: ev.isComplete });
+          hooks.onScore({
+            gameId: gameId,
+            score: scoreFinal,
+            displayScore: scoreFinal,
+            rawScore: ev.score,
+            maxScore: maxScore,
+            errors: linkErrors,
+            isComplete: ev.isComplete
+          });
         }
         if (ev.isComplete && !completeFired && typeof hooks.onComplete === 'function') {
           completeFired = true;
@@ -3091,6 +3167,7 @@
     var resultDiv = gameContainer.querySelector('.dnd-result') || gameContainer.querySelector('[id^="result"]');
     var scoreContainer = gameContainer.querySelector('.score-malus-container') ||
       gameContainer.querySelector('[id^="score-malus"]');
+    applyScoreBoxToElements(scoreContainer, resultDiv, game);
     var instructionsEl = findInstructionsEl(gameContainer);
     var stepsEnabled = !!(game.enableSteps && game.steps && game.steps.length);
     var lastStepIndex = -1;
@@ -4102,10 +4179,11 @@
 
       if (scoreContainer && showScore) {
         var malusHtml = (showMalus && nbErreurs > 0)
-          ? '<div class="malus-display" style="color:#d32f2f;">Malus: -' + (nbErreurs * 0.5).toFixed(1) + '</div>'
+          ? '<span class="malus-display" style="color:#d32f2f;white-space:nowrap;">Malus: −' + (nbErreurs * 0.5).toFixed(1) + '</span>'
           : '';
         scoreContainer.innerHTML =
-          '<div class="score-display" style="color:#2e7d32;">Score: ' + scoreFinal + ' / ' + maxScore + '</div>' + malusHtml;
+          '<span class="score-display" style="color:#2e7d32;white-space:nowrap;">Score: ' + scoreFinal + ' / ' + maxScore + '</span>' + malusHtml;
+        applyScoreBoxToElements(scoreContainer, resultDiv, game);
       } else if (scoreContainer && !showScore) {
         scoreContainer.innerHTML = '';
       }
@@ -4113,8 +4191,9 @@
       if (typeof hooks.onScore === 'function') {
         hooks.onScore({
           gameId: gameId,
-          score: ev.score,
+          score: scoreFinal,
           displayScore: scoreFinal,
+          rawScore: ev.score,
           maxScore: maxScore,
           errors: nbErreurs,
           isComplete: ev.isComplete,
@@ -4574,6 +4653,7 @@
     stepInstructionLabel: stepInstructionLabel,
     normalizeInstructionsBox: normalizeInstructionsBox,
     normalizeScoreBox: normalizeScoreBox,
+    applyScoreBoxToElements: applyScoreBoxToElements,
     applyInstructionsBoxToElement: applyInstructionsBoxToElement,
     findInstructionsHudHost: findInstructionsHudHost,
     findInstructionsEl: findInstructionsEl,

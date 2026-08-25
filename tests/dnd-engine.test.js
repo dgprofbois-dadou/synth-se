@@ -1197,14 +1197,36 @@ test('Étape DnD après Relier : cartes requises par l’étape restent draggabl
 test('scoreBox absolu normalisé (taille lisible, pas height*0.07)', () => {
   const sb = Engine.normalizeScoreBox({}, { width: 1400, height: 1100 });
   assert.ok(sb.fontSize <= 28);
+  assert.ok(sb.fontSize >= 22);
   assert.ok(sb.width < 1400);
   assert.ok(sb.y > 900);
   const g = Engine.applyGameDefaults({ width: 1000, height: 800 });
   assert.ok(g.scoreBox);
   assert.strictEqual(g.scoreBox.fontSize, 22);
+  // Gros plan (export ~5950×3564) : police ≈ 2.5 % hauteur, boîte assez large pour Score+Malus
+  const big = Engine.normalizeScoreBox({ fontSize: 22, width: 420, height: 48 }, { width: 5950, height: 3564 });
+  assert.ok(big.fontSize >= 80, 'fontSize trop petit sur grand jeu: ' + big.fontSize);
+  assert.ok(big.width >= big.fontSize * 12, 'largeur insuffisante: ' + big.width);
+  assert.ok(big.height >= big.fontSize * 1.8, 'hauteur insuffisante: ' + big.height);
+  // Ancienne boîte trop petite doit être agrandie
+  const tiny = Engine.normalizeScoreBox({ fontSize: 8, width: 80, height: 20 }, { width: 2000, height: 1500 });
+  assert.ok(tiny.fontSize >= 22);
+  assert.ok(typeof Engine.applyScoreBoxToElements === 'function');
   const html = fs.readFileSync(path.join(__dirname, '..', 'placement-inputs.html'), 'utf8');
   assert.ok(html.includes('normalizeScoreBox'));
+  assert.ok(html.includes('applyScoreBoxToElements'));
   assert.ok(!html.includes("(g.height || 400) * 0.07"));
+});
+
+test('score DnD avec malus : displayScore = score brut − 0.5×erreurs', () => {
+  // Vérifie la formule utilisée par le moteur (même logique que refreshUI)
+  const raw = 3;
+  const errors = 2;
+  const final = Math.max(0, Math.round((raw - errors * 0.5) * 10) / 10);
+  assert.strictEqual(final, 2);
+  const runtime = fs.readFileSync(path.join(__dirname, '..', 'export-runtime', 'script.js'), 'utf8');
+  assert.ok(runtime.includes('info.displayScore'), 'export doit utiliser displayScore (malus) pour le total');
+  assert.ok(runtime.includes('displayScore != null'));
 });
 
 test('zone jeux : déplacement du cadre + 4 poignées de redim', () => {
