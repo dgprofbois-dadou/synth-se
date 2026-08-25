@@ -1486,6 +1486,33 @@
     return (step.title || ('Étape ' + n)) + ' (' + n + '/' + t + ')';
   }
 
+  /**
+   * Pour valider une étape Relier : ignorer les flèches déjà validées d’autres étapes.
+   * Sinon evaluateLinks les compte en « wrong » → étape bloquée alors que les flèches sont vertes.
+   */
+  function linksForStepEvaluation(game, step, userLinks) {
+    step = normalizeStep(step, 0);
+    var stepPairs = normalizeAllowedLinks(step.linkPairs || []);
+    var stepKeys = {};
+    stepPairs.forEach(function (l) {
+      stepKeys[linkPairKey(l.from, l.to)] = true;
+    });
+    var otherKeys = {};
+    if (game && game.enableSteps && Array.isArray(game.steps)) {
+      game.steps.forEach(function (s, i) {
+        var ns = normalizeStep(s, i);
+        if (String(ns.id) === String(step.id)) return;
+        normalizeAllowedLinks(ns.linkPairs || []).forEach(function (l) {
+          var k = linkPairKey(l.from, l.to);
+          if (!stepKeys[k]) otherKeys[k] = true;
+        });
+      });
+    }
+    return normalizeAllowedLinks(userLinks).filter(function (l) {
+      return !otherKeys[linkPairKey(l.from, l.to)];
+    });
+  }
+
   function evaluateStep(game, step, placements) {
     placements = placements || {};
     step = normalizeStep(step, 0);
@@ -1521,10 +1548,10 @@
     }
 
     if (linkPairs.length) {
-      // Évaluer uniquement les paires de CETTE étape (pas l'union globale)
+      // Paires de CETTE étape seulement ; flèches des autres étapes exclues
       var lev = evaluateLinks(
         { allowedLinks: linkPairs },
-        placements.links || [],
+        linksForStepEvaluation(game, step, placements.links || []),
         { minCorrect: step.minCorrectLinks }
       );
       okLinks = lev.isComplete;
@@ -4394,6 +4421,7 @@
     isElementVisibleAtStep: isElementVisibleAtStep,
     isZoneVisibleAtStep: isZoneVisibleAtStep,
     evaluateStep: evaluateStep,
+    linksForStepEvaluation: linksForStepEvaluation,
     getStepsState: getStepsState,
     effectiveStepZoneIds: effectiveStepZoneIds,
     enrichStepsFromDropzones: enrichStepsFromDropzones,

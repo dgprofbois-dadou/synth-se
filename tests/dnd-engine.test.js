@@ -446,6 +446,29 @@ test('DnD puis Relier : étapes successives', () => {
   assert.strictEqual(Engine.shouldHideUsedStepSources(stDone), true);
 });
 
+test('Relier puis Relier : flèches étape 1 n’empêchent pas le passage étape 2', () => {
+  const g = Engine.applyGameDefaults({
+    gameType: 'exact',
+    enableSteps: true,
+    enableLinking: true,
+    steps: [
+      { id: 's1', title: 'Relier 1', activity: 'linking', linkPairs: [{ from: '1', to: '2' }] },
+      { id: 's2', title: 'Relier 2', activity: 'linking', linkPairs: [{ from: '3', to: '4' }] },
+      { id: 's3', title: 'Suite', activity: 'dnd', zoneIds: [], goodIds: '', requireNextButton: true }
+    ]
+  });
+  const after1 = Engine.getStepsState(g, { links: [{ from: '1', to: '2' }] });
+  assert.strictEqual(after1.currentIndex, 1);
+  assert.strictEqual(after1.active.id, 's2');
+  const stuckBug = Engine.getStepsState(g, {
+    links: [{ from: '1', to: '2' }, { from: '3', to: '4' }]
+  });
+  assert.strictEqual(stuckBug.statuses[0].isComplete, true);
+  assert.strictEqual(stuckBug.statuses[1].isComplete, true);
+  assert.strictEqual(stuckBug.currentIndex, 2);
+  assert.strictEqual(stuckBug.active.id, 's3');
+});
+
 test('zoneMap sans zoneIds → critères de fin d’étape', () => {
   const g = Engine.applyGameDefaults({
     gameType: 'exact',
