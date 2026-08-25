@@ -1341,9 +1341,9 @@
     return s.activity === 'linking' || s.activity === 'both';
   }
 
-  /** Étape Relier pure : le mode lien s’active tout seul, sans bouton bleu. */
+  /** Relier s’active tout seul dès qu’une étape en a besoin (plus de bouton manuel). */
   function stepAutoLinkMode(step) {
-    return normalizeStep(step, 0).activity === 'linking';
+    return stepNeedsRelier(step);
   }
 
   function normalizeZoneMapIds(raw) {
@@ -2412,33 +2412,14 @@
       showTip(text || tipText(), pt.x, pt.y);
     }
 
-    // Logo Relier (assets/logo-relier-zones.svg)
-    var relierSize = (normalizeRelierBtn(game.relierBtn, game).size);
-    var relierLogoHtml = relierLogoSvg(gameId, relierSize);
-
+    // Bouton Relier retiré : activation auto via syncRelierForStep / setLinkMode
     var btn = gameContainer.querySelector('.dnd-relier-btn');
-    if (!btn) {
-      btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'dnd-relier-btn';
-      btn.style.cssText = 'position:absolute;z-index:12;pointer-events:auto;padding:0;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;border:none;border-radius:23%;background:transparent;overflow:hidden;box-shadow:none;';
-      gameContainer.appendChild(btn);
-    }
-    btn.innerHTML = relierLogoHtml;
-    btn.title = BTN_TIP;
-    btn.setAttribute('aria-label', BTN_TIP);
-    btn.setAttribute('aria-pressed', 'false');
-    applyRelierBtnLayout(btn, game);
+    if (btn && btn.parentNode) btn.parentNode.removeChild(btn);
+    btn = null;
 
     function setLinkMode(on) {
       linkModeActive = !!on;
       gameContainer.classList.toggle('dnd-link-mode', linkModeActive);
-      btn.classList.toggle('active', linkModeActive);
-      btn.setAttribute('aria-pressed', linkModeActive ? 'true' : 'false');
-      btn.title = linkModeActive
-        ? 'Mode Relier actif — clic droit maintenu pour tracer une flèche'
-        : BTN_TIP;
-      btn.setAttribute('aria-label', btn.title);
       allNodes().forEach(function (el) {
         if (linkModeActive) {
           el.classList.add('dnd-link-node');
@@ -2497,11 +2478,6 @@
       }
     }
 
-    btn.addEventListener('click', function (e) {
-      e.preventDefault();
-      e.stopPropagation();
-      setLinkMode(!linkModeActive);
-    });
     gameContainer.addEventListener('contextmenu', function (e) {
       if (!linkModeActive) return;
       e.preventDefault();
@@ -3407,26 +3383,19 @@
       }
     }
 
-    /** Affiche Relier si l’étape le demande ; étape Relier pure : activation auto, sans bouton. */
+    /** Relier : activation auto sur les étapes linking/both — plus de bouton manuel. */
     function syncRelierForStep(st) {
       var btn = gameContainer.querySelector('.dnd-relier-btn');
-      if (!btn && !linkingApi) return;
-      var showBtn = false;
+      if (btn && btn.parentNode) btn.parentNode.removeChild(btn);
       var autoLink = false;
       var actName = 'dnd';
       if (linkingApi) {
         if (!stepsEnabled) {
-          showBtn = !!game.enableLinking;
+          autoLink = !!game.enableLinking;
         } else if (st && st.enabled && !st.allComplete && st.active) {
           actName = normalizeStep(st.active, 0).activity || 'dnd';
           autoLink = stepAutoLinkMode(st.active);
-          showBtn = !autoLink && stepNeedsRelier(st.active);
         }
-      }
-      if (btn) {
-        btn.style.display = showBtn ? '' : 'none';
-        btn.hidden = !showBtn;
-        btn.setAttribute('aria-hidden', showBtn ? 'false' : 'true');
       }
       if (linkingApi && linkingApi.setLinkMode) {
         try {
@@ -3442,7 +3411,7 @@
           }
         } catch (e) {}
       }
-      gameContainer.classList.toggle('dnd-step-relier-on', !!(autoLink || showBtn));
+      gameContainer.classList.toggle('dnd-step-relier-on', !!autoLink);
       gameContainer.classList.toggle('dnd-step-relier-auto', !!autoLink);
       // Filet de sécurité : hors Relier auto, la classe ne doit pas bloquer le pan / DnD
       if (!autoLink && actName !== 'linking') {

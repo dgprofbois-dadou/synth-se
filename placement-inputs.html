@@ -1316,18 +1316,6 @@
             outline: 3px solid #ef6c00 !important;
             outline-offset: 3px;
         }
-        .dnd-relier-preview {
-            border-radius: 23% !important;
-            background: transparent !important;
-            border: none !important;
-            box-shadow: none !important;
-            overflow: hidden;
-            padding: 0 !important;
-        }
-        .dnd-relier-preview .dnd-relier-icon {
-            width: 100%;
-            height: 100%;
-        }
         .dnd-link-mode .draggable,
         .dnd-link-mode .dnd-link-node {
             cursor: crosshair !important;
@@ -1336,9 +1324,6 @@
         .drag-game.dnd-link-mode .dnd-decor-text[data-id] {
             pointer-events: auto !important;
             cursor: crosshair !important;
-        }
-        .drag-game.dnd-step-relier-auto .dnd-relier-btn {
-            display: none !important;
         }
         .dropzone.dnd-step-locked .dnd-placed,
         .dnd-link-mode .dropzone.dnd-step-locked .dnd-placed {
@@ -15706,22 +15691,7 @@
                         }
                     }
 
-                    if (mqGameNeedsRelier(g)) {
-                        const rb = (window.MqDndEngine && MqDndEngine.normalizeRelierBtn)
-                            ? MqDndEngine.normalizeRelierBtn(g.relierBtn, g)
-                            : Object.assign({ x: Math.round((g.width || 800) * 0.02), y: Math.max(0, Math.round((g.height || 400) * 0.9 - 52)), size: 52 }, g.relierBtn || {});
-                        g.relierBtn = rb;
-                        const logoHtml = (window.MqDndEngine && MqDndEngine.relierLogoSvg)
-                            ? MqDndEngine.relierLogoSvg(gameId, rb.size)
-                            : '';
-                        html += `
-                            <div class="dnd-element dnd-relier-preview" data-game="${gameId}" data-type="relierBtn"
-                                 title="Bouton Relier — glisser pour positionner, poignée pour la taille"
-                                 style="left:${rb.x}px;top:${rb.y}px;width:${rb.size}px;height:${rb.size}px;z-index:12;display:flex;align-items:center;justify-content:center;box-sizing:border-box;">
-                                ${logoHtml}
-                                <div class="dnd-element-handle" data-game="${gameId}" data-type="relierBtn"></div>
-                            </div>`;
-                    }
+                    // Bouton Relier retiré de l’éditeur et de l’export (activation auto sur étapes Relier)
 
                     html += `
                         </div>`;

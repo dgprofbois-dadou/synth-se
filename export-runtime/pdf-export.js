@@ -144,54 +144,8 @@ class PDFExporter {
     }
 
     async addAnnotationsOverlay(doc) {
-        const elements = document.querySelectorAll(this.annotationsSelector);
-        if (elements.length === 0) return;
-
-        const container = document.createElement('div');
-        container.style.position = 'absolute';
-        container.style.left = '-9999px';
-        container.style.background = 'transparent';
-
-        elements.forEach(el => container.appendChild(el.cloneNode(true)));
-
-        document.body.appendChild(container);
-
-        let canvas;
-        try {
-            canvas = await html2canvas(container, {
-                scale: 2,
-                backgroundColor: null,
-                useCORS: false,
-                allowTaint: true,
-                logging: false
-            });
-        } catch (err) {
-            console.warn('html2canvas annotations:', err);
-            document.body.removeChild(container);
-            return;
-        }
-
-        document.body.removeChild(container);
-
-        if (!canvas || canvas.width === 0 || canvas.height === 0) return;
-
-        const pdfWidth = doc.internal.pageSize.getWidth();
-        const pdfHeight = doc.internal.pageSize.getHeight();
-        const imgRatio = canvas.width / canvas.height;
-        const pageRatio = pdfWidth / pdfHeight;
-
-        let w, h, x = 0, y = 0;
-        if (imgRatio > pageRatio) {
-            h = pdfHeight;
-            w = h * imgRatio;
-            x = (pdfWidth - w) / 2;
-        } else {
-            w = pdfWidth;
-            h = w / imgRatio;
-            y = (pdfHeight - h) / 2;
-        }
-
-        doc.addImage(canvas.toDataURL('image/png'), 'PNG', x, y, w, h);
+        // Synthèse PDF = images de page uniquement (pas d’inputs, hotspots SVG, ni logo Relier).
+        return;
     }
 
     addHeaderText(doc, line1, line2, scoreText) {

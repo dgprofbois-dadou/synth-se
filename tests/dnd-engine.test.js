@@ -431,7 +431,7 @@ test('activité linking / dnd + Relier gating helpers', () => {
   assert.strictEqual(Engine.stepAutoLinkMode(link), true);
   const both = Engine.normalizeStep({ title: 'C', activity: 'both', zoneIds: ['1'], linkPairs: [{ from: 'a', to: 'b' }] }, 2);
   assert.strictEqual(Engine.stepNeedsRelier(both), true);
-  assert.strictEqual(Engine.stepAutoLinkMode(both), false);
+  assert.strictEqual(Engine.stepAutoLinkMode(both), true);
   const inferred = Engine.normalizeStep({ title: 'D', linkPairs: [{ from: 'a', to: 'b' }] }, 3);
   assert.strictEqual(inferred.activity, 'linking');
   const byMap = Engine.normalizeStep({ title: 'E', zoneMap: { '19': ['4'] } }, 4);
@@ -443,7 +443,7 @@ test('activité linking / dnd + Relier gating helpers', () => {
     linkPairs: [{ from: 'a', to: 'b' }]
   }, 5);
   assert.strictEqual(mapAndLinks.activity, 'both');
-  assert.strictEqual(Engine.stepAutoLinkMode(mapAndLinks), false);
+  assert.strictEqual(Engine.stepAutoLinkMode(mapAndLinks), true);
 });
 
 test('DnD puis Relier : étapes successives', () => {
@@ -818,11 +818,22 @@ test('UI Relier uniquement par étape dans placement-inputs.html', () => {
   assert.ok(html.includes('value="linking"'));
   assert.ok(html.includes('data-field="activity"'));
   assert.ok(html.includes('mqSyncLinkingToolsVisibility'));
-  assert.ok(html.includes('dnd-relier-btn') || html.includes('Relier (flèches)'));
+  // Bouton Relier retiré (activation auto) — plus de preview canvas
+  assert.ok(!html.includes('dnd-relier-preview'));
+  assert.ok(html.includes('Bouton Relier retiré') || html.includes('activation auto'));
   assert.ok(!html.includes('EnableLinking'));
   assert.ok(!html.includes('Relier seul'));
   assert.ok(!html.includes('Activer Relier (flèches) en plus'));
   assert.ok(!html.includes('mq-dnd-global-pairs'));
+});
+
+test('PDF synthèse : pas d’overlay inputs/SVG Relier', () => {
+  const pdf = fs.readFileSync(path.join(__dirname, '..', 'export-runtime', 'pdf-export.js'), 'utf8');
+  assert.ok(pdf.includes('addAnnotationsOverlay'));
+  assert.ok(pdf.includes('images de page uniquement') || pdf.includes('return;'));
+  // L’ancienne capture html2canvas des annotations ne doit plus s’exécuter
+  const fn = pdf.slice(pdf.indexOf('async addAnnotationsOverlay'), pdf.indexOf('addHeaderText'));
+  assert.ok(!fn.includes('html2canvas(container'));
 });
 
 test('UI étapes repliables dans placement-inputs.html', () => {
