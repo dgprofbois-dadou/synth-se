@@ -2497,8 +2497,21 @@
     svg.removeAttribute('viewBox');
     svg.removeAttribute('preserveAspectRatio');
 
+    /** Paires pour feedback couleur / verrouillage : étape Relier active si fournie, sinon union. */
+    function activeAllowedLinks() {
+      if (typeof opts.getActiveAllowedLinks === 'function') {
+        try {
+          var stepLinks = opts.getActiveAllowedLinks();
+          if (Array.isArray(stepLinks) && stepLinks.length) {
+            return normalizeAllowedLinks(stepLinks);
+          }
+        } catch (errAct) { /* ignore */ }
+      }
+      return effectiveAllowedLinks(game);
+    }
+
     function isAllowedPair(from, to) {
-      var allowed = effectiveAllowedLinks(game);
+      var allowed = activeAllowedLinks();
       for (var i = 0; i < allowed.length; i++) {
         if (String(allowed[i].from) === String(from) && String(allowed[i].to) === String(to)) return true;
       }
@@ -3039,6 +3052,8 @@
     var gameId = gameConfig._gameId || gameContainer.getAttribute('data-dnd-gameid') || 'game';
     var linkingApi = null;
     var lastStepActivity = 'dnd';
+    /** Étape active (pour couleurs Relier alignées sur la validation d’étape). */
+    var lastActiveStep = null;
 
     function isLinkModeOn() {
       if (!(linkingApi && linkingApi.isLinkModeActive && linkingApi.isLinkModeActive())) return false;
@@ -3046,6 +3061,15 @@
       // « both » et « linking » autorisent le mode Relier actif
       if (stepsEnabled && lastStepActivity === 'dnd') return false;
       return true;
+    }
+
+    /** Pendant une étape Relier : seules ses linkPairs sont « vertes » (pas l’union des autres étapes). */
+    function getActiveAllowedLinksForFeedback() {
+      if (!stepsEnabled || !lastActiveStep) return null;
+      var act = normalizeStep(lastActiveStep, 0).activity || 'dnd';
+      if (act !== 'linking' && act !== 'both') return null;
+      var pairs = lastActiveStep.linkPairs || [];
+      return pairs.length ? pairs : null;
     }
 
     var resultDiv = gameContainer.querySelector('.dnd-result') || gameContainer.querySelector('[id^="result"]');
@@ -3383,6 +3407,32 @@
       // Filet de sécurité : hors Relier auto, la classe ne doit pas bloquer le pan / DnD
       if (!autoLink && actName !== 'linking') {
         gameContainer.classList.remove('dnd-link-mode');
+      }
+    }
+
+    /**
+     * Compteur Relier de l’étape active (aligné sur evaluateStep / minCorrectLinks).
+     * Évite l’illusion « tout vert = terminé » quand des flèches d’une autre étape sont vertes via l’union.
+     */
+    function syncRelierStepProgress(st, placements) {
+      if (!resultDiv || !stepsEnabled || !st || st.allComplete || !st.active) return;
+      var step = normalizeStep(st.active, 0);
+      if (step.activity !== 'linking' && step.activity !== 'both') return;
+      if (!(step.linkPairs || []).length) return;
+      if (st.activeStatus && st.activeStatus.isComplete) return;
+      var lev = evaluateLinks(
+        { allowedLinks: step.linkPairs },
+        linksForStepEvaluation(game, step, (placements && placements.links) || []),
+        { minCorrect: step.minCorrectLinks }
+      );
+      var need = lev.requiredScore || 0;
+      var have = lev.score || 0;
+      if (lev.wrong && lev.wrong.length) {
+        resultDiv.textContent = 'Flèches : ' + have + ' / ' + need + ' — retirez les flèches rouges';
+        resultDiv.style.color = '#d32f2f';
+      } else if (need > 0) {
+        resultDiv.textContent = 'Flèches : ' + have + ' / ' + need;
+        resultDiv.style.color = have >= need ? '#2e7d32' : '#1565c0';
       }
     }
 
@@ -3932,11 +3982,11 @@
       var placements = collectPlacements(gameContainer, game);
       if (linkingApi) placements.links = linkingApi.getLinks();
       var ev = evaluateGame(game, placements);
-      if (linkingApi && linkingApi.refresh) linkingApi.refresh();
 
       var stepsComplete = true;
+      var st = null;
       if (stepsEnabled) {
-        var st = getStepsState(game, placements);
+        st = getStepsState(game, placements);
         st.statuses.forEach(function (s, i) {
           var sid = String((st.steps[i] && st.steps[i].id) || i);
           if (manualStepDone[sid]) {
@@ -3955,22 +4005,28 @@
         st.activeStatus = st.statuses[st.currentIndex] || null;
         stepsComplete = st.allComplete;
 
+        // Avant redraw des flèches : l’étape active pilote les couleurs (pas l’union globale)
+        lastActiveStep = st.active || null;
+        lastStepActivity = st.active
+          ? (normalizeStep(st.active, 0).activity || 'dnd')
+          : 'dnd';
+        if (linkingApi && linkingApi.refresh) linkingApi.refresh();
+
         syncStepInstructions(st);
         if (st.active && String(st.active.id) === lastActiveStepId) {
           highlightStepZones(st.active);
         }
         syncStepNextBtn(st);
-        lastStepActivity = st.active
-          ? (normalizeStep(st.active, 0).activity || 'dnd')
-          : 'dnd';
         syncRelierForStep(st);
         syncZonesForStep(st);
         syncPlacedCardsAppearance();
         ev.stepsState = st;
         ev.isComplete = st.allComplete;
       } else {
+        lastActiveStep = null;
         lastStepActivity = 'dnd';
         stepsComplete = !!ev.isComplete;
+        if (linkingApi && linkingApi.refresh) linkingApi.refresh();
         syncRelierForStep(null);
         syncZonesForStep(null);
         syncPlacedCardsAppearance();
@@ -4019,6 +4075,8 @@
             resultDiv.textContent = '';
           }
         }
+        // Après éventuel clear du resultDiv : compteur Relier de l’étape
+        if (st) syncRelierStepProgress(st, placements);
       }
 
       var maxScore = ev.maxScore;
@@ -4244,7 +4302,8 @@
         gameId: gameId,
         onChange: function () { refreshUI(); },
         getVerifiedOnce: function () { return verifiedOnce; },
-        addErrors: function (n) { nbErreurs += (n || 1); }
+        addErrors: function (n) { nbErreurs += (n || 1); },
+        getActiveAllowedLinks: getActiveAllowedLinksForFeedback
       });
       // Masquer Relier tant que l’étape active ne le demande pas
       var btn0 = gameContainer.querySelector('.dnd-relier-btn');

@@ -949,6 +949,66 @@ test('Relier : images / textes fixes sont des nœuds (id decor-N)', () => {
   assert.ok(html.includes('Les <strong>images fixes</strong>'));
 });
 
+test('Relier : flèche d’une autre étape ne compte pas (minCorrect) et ne doit pas tromper', () => {
+  const g = Engine.applyGameDefaults({
+    enableSteps: true,
+    enableLinking: true,
+    steps: [
+      {
+        id: 's1',
+        title: 'DnD',
+        activity: 'dnd',
+        zoneIds: ['1'],
+        linkPairs: [{ from: '4', to: 'veh1' }]
+      },
+      {
+        id: 's2',
+        title: 'Relier',
+        activity: 'linking',
+        minCorrectLinks: 7,
+        linkPairs: [
+          { from: '3', to: 'Chute2' },
+          { from: '4', to: 'Scie' },
+          { from: '5', to: 'Scie' },
+          { from: '6', to: 'Scie' },
+          { from: '7', to: "Chute d'objets" },
+          { from: '8', to: 'elec2' },
+          { from: '8', to: 'Elec1' },
+          { from: 'Circulation Engin', to: 'veh1' }
+        ]
+      },
+      { id: 's3', title: 'Suite', activity: 'dnd', zoneIds: [], requireNextButton: true }
+    ],
+    dropzones: [{ id: '1', acceptedIds: ['a'], capacity: 1, required: true }]
+  });
+  const sixPlusOther = {
+    '1': ['a'],
+    links: [
+      { from: '3', to: 'Chute2' },
+      { from: '4', to: 'Scie' },
+      { from: '5', to: 'Scie' },
+      { from: '6', to: 'Scie' },
+      { from: '7', to: "Chute d'objets" },
+      { from: '8', to: 'elec2' },
+      // Paire étape 1 seulement : verte via union, ignorée pour l’étape 2
+      { from: '4', to: 'veh1' }
+    ]
+  };
+  const stuck = Engine.getStepsState(g, sixPlusOther);
+  assert.strictEqual(stuck.currentIndex, 1, '6 flèches étape 2 + 1 hors-étape → toujours étape Relier');
+  assert.strictEqual(stuck.statuses[1].isComplete, false);
+  const filtered = Engine.linksForStepEvaluation(g, g.steps[1], sixPlusOther.links);
+  assert.strictEqual(filtered.length, 6);
+  assert.ok(!filtered.some((l) => l.from === '4' && l.to === 'veh1'));
+  const seven = {
+    '1': ['a'],
+    links: sixPlusOther.links.concat([{ from: '8', to: 'Elec1' }])
+  };
+  const ok = Engine.getStepsState(g, seven);
+  assert.strictEqual(ok.currentIndex, 2);
+  assert.strictEqual(ok.active.id, 's3');
+});
+
 test('Relier : minCorrectLinks pour passer à l’étape suivante', () => {
   const g = Engine.applyGameDefaults({
     enableSteps: true,
