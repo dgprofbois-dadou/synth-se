@@ -2785,35 +2785,36 @@
       z.style.pointerEvents = 'auto';
     });
 
-    // Déplacement libre des images hors mode Relier → la flèche suit (x1/y1)
-    Array.prototype.forEach.call(gameContainer.querySelectorAll('.draggable[data-id]'), function (img) {
-      var id = img.getAttribute('data-id');
-      if (!id || img.dataset.mqLinkFreeMove) return;
-      img.dataset.mqLinkFreeMove = '1';
-      img.addEventListener('dragstart', function (e) {
-        if (linkModeActive) {
-          e.preventDefault();
-          return;
-        }
-        // En hybrid, le gestionnaire DnD principal gère aussi ; on démarre le suivi flèche
-        beginCardDrag(id);
-        try {
-          e.dataTransfer.setData('text/plain', id);
-          e.dataTransfer.effectAllowed = 'move';
-        } catch (err) { /* ignore */ }
-        img.style.opacity = '0.55';
+    // Relier pur : déplacement libre pour que la flèche suive. Hybrid → initPlayableDndGame gère dragstart.
+    if (!hybrid) {
+      Array.prototype.forEach.call(gameContainer.querySelectorAll('.draggable[data-id]'), function (img) {
+        var id = img.getAttribute('data-id');
+        if (!id || img.dataset.mqLinkFreeMove) return;
+        img.dataset.mqLinkFreeMove = '1';
+        img.addEventListener('dragstart', function (e) {
+          if (linkModeActive) {
+            e.preventDefault();
+            return;
+          }
+          beginCardDrag(id);
+          try {
+            e.dataTransfer.setData('text/plain', id);
+            e.dataTransfer.effectAllowed = 'move';
+          } catch (err) { /* ignore */ }
+          img.style.opacity = '0.55';
+        });
+        img.addEventListener('drag', function (e) {
+          if (linkModeActive) return;
+          if (!e.clientX && !e.clientY) return;
+          setDragCenter(id, e.clientX, e.clientY);
+          htmlDragLast = clientToLocal(e.clientX, e.clientY);
+        });
+        img.addEventListener('dragend', function () {
+          img.style.opacity = img.classList.contains('used') ? '0.3' : '1';
+          endCardDrag(id, img);
+        });
       });
-      img.addEventListener('drag', function (e) {
-        if (linkModeActive) return;
-        if (!e.clientX && !e.clientY) return;
-        setDragCenter(id, e.clientX, e.clientY);
-        htmlDragLast = clientToLocal(e.clientX, e.clientY);
-      });
-      img.addEventListener('dragend', function () {
-        img.style.opacity = img.classList.contains('used') ? '0.3' : '1';
-        endCardDrag(id, img);
-      });
-    });
+    }
 
     setLinkMode(false);
 
@@ -3318,17 +3319,12 @@
           var stepKey = (st && st.active)
             ? (String(st.active.id) + '@' + String(st.currentIndex))
             : '';
-          var stepChanged = syncRelierForStep._stepKey !== stepKey;
           syncRelierForStep._stepKey = stepKey;
           if (autoLink) {
-            // Étape Relier pure : forcer le mode flèche
             if (!linkingApi.isLinkModeActive()) linkingApi.setLinkMode(true);
-          } else if (actName === 'dnd' || !showBtn) {
-            // DnD pur (ou Relier indisponible) : jamais de mode flèche (sinon les drops sont bloqués)
-            if (linkingApi.isLinkModeActive()) linkingApi.setLinkMode(false);
-          } else if (stepChanged) {
-            // « Les deux » : à l’entrée d’étape, repartir en dépôt (le bouton réactive Relier)
-            if (linkingApi.isLinkModeActive()) linkingApi.setLinkMode(false);
+          } else {
+            // Hors étape Relier auto : toujours couper le mode flèche (sinon DnD bloqué à l’étape suivante)
+            linkingApi.setLinkMode(false);
           }
         } catch (e) {}
       }
@@ -3418,20 +3414,21 @@
         var id = String(el.getAttribute('data-id') || '');
         var isUsed = used.has(id) || el.classList.contains('used');
         var futureHide = !!(hideFuture && ownership && id && ownership.elementMinStep[id] != null && ownership.elementMinStep[id] > curIdx);
+        var neededNow = !!(st && st.active && id && idsReferencedByStep(st.active)[id]);
         if (linkingOnly) {
           el.draggable = false;
           el.classList.add('dnd-step-link-phase');
         } else {
           el.classList.remove('dnd-step-link-phase');
-          if (!(cardUse !== 'reusable' && used.has(id))) {
-            if (!el.classList.contains('used')) el.draggable = true;
+          if (!(cardUse !== 'reusable' && used.has(id) && !neededNow)) {
+            if (!el.classList.contains('used') || neededNow) el.draggable = true;
           }
         }
         if (futureHide) {
           el.classList.add('dnd-step-future-hidden');
           el.draggable = false;
           applyFutureHidden(el, true);
-        } else if (hideUsedSources && isUsed) {
+        } else if (hideUsedSources && isUsed && !neededNow) {
           el.classList.add('dnd-step-source-hidden');
           applyFutureHidden(el, false);
           el.style.visibility = 'hidden';
@@ -3440,8 +3437,12 @@
         } else {
           el.classList.remove('dnd-step-source-hidden', 'dnd-step-future-hidden');
           el.style.visibility = '';
-          el.style.pointerEvents = '';
+          el.style.pointerEvents = 'auto';
           el.removeAttribute('aria-hidden');
+          if (!linkingOnly && !futureHide && (!isUsed || neededNow)) {
+            el.draggable = true;
+            el.style.cursor = 'grab';
+          }
         }
       });
       Array.prototype.forEach.call(gameContainer.querySelectorAll('.dnd-decor-fixed, .dnd-decor-text, .dnd-link-zone'), function (el) {

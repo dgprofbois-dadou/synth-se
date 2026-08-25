@@ -1012,9 +1012,35 @@ test('Relier→DnD : isLinkModeOn ignore le mode flèche résiduel sur étape d�
   const src = fs.readFileSync(path.join(__dirname, '..', 'mq-dnd-engine.js'), 'utf8');
   assert.ok(src.includes("lastStepActivity === 'dnd'"));
   assert.ok(src.includes('syncRelierForStep._stepKey'));
-  assert.ok(src.includes("actName === 'dnd' || !showBtn"));
+  assert.ok(src.includes('linkingApi.setLinkMode(false)'));
+  assert.ok(src.includes('if (!hybrid)'));
+  assert.ok(/if \(!hybrid\)[\s\S]{0,400}dragstart/.test(src));
   const html = fs.readFileSync(path.join(__dirname, '..', 'placement-inputs.html'), 'utf8');
   assert.ok(html.includes("z-index:7; pointer-events:none"));
+});
+
+test('Étape DnD après Relier : cartes requises par l’étape restent draggables', () => {
+  const g = Engine.applyGameDefaults({
+    gameType: 'exact',
+    enableSteps: true,
+    cardUse: 'unique',
+    dropzones: [
+      { id: '10', acceptedIds: ['a'], capacity: 1, required: true },
+      { id: '20', acceptedIds: ['b'], capacity: 1, required: true }
+    ],
+    draggables: [{ id: 'a' }, { id: 'b' }, { id: 'c' }],
+    steps: [
+      { title: 'E1', activity: 'dnd', zoneIds: ['10'], goodIds: 'a' },
+      { title: 'E2', activity: 'linking', linkPairs: [{ from: '1', to: '2' }] },
+      { title: 'E3', activity: 'dnd', zoneIds: ['20'], goodIds: 'b' }
+    ]
+  });
+  const st2 = Engine.getStepsState(g, { '10': ['a'], links: [{ from: '1', to: '2' }] });
+  assert.strictEqual(st2.currentIndex, 2);
+  assert.strictEqual(st2.active.activity, 'dnd');
+  const refs = Engine.idsReferencedByStep(st2.active);
+  assert.ok(refs.b);
+  assert.ok(!refs.c);
 });
 
 test('zone jeux : déplacement du cadre + 4 poignées de redim', () => {
