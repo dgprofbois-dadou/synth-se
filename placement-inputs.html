@@ -14855,31 +14855,50 @@
                 });
                 return set;
             }
-            /** Alerte si des flèches référencent des IDs absents du jeu. */
+            /** Alerte si des flèches référencent des IDs absents du jeu (ou mauvaise casse). */
             function mqLinkPairsWarnHTML(gameId, pairs) {
                 const list = (window.MqDndEngine && MqDndEngine.normalizeAllowedLinks)
                     ? MqDndEngine.normalizeAllowedLinks(pairs || [])
                     : [];
                 if (!list.length) return '';
                 const known = mqGameLinkableIdSet(gameId);
+                const knownList = Array.from(known);
+                const knownLower = {};
+                knownList.forEach((id) => { knownLower[String(id).toLowerCase()] = id; });
                 const missing = [];
+                const caseFix = [];
                 const seen = {};
                 list.forEach((p) => {
                     ['from', 'to'].forEach((role) => {
                         const id = String(p[role] || '').trim();
-                        if (!id || known.has(id) || seen[id]) return;
+                        if (!id || seen[id]) return;
                         seen[id] = true;
+                        if (known.has(id)) return;
+                        const canon = knownLower[id.toLowerCase()];
+                        if (canon) {
+                            caseFix.push({ written: id, actual: canon });
+                            return;
+                        }
                         missing.push(id);
                     });
                 });
-                if (!missing.length) return '';
-                const chips = missing.map((id) => {
-                    const safe = mqEscapeHtmlLite(id);
-                    return '<code style="background:#fee2e2;padding:1px 5px;border-radius:4px;font-size:11px;">' + safe + '</code>';
-                }).join(' ');
-                return '<p data-link-pairs-warn style="margin:6px 0 0;padding:6px 8px;background:#fef2f2;border:1px solid #fecaca;border-radius:6px;font-size:10px;color:#991b1b;line-height:1.45;">'
-                    + '⚠️ ID introuvable dans le jeu : ' + chips
-                    + ' — aucune image / texte fixe / zone SVG ne porte cet ID. La flèche ne pourra pas être tracée en mode élève.</p>';
+                if (!missing.length && !caseFix.length) return '';
+                let html = '<p data-link-pairs-warn style="margin:6px 0 0;padding:6px 8px;background:#fef2f2;border:1px solid #fecaca;border-radius:6px;font-size:10px;color:#991b1b;line-height:1.45;">';
+                if (caseFix.length) {
+                    html += '⚠️ Casse différente (utilisez l’ID exact) : '
+                        + caseFix.map((c) => '<code style="background:#ffedd5;padding:1px 5px;border-radius:4px;">'
+                            + mqEscapeHtmlLite(c.written) + '</code> → <code style="background:#dcfce7;padding:1px 5px;border-radius:4px;">'
+                            + mqEscapeHtmlLite(c.actual) + '</code>').join(' ')
+                        + (missing.length ? '<br>' : '');
+                }
+                if (missing.length) {
+                    html += '⚠️ ID introuvable dans le jeu : '
+                        + missing.map((id) => '<code style="background:#fee2e2;padding:1px 5px;border-radius:4px;font-size:11px;">'
+                            + mqEscapeHtmlLite(id) + '</code>').join(' ')
+                        + ' — aucune image / texte fixe / zone SVG ne porte cet ID.';
+                }
+                html += '</p>';
+                return html;
             }
             function mqUpdateLinkPairsWarn(inp, gameId) {
                 const host = inp && inp.closest('[data-step-idx]');

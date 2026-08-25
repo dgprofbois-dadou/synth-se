@@ -958,6 +958,39 @@ test('Relier : images / textes fixes sont des nœuds (id decor-N)', () => {
   assert.ok(html.includes('Les <strong>images fixes</strong>'));
 });
 
+test('Relier : comparaison des IDs insensible à la casse (Scie / scie)', () => {
+  const g = Engine.applyGameDefaults({
+    enableSteps: true,
+    enableLinking: true,
+    steps: [{
+      id: 's2',
+      title: 'Relier',
+      activity: 'linking',
+      minCorrectLinks: 3,
+      linkPairs: [
+        { from: '4', to: 'Scie' },
+        { from: '5', to: 'scie' },
+        { from: '6', to: 'Scie' },
+        { from: 'Circulation Engin', to: 'veh' }
+      ]
+    }]
+  });
+  // L’élève relie vers les IDs canvas en minuscules
+  const drawn = {
+    links: [
+      { from: '4', to: 'scie' },
+      { from: '5', to: 'scie' },
+      { from: '6', to: 'scie' }
+    ]
+  };
+  const st = Engine.evaluateStep(g, g.steps[0], drawn);
+  assert.strictEqual(st.isComplete, true);
+  assert.strictEqual(st.okLinks, true);
+  const ev = Engine.evaluateLinks({ allowedLinks: g.steps[0].linkPairs }, drawn.links, { minCorrect: 3 });
+  assert.strictEqual(ev.wrong.length, 0);
+  assert.ok(ev.score >= 3);
+});
+
 test('Relier : flèche d’une autre étape ne compte pas (minCorrect) et ne doit pas tromper', () => {
   const g = Engine.applyGameDefaults({
     enableSteps: true,

@@ -96,7 +96,8 @@
     var seen = {};
     return list.filter(function (l) {
       if (!l.from || !l.to || l.from === l.to) return false;
-      var k = l.from + '\0' + l.to;
+      // Dédup insensible à la casse (Scie / scie = même flèche)
+      var k = linkPairKey(l.from, l.to);
       if (seen[k]) return false;
       seen[k] = true;
       return true;
@@ -116,7 +117,7 @@
       var seen = {};
       game.steps.forEach(function (s) {
         normalizeAllowedLinks((s && (s.linkPairs || s.allowedLinks || s.links)) || []).forEach(function (l) {
-          var k = String(l.from) + '>' + String(l.to);
+          var k = linkPairKey(l.from, l.to);
           if (!seen[k]) {
             seen[k] = true;
             out.push({ from: String(l.from), to: String(l.to) });
@@ -128,8 +129,13 @@
     return normalizeAllowedLinks(game && game.allowedLinks);
   }
 
+  /** Clé de paire Relier : insensible à la casse (ID canvas « scie » = liste « Scie »). */
   function linkPairKey(from, to) {
-    return String(from) + '\0' + String(to);
+    return String(from).trim().toLowerCase() + '\0' + String(to).trim().toLowerCase();
+  }
+
+  function idsEqualIgnoreCase(a, b) {
+    return String(a).trim().toLowerCase() === String(b).trim().toLowerCase();
   }
 
   function round1(n) {
@@ -885,7 +891,7 @@
         wrong.push(l);
       }
     });
-    var maxScore = allowed.length;
+    var maxScore = Object.keys(allowedSet).length;
     var score = correct.length;
     var required = maxScore;
     if (opts && opts.minCorrect != null && opts.minCorrect !== '') {
@@ -909,10 +915,9 @@
     if (!link) return false;
     if (!showFeedback) return true;
     var allowed = effectiveAllowedLinks(game);
-    var from = String(link.from);
-    var to = String(link.to);
+    var k = linkPairKey(link.from, link.to);
     for (var i = 0; i < allowed.length; i++) {
-      if (String(allowed[i].from) === from && String(allowed[i].to) === to) return false;
+      if (linkPairKey(allowed[i].from, allowed[i].to) === k) return false;
     }
     return true;
   }
@@ -2537,8 +2542,9 @@
 
     function isAllowedPair(from, to) {
       var allowed = activeAllowedLinks();
+      var want = linkPairKey(from, to);
       for (var i = 0; i < allowed.length; i++) {
-        if (String(allowed[i].from) === String(from) && String(allowed[i].to) === String(to)) return true;
+        if (linkPairKey(allowed[i].from, allowed[i].to) === want) return true;
       }
       return false;
     }
@@ -4521,6 +4527,8 @@
     normalizeFeedbackMode: normalizeFeedbackMode,
     normalizeCardUse: normalizeCardUse,
     normalizeLinkMode: normalizeLinkMode,
+    linkPairKey: linkPairKey,
+    idsEqualIgnoreCase: idsEqualIgnoreCase,
     normalizeAllowedLinks: normalizeAllowedLinks,
     allowedLinksToText: allowedLinksToText,
     effectiveAllowedLinks: effectiveAllowedLinks,
