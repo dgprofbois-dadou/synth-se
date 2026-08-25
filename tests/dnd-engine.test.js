@@ -226,6 +226,9 @@ test('export runtime : infobulles DnD par délégation (img enfant + thème jeu)
   assert.ok(js.includes('applyTooltipTheme'));
   assert.ok(js.includes('data-tt-font'));
   assert.ok(js.includes('pointerover'));
+  // data-tooltip sur la carte prime sur l’interrupteur global data-tt-enabled=0
+  assert.ok(js.includes("closest('[data-tooltip]')"));
+  assert.ok(!js.includes("game.getAttribute('data-tt-enabled') === '0'"));
   assert.ok(!js.includes("document.querySelectorAll('.draggable').forEach(d =>"));
 });
 
@@ -1114,6 +1117,9 @@ test('placement exact : cartes incorrectes repositionnables (pas seulement retry
   assert.ok(src.includes('var movable = !correctHere'));
   assert.ok(src.includes('existingPlaced || orig'));
   assert.ok(src.includes('dnd-step-source-hidden'));
+  // Après Relier, setLinkMode(false) ne doit plus bloquer le drag des incorrectes
+  assert.ok(src.includes("el.classList.contains('dnd-retry-movable')"));
+  assert.ok(src.includes('syncPlacedCardsAppearance'));
   // Ancien comportement limité au mode retry : ne doit plus être la seule condition
   assert.ok(!src.includes("var movable = (cardUse === 'retry' && !correctHere)"));
 });

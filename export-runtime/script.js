@@ -417,9 +417,12 @@
   function findDndTooltipEl(node) {
     if (!node || !node.closest) return null;
     const game = node.closest('.drag-game');
-    if (!game || game.getAttribute('data-tt-enabled') === '0') return null;
+    if (!game) return null;
+    // data-tt-enabled=0 = interrupteur global éditeur ; si la carte a data-tooltip,
+    // l’export l’a déjà filtrée → afficher quand même (sinon étape 3 sans infobulles).
     const el = node.closest('[data-tooltip]');
     if (!el || !game.contains(el)) return null;
+    if (el.getAttribute('data-tt-card') === '0') return null;
     const text = String(el.getAttribute('data-tooltip') || '').trim();
     return text ? el : null;
   }

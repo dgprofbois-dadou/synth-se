@@ -2455,8 +2455,17 @@
             // syncZonesForStep repartira pointer-events ; laisser auto en attendant
             el.style.pointerEvents = 'auto';
           } else if (el.classList.contains('dnd-placed')) {
-            el.draggable = false;
-            el.style.cursor = 'pointer';
+            // Cartes incorrectes (retry/unique) : rester déplaçables après Relier
+            if (el.classList.contains('dnd-retry-movable')) {
+              el.draggable = true;
+              el.setAttribute('draggable', 'true');
+              el.style.cursor = 'grab';
+              el.style.pointerEvents = 'auto';
+            } else {
+              el.draggable = false;
+              el.setAttribute('draggable', 'false');
+              el.style.cursor = 'pointer';
+            }
           } else if (el.classList.contains('draggable')) {
             if (el.classList.contains('used')) {
               el.draggable = false;
@@ -3467,7 +3476,7 @@
       }
     }
 
-    /** Cartes déposées : toujours opacité pleine (jamais grisées par l’étape ou la zone). */
+    /** Cartes déposées : opacité pleine + rétablir le drag des incorrectes (écrasé par setLinkMode). */
     function syncPlacedCardsAppearance() {
       Array.prototype.forEach.call(gameContainer.querySelectorAll('.dropzone .dnd-placed'), function (clone) {
         clone.style.opacity = '1';
@@ -3482,6 +3491,12 @@
           img.style.webkitFilter = 'none';
           img.style.mixBlendMode = 'normal';
           img.classList.remove('used');
+        }
+        if (clone.classList.contains('dnd-retry-movable') && !isLinkModeOn()) {
+          clone.draggable = true;
+          clone.setAttribute('draggable', 'true');
+          clone.style.cursor = 'grab';
+          clone.style.pointerEvents = 'auto';
         }
       });
     }
