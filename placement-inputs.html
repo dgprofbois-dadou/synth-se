@@ -16471,17 +16471,31 @@
                     const dH = ((d.height || 250) / G_H) * 100;
                     const dX = ((d.x || 0) / G_W) * 100;
                     const dY = ((d.y || 0) / G_H) * 100;
-                    const tipText = ((window.MqDndEngine && MqDndEngine.dragShowsTooltip)
+                    const tipOn = (window.MqDndEngine && MqDndEngine.dragShowsTooltip)
                         ? MqDndEngine.dragShowsTooltip(d, g)
-                        : (d.tooltipEnabled !== false))
-                        ? String(d.title || '').replace(/"/g, '&quot;') : '';
-                    return '<div class="draggable-wrapper" style="position:absolute; left:' + dX + '%; top:' + dY + '%; width:' + dW + '%; height:' + dH + '%; box-sizing:border-box;">'
-                        + '<span class="png-wrap draggable" draggable="true" tabindex="0" role="button" aria-label="Carte ' + d.id + '"'
-                        + ' style="display:block; width:100%; height:100%; pointer-events:auto;"'
-                        + ' data-id="' + d.id + '"'
-                        + (tipText ? ' data-tooltip="' + tipText + '"' : '')
-                        + '>'
-                        + mqDndItemInner(d) + '</span></div>';
+                        : (d.tooltipEnabled !== false);
+                    const tipRaw = tipOn ? String(d.title || d.tooltip || '').trim() : '';
+                    const tipText = tipRaw.replace(/"/g, '&quot;');
+                    const tipAttrs = tipText
+                        ? (' data-tooltip="' + tipText + '"'
+                            + ' data-hint-font="' + String(ttFont).replace(/"/g, '&quot;') + '"'
+                            + ' data-duration="' + ttDur + '"')
+                        : '';
+                    const posStyle = 'position:absolute; left:' + dX + '%; top:' + dY + '%; width:' + dW + '%; height:' + dH + '%; box-sizing:border-box; pointer-events:auto;';
+                    const aria = ' aria-label="Carte ' + d.id + '" tabindex="0" role="button"';
+                    if (d.kind === 'text') {
+                        const safeText = String(d.text || 'Étiquette')
+                            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                        return '<div class="draggable dnd-label-wrap"' + tipAttrs + aria
+                            + ' draggable="true" data-id="' + d.id + '"'
+                            + ' style="' + posStyle + ' cursor:grab; display:flex; align-items:center; justify-content:center;">'
+                            + '<div class="dnd-label" style="' + mqDndTextStyle(d) + '">' + safeText + '</div></div>';
+                    }
+                    const src = String(d.src || '').replace(/"/g, '&quot;');
+                    return '<img class="draggable png" draggable="true" data-id="' + d.id + '"' + tipAttrs + aria
+                        + ' src="' + src + '" alt=""'
+                        + ' style="' + posStyle + ' object-fit:contain; display:block; cursor:grab;"'
+                        + ' onerror="this.style.display=\'none\'">';
                 }).join('');
                 out += '</div>';
                 out += (g.decorImages || []).map(function (dc) {

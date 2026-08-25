@@ -398,47 +398,64 @@
     overlay.style.backgroundImage = 'none';
   }
 
+  function findDndTooltipEl(node) {
+    if (!node || !node.closest) return null;
+    const game = node.closest('.drag-game');
+    if (!game || game.getAttribute('data-tt-enabled') === '0') return null;
+    const el = node.closest('[data-tooltip]');
+    if (!el || !game.contains(el)) return null;
+    const text = String(el.getAttribute('data-tooltip') || '').trim();
+    return text ? el : null;
+  }
+
+  function applyTooltipTheme(tip, el) {
+    const gameRoot = el && el.closest ? el.closest('.drag-game') : null;
+    const font = el.getAttribute('data-tip-font') || el.getAttribute('data-hint-font')
+      || (gameRoot && gameRoot.getAttribute('data-tt-font')) || 'inherit';
+    const bg = el.getAttribute('data-tip-bg')
+      || (gameRoot && gameRoot.getAttribute('data-tt-bg')) || 'rgba(0,0,0,0.85)';
+    const color = el.getAttribute('data-tip-col')
+      || (gameRoot && gameRoot.getAttribute('data-tt-col')) || '#ffffff';
+    tip.style.fontFamily = font;
+    tip.style.background = bg;
+    tip.style.color = color;
+  }
+
   // --- TOOLTIP AVEC PROTECTION ANTI-DOUBLON ---
   let currentTooltipTarget = null;
+  let dndTooltipBound = false;
 
   function showTooltipFor(el, x, y) {
     // --- Durée du tooltip (en ms) --- Peut-être définie via le HTML (data-duration)
     const defaultTooltipDelay = window.tooltipDelay || 3000;
     // Protection anti-doublon : si c'est déjà cet élément, on ne fait rien
     if (currentTooltipTarget === el) {
-      console.log('🔄 Tooltip déjà affiché pour cet élément, skip');
+      moveTooltip(x, y);
       return;
     }
 
     const text = String(el.getAttribute('data-tooltip') || '').trim();
     if (!text) return;
 
-    console.log('📌 showTooltipFor appelé:', { text, element: el.className || el.tagName });
     currentTooltipTarget = el;
     const tip = ensureTooltip();
-
-    // Récupération de la police (Font) depuis data-tip-font ou data-hint-font
-    const font = el.getAttribute('data-tip-font') || el.getAttribute('data-hint-font') || 'inherit';
+    const gameRoot = el.closest ? el.closest('.drag-game') : null;
 
     tip.innerHTML = '';
     tip.textContent = text;
-    tip.style.fontFamily = font; // Application de la police
+    applyTooltipTheme(tip, el);
     tip.style.display = 'block';
 
     // --- Auto-hide ---
-    const timeoutAttr = el.getAttribute('data-duration') || el.getAttribute('data-tooltip-timeout');
+    const timeoutAttr = el.getAttribute('data-duration') || el.getAttribute('data-tooltip-timeout')
+      || (gameRoot && gameRoot.getAttribute('data-tt-dur'));
     const delay = timeoutAttr ? parseInt(timeoutAttr, 10) : defaultTooltipDelay;
-
-    console.log('⏱️ Durée tooltip:', { timeoutAttr, delay, element: el.className });
 
     clearTimeout(tip.hideTimeout);
     tip.hideTimeout = setTimeout(() => {
       tip.style.display = 'none';
       currentTooltipTarget = null;
     }, delay);
-
-
-
 
     moveTooltip(x, y);
   }
@@ -567,31 +584,24 @@
       });
     });
 
-    // C. GESTION DES DRAGGABLES (Images DnD)
-    document.querySelectorAll('.draggable').forEach(d => {
-      const gameRoot = d.closest('.drag-game, [data-dnd-gameid], [data-tt-enabled]');
-      const tipEnabled = !(gameRoot && gameRoot.getAttribute('data-tt-enabled') === '0');
-
-      // Infobulle uniquement si data-tooltip est présent (réglage par carte).
-      // data-tt-enabled=0 : ancien export « tout masquer ».
-      if (!tipEnabled) {
-        d.removeAttribute('data-tooltip');
-        d.removeAttribute('title');
-        return;
-      }
-      if (!d.getAttribute('data-tooltip')) {
-        d.removeAttribute('title');
-        return;
-      }
-
-      d.addEventListener('pointerenter', (e) => {
-        showTooltipFor(d, e.clientX, e.clientY);
-      });
-      d.addEventListener('pointermove', (e) => moveTooltip(e.clientX, e.clientY));
-      d.addEventListener('pointerleave', () => {
-        hideTooltip(d);
-      });
-    });
+    // C. GESTION DES DRAGGABLES (Images DnD) — délégation (img enfant + cartes clonées .dnd-placed)
+    if (!dndTooltipBound) {
+      dndTooltipBound = true;
+      document.addEventListener('pointerover', (e) => {
+        const el = findDndTooltipEl(e.target);
+        if (el) showTooltipFor(el, e.clientX, e.clientY);
+      }, true);
+      document.addEventListener('pointermove', (e) => {
+        const el = findDndTooltipEl(e.target);
+        if (el && currentTooltipTarget === el) moveTooltip(e.clientX, e.clientY);
+      }, true);
+      document.addEventListener('pointerout', (e) => {
+        const el = findDndTooltipEl(e.target);
+        if (!el || el !== currentTooltipTarget) return;
+        const stillInside = el.contains(e.relatedTarget);
+        if (!stillInside) hideTooltip(el);
+      }, true);
+    }
   }
 
   // -----------------------

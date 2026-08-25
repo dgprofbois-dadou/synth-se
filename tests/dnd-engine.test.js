@@ -215,6 +215,18 @@ test('mqBuildExportDndGameHtml et PAGE 2 dans placement-inputs.html', () => {
   assert.ok(html.includes('JEUX DnD PAGE 2'));
   assert.ok(html.includes('dnd-config-'));
   assert.ok(html.includes('mq-dnd-engine.js'));
+  assert.ok(html.includes('data-hint-font'));
+  assert.ok(html.includes('d.title || d.tooltip'));
+  assert.ok(html.includes('class="draggable png"'));
+});
+
+test('export runtime : infobulles DnD par délégation (img enfant + thème jeu)', () => {
+  const js = fs.readFileSync(path.join(__dirname, '..', 'export-runtime', 'script.js'), 'utf8');
+  assert.ok(js.includes('findDndTooltipEl'));
+  assert.ok(js.includes('applyTooltipTheme'));
+  assert.ok(js.includes('data-tt-font'));
+  assert.ok(js.includes('pointerover'));
+  assert.ok(!js.includes("document.querySelectorAll('.draggable').forEach(d =>"));
 });
 
 test('PAN export : slack de centrage des bords (pas clamp 120 px)', () => {
