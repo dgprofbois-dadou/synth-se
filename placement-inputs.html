@@ -14774,6 +14774,72 @@
                 const preview = host.querySelector('[data-ids-preview="' + field + '"]');
                 if (preview) preview.innerHTML = mqStepIdChipsHTML(inp.value);
             }
+            /** IDs utilisables comme nœuds Relier (cartes, décors, textes, zones SVG). */
+            function mqGameLinkableIdSet(gameId) {
+                const g = state.dndGames[gameId];
+                const set = new Set();
+                if (!g) return set;
+                (g.draggables || []).forEach((d) => {
+                    if (d && d.id != null && String(d.id).trim() !== '') set.add(String(d.id).trim());
+                });
+                (g.decorImages || []).forEach((d) => {
+                    if (d && d.id != null && String(d.id).trim() !== '') set.add(String(d.id).trim());
+                });
+                (g.decorTexts || []).forEach((d) => {
+                    if (d && d.id != null && String(d.id).trim() !== '') set.add(String(d.id).trim());
+                });
+                (g.linkZones || []).forEach((z) => {
+                    if (z && z.id != null && String(z.id).trim() !== '') set.add(String(z.id).trim());
+                });
+                (g.dropzones || []).forEach((z, i) => {
+                    set.add(String(mqDropzoneId(z, i)));
+                });
+                return set;
+            }
+            /** Alerte si des flèches référencent des IDs absents du jeu. */
+            function mqLinkPairsWarnHTML(gameId, pairs) {
+                const list = (window.MqDndEngine && MqDndEngine.normalizeAllowedLinks)
+                    ? MqDndEngine.normalizeAllowedLinks(pairs || [])
+                    : [];
+                if (!list.length) return '';
+                const known = mqGameLinkableIdSet(gameId);
+                const missing = [];
+                const seen = {};
+                list.forEach((p) => {
+                    ['from', 'to'].forEach((role) => {
+                        const id = String(p[role] || '').trim();
+                        if (!id || known.has(id) || seen[id]) return;
+                        seen[id] = true;
+                        missing.push(id);
+                    });
+                });
+                if (!missing.length) return '';
+                const chips = missing.map((id) => {
+                    const safe = mqEscapeHtmlLite(id);
+                    return '<code style="background:#fee2e2;padding:1px 5px;border-radius:4px;font-size:11px;">' + safe + '</code>';
+                }).join(' ');
+                return '<p data-link-pairs-warn style="margin:6px 0 0;padding:6px 8px;background:#fef2f2;border:1px solid #fecaca;border-radius:6px;font-size:10px;color:#991b1b;line-height:1.45;">'
+                    + '⚠️ ID introuvable dans le jeu : ' + chips
+                    + ' — aucune image / texte fixe / zone SVG ne porte cet ID. La flèche ne pourra pas être tracée en mode élève.</p>';
+            }
+            function mqUpdateLinkPairsWarn(inp, gameId) {
+                const host = inp && inp.closest('[data-step-idx]');
+                if (!host) return;
+                let box = host.querySelector('[data-link-pairs-warn]');
+                const html = mqLinkPairsWarnHTML(gameId, inp.value);
+                if (!html) {
+                    if (box) box.remove();
+                    return;
+                }
+                if (box) {
+                    box.outerHTML = html;
+                    return;
+                }
+                const ta = host.querySelector('[data-field="linkPairs"]');
+                if (ta && ta.parentNode) {
+                    ta.insertAdjacentHTML('afterend', html);
+                }
+            }
             function mqSetZmapRowsExclusiveOpen(wrap, zoneId) {
                 if (!wrap) return null;
                 const want = String(zoneId);
@@ -15066,6 +15132,7 @@
                         + '<div data-step-link-fields style="display:' + (showLink ? 'block' : 'none') + ';margin-top:8px;padding:8px;background:#eef2ff;border:1px solid #c7d2fe;border-radius:8px;font-size:11px;">'
                         + '<label style="display:block;font-weight:bold;margin-bottom:4px;">🔗 Flèches à valider (id&gt;id)</label>'
                         + '<textarea data-field="linkPairs" rows="2" placeholder="Ex: 1&gt;3 ou decor-1&gt;5" style="width:100%;font-size:11px;padding:4px;box-sizing:border-box;font-family:monospace;">' + linksToText(s.linkPairs).replace(/</g, '&lt;') + '</textarea>'
+                        + mqLinkPairsWarnHTML(gameId, s.linkPairs)
                         + '<label style="display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap;">'
                         + '<span style="font-weight:bold;white-space:nowrap;">Réponses justes pour passer</span>'
                         + '<input data-field="minCorrectLinks" type="number" min="0" step="1" value="' + minLinks + '" '
@@ -15115,7 +15182,11 @@
                                 const row = inp.closest('.mq-zmap-row');
                                 if (row) mqSyncZmapRowSummary(row, gameId);
                             }
-                            if (field === 'title' || field === 'instructions' || field === 'linkPairs') return;
+                            if (field === 'linkPairs') {
+                                mqUpdateLinkPairsWarn(inp, gameId);
+                                return;
+                            }
+                            if (field === 'title' || field === 'instructions') return;
                             renderDropzonesList(gameId);
                             renderDndGamesPreview();
                         } catch (err) {}
