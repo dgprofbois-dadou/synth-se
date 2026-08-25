@@ -1027,6 +1027,14 @@ test('Relier→DnD : isLinkModeOn ignore le mode flèche résiduel sur étape d�
   assert.ok(html.includes("z-index:7; box-sizing:border-box; pointer-events:none"));
 });
 
+test('Étape DnD après Relier : placeInZone n’évalue pas les étapes sans flèches', () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'mq-dnd-engine.js'), 'utf8');
+  // Régression : getStepsState(collectPlacements) sans links → activity linking → dépôt refusé
+  assert.ok(src.includes("lastStepActivity === 'linking'"));
+  assert.ok(src.includes('pas getStepsState(collectPlacements) sans links'));
+  assert.ok(!/placeInZone[\s\S]{0,800}getStepsState\(game, collectPlacements\(gameContainer/.test(src));
+});
+
 test('Étape DnD après Relier : cartes requises par l’étape restent draggables', () => {
   const g = Engine.applyGameDefaults({
     gameType: 'exact',

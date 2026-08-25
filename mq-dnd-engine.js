@@ -3737,21 +3737,12 @@
       if (!zcfg) return false;
       if (isSingleUse(cardUse) && used.has(id) && !opts.allowMove) return false;
 
-      // Étapes : pendant Relier pur, pas de dépôt (les IDs d’étape ne restreignent pas les zones)
-      if (stepsEnabled && !opts.autoSeed) {
-        var stPlace = getStepsState(game, collectPlacements(gameContainer, game));
-        stPlace.statuses.forEach(function (s, i) {
-          var sid = String((stPlace.steps[i] && stPlace.steps[i].id) || i);
-          if (manualStepDone[sid]) { s.isComplete = true; s.needsManualNext = false; }
-        });
-        stPlace.allComplete = stPlace.statuses.every(function (s) { return s.isComplete; });
-        if (!stPlace.allComplete) {
-          stPlace.currentIndex = stPlace.statuses.findIndex(function (s) { return !s.isComplete; });
-          if (stPlace.currentIndex < 0) stPlace.currentIndex = 0;
-          stPlace.active = stPlace.steps[stPlace.currentIndex] || null;
-        }
-        var act = stPlace.active ? normalizeStep(stPlace.active, 0) : null;
-        if (act && act.activity === 'linking') return false;
+      // Étapes : pendant Relier pur, pas de dépôt.
+      // Important : utiliser lastStepActivity (mis à jour par refreshUI avec les flèches),
+      // pas getStepsState(collectPlacements) sans links — sinon après Relier le dépôt
+      // croit encore être en étape linking et refuse toutes les cartes.
+      if (stepsEnabled && !opts.autoSeed && lastStepActivity === 'linking') {
+        return false;
       }
 
       var existingPlaced = findPlacedCard(id);
