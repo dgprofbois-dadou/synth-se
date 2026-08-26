@@ -3621,10 +3621,13 @@
                 Mise en page altérée par erreur ? <strong>↶ Annuler</strong> (Ctrl+Z) ou <strong>Charger</strong> une sauvegarde .json antérieure.
             </div>
             <div class="mini" style="color:#666; margin:4px 0 8px;">
-                <strong>Dossier FTP des MP3</strong> : modifiable en haut à gauche (à côté du nom du projet) ou dans le panneau voix d’un champ. Une seule URL pour <strong>toutes</strong> les consignes : <code>nomprojet-ch001.mp3</code>, etc.
+                <strong>Dossier FTP des MP3</strong> : URL publique HTTPS du dossier (pas le chemin o2switch/odns ni <code>/moodle_…/</code>).
+                Ex. en ligne : <code>https://www.woodworkingdematerialized.fr/synthese-papier/monprojet/voix</code>.
+                En local : <code>voix</code> (dossier <code>voix/</code> à côté du HTML) puis serveur local.
+                Fichiers : <code>nomprojet-ch001.mp3</code>, etc. Testez l’URL complète dans le navigateur (doit télécharger/lire le MP3).
             </div>
-            <input id="confVoiceBase" type="text" placeholder="https://monsite.fr/voices/" hidden
-                title="URL du dossier FTP pour tous les MP3 (commun à toutes les voix)">
+            <input id="confVoiceBase" type="text" placeholder="https://www.…/synthese-papier/…/voix" hidden
+                title="URL publique du dossier MP3 (HTTPS) — ou « voix » en local">
             <button id="btnVoiceManifest" type="button" style="width:100%; margin:6px 0 4px; font-size:12px;">📋 Liste des MP3 à produire</button>
             <pre id="pVoiceManifest" style="display:none;"></pre>
 
@@ -3671,10 +3674,10 @@
                 <div style="font-size:11px; font-weight:700; color:#047857; margin-bottom:8px;">🎙 Consigne vocale (MP3 sur FTP)</div>
                 <div class="row" style="margin-bottom:6px;">
                     <label>Dossier FTP</label>
-                    <input id="pVoiceBaseUrl" type="text" placeholder="https://monsite.fr/voices/"
-                        title="URL commune pour tous les MP3 — modifiez ici pour l’ensemble des voix">
+                    <input id="pVoiceBaseUrl" type="text" placeholder="https://www.…/synthese-papier/…/voix"
+                        title="URL publique HTTPS du dossier MP3 (pas odns / moodle_…) — ou « voix » en local">
                 </div>
-                <div class="mini" style="color:#047857; margin:-2px 0 8px;">Même chemin pour toutes les consignes vocales.</div>
+                <div class="mini" style="color:#047857; margin:-2px 0 8px;">Même URL pour toutes les consignes. Survol ou focus de l’input → lecture du MP3.</div>
                 <div class="row" style="margin-bottom:6px;">
                     <label>Fichier MP3</label>
                     <input id="pVoiceFileDisplay" type="text" readonly title="Nom exact du fichier à déposer sur le FTP">
@@ -6437,6 +6440,10 @@
                         if (state.mode !== 'student' || b.locked) return;
                         mqPlayVoiceForBox(b);
                     });
+                    field.addEventListener('mouseenter', () => {
+                        if (state.mode !== 'student' || b.locked) return;
+                        mqPlayVoiceForBox(b);
+                    });
 
                     // === Validation élève ===
                     // === Validation élève (MODIFIÉ AVEC ANIMATION) ===
@@ -6918,6 +6925,20 @@
             function mqSanitizeVoicePrefix(raw) {
                 return String(raw || 'exercice').trim().replace(/[^\w\u00C0-\u024F.-]+/gi, '_').replace(/^_+|_+$/g, '') || 'exercice';
             }
+            /** Corrige les URL FTP historiques (odns + /moodle_…/) vers le domaine public. */
+            function mqNormalizeVoiceBaseUrl(raw) {
+                let u = String(raw || '').trim();
+                if (!u) return '';
+                u = u.replace(
+                    /^https?:\/\/woodworkingdematerialized\.fr\.gida9464\.odns\.fr\/moodle_V[\d.]+/i,
+                    'https://www.woodworkingdematerialized.fr'
+                );
+                u = u.replace(
+                    /^https?:\/\/woodworkingdematerialized\.fr\.gida9464\.odns\.fr/i,
+                    'https://www.woodworkingdematerialized.fr'
+                );
+                return u.replace(/\/+$/, '');
+            }
             /** Nom du projet (HTML + préfixe MP3/PDF). */
             function getProjectName() {
                 const raw = ($('confExportName') ? $('confExportName').value : '') || 'exercice';
@@ -6962,9 +6983,9 @@
                 return '';
             }
             function mqVoiceUrl(b) {
-                const base = ($('confVoiceBase') && $('confVoiceBase').value || '').trim();
+                const base = mqNormalizeVoiceBaseUrl($('confVoiceBase') && $('confVoiceBase').value || '');
                 if (!base || !b || b.kind === 'iframe') return null;
-                return base.replace(/\/+$/, '') + '/' + encodeURIComponent(mqVoiceFileName(b)).replace(/%2F/g, '/');
+                return base + '/' + encodeURIComponent(mqVoiceFileName(b)).replace(/%2F/g, '/');
             }
             function mqPlayVoiceForBox(b) {
                 if (!b || b.kind === 'iframe' || b.locked) return;
@@ -17018,7 +17039,12 @@
                     const prefix = getProjectName();
                     const htmlFileName = getHtmlExportFileName();
                     mqEnsureAllVoiceKeys();
-                    const voiceBaseExport = ($('confVoiceBase') ? $('confVoiceBase').value : '').trim();
+                    const rawVoiceBase = ($('confVoiceBase') ? $('confVoiceBase').value : '');
+                    const voiceBaseExport = mqNormalizeVoiceBaseUrl(rawVoiceBase);
+                    if (voiceBaseExport && String(rawVoiceBase || '').trim().replace(/\/+$/, '') !== voiceBaseExport) {
+                        if ($('confVoiceBase')) $('confVoiceBase').value = voiceBaseExport;
+                        mqSyncVoiceBaseFields('base');
+                    }
 
                     const bgImgs = Array.from(document.querySelectorAll('#stage img.bg'));
                     const live1 = bgImgs[0] && (bgImgs[0].currentSrc || bgImgs[0].src);
@@ -17479,18 +17505,25 @@
                 }
             });
             if (MQ_VOICE_BASE) {
+                function mqPlayInputVoice(wrap) {
+                    const inp = wrap.querySelector('input,textarea');
+                    if (!inp || inp.disabled || inp.readOnly) return;
+                    const f = wrap.getAttribute('data-voice');
+                    if (!f) return;
+                    const url = MQ_VOICE_BASE.replace(/\\/+$/, '') + '/' + encodeURIComponent(f).replace(/%2F/g, '/');
+                    if (mqVoiceAud && mqVoiceAud._mqVoiceUrl === url && !mqVoiceAud.paused) return;
+                    if (mqVoiceAud) { try { mqVoiceAud.pause(); } catch (e) {} mqVoiceAud = null; }
+                    mqVoiceAud = new Audio(url);
+                    mqVoiceAud._mqVoiceUrl = url;
+                    mqVoiceAud.play().catch(function(err) {
+                        console.warn('[Synthèse] Voix MP3 inaccessible — vérifiez le dossier FTP / URL :', url, err && err.message);
+                    });
+                }
                 document.querySelectorAll('.input-wrapper[data-voice]').forEach(function(wrap) {
                     const inp = wrap.querySelector('input,textarea');
                     if (!inp) return;
-                    inp.addEventListener('focus', function() {
-                        if (inp.disabled || inp.readOnly) return;
-                        const f = wrap.getAttribute('data-voice');
-                        if (!f) return;
-                        const url = MQ_VOICE_BASE.replace(/\\/+$/, '') + '/' + encodeURIComponent(f).replace(/%2F/g, '/');
-                        if (mqVoiceAud) { mqVoiceAud.pause(); mqVoiceAud = null; }
-                        mqVoiceAud = new Audio(url);
-                        mqVoiceAud.play().catch(function() {});
-                    });
+                    wrap.addEventListener('mouseenter', function() { mqPlayInputVoice(wrap); });
+                    inp.addEventListener('focus', function() { mqPlayInputVoice(wrap); });
                 });
             }
         });
@@ -19328,8 +19361,8 @@
                 voiceBaseInput.removeAttribute('hidden');
                 voiceBaseInput.classList.add('mq-voice-base-url');
                 voiceBaseInput.removeAttribute('style');
-                voiceBaseInput.placeholder = 'https://…/dossier-mp3/';
-                voiceBaseInput.title = 'URL du dossier FTP pour tous les MP3 (commun à toutes les voix)';
+                voiceBaseInput.placeholder = 'https://www.…/synthese-papier/…/voix';
+                voiceBaseInput.title = 'URL publique HTTPS du dossier MP3 (pas odns/moodle) — ou « voix » en local';
                 voiceBaseInput.setAttribute('aria-label', 'Dossier FTP des voix');
                 const voiceSep = document.createElement('span');
                 voiceSep.className = 'mq-crumb-sep';
