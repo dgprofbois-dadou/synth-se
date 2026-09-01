@@ -127,6 +127,42 @@
     }
   }
 
+  /** Feuille ouverte en iframe Moodle ou ?embed=1 (pas une ouverture locale autonome). */
+  function mqIsMoodleEmbedContext() {
+    try {
+      const q = new URLSearchParams(window.location.search);
+      if (q.get('embed') === '1' || q.has('embed')) return true;
+    } catch (_) { /* ignore */ }
+    try {
+      return window.self !== window.top;
+    } catch (_) {
+      return true;
+    }
+  }
+
+  /** courseid = cours ; cmid = activité Page (paramètre id de l'URL parente Moodle). */
+  function mqResolveMoodleIds() {
+    let courseid = 0;
+    let cmid = 0;
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.has('courseid')) courseid = parseInt(urlParams.get('courseid'), 10) || 0;
+      if (urlParams.has('cmid')) cmid = parseInt(urlParams.get('cmid'), 10) || 0;
+    } catch (_) { /* ignore */ }
+    try {
+      if (!courseid && window.parent && window.parent.M && window.parent.M.cfg && window.parent.M.cfg.courseId) {
+        courseid = parseInt(window.parent.M.cfg.courseId, 10) || 0;
+      }
+      if (!cmid && window.parent && window.parent.location) {
+        const parentUrlParams = new URLSearchParams(window.parent.location.search);
+        if (parentUrlParams.has('id')) cmid = parseInt(parentUrlParams.get('id'), 10) || 0;
+      }
+    } catch (e) {
+      console.warn("Impossible d'accéder à window.parent (Cross-Origin ou non embarqué)");
+    }
+    return { courseid: courseid, cmid: cmid };
+  }
+
   /** Envoie Moodle : HTTP(S) uniquement (pas file:// ni ouverture locale du HTML exporté). */
   function mqCanSendMoodleScore() {
     if (!window.__mqAllowMoodleScore) return false;
@@ -139,34 +175,14 @@
     return true;
   }
 
-  function envoyerScoreAMoodle(scoreFinal) {
+  function envoyerScoreAMoodle(scoreFinal, maxScoreFinal) {
     if (!mqCanSendMoodleScore()) return;
-    let finalCourseId = 1; // ID du cours Moodle (très important pour le contexte)
-    let finalCmid = 1;     // ID du module
-
-    // 1. Essai de récupération propre depuis les paramètres de l'iframe locale
-    const urlParams = new URLSearchParams(window.location.search);
-    if (urlParams.has('courseid') || urlParams.has('id')) {
-      finalCourseId = urlParams.get('courseid') || urlParams.get('id');
-      finalCmid = urlParams.get('cmid') || urlParams.get('id');
-    } else {
-      // En cas d'iframe sans paramètre, on fouille dans le parent
-      try {
-        if (window.parent && window.parent.M && window.parent.M.cfg) {
-          // Moodle expose le courseId ! C'est ce qu'il nous faut pour l'event et l'API
-          if (window.parent.M.cfg.courseId) {
-            finalCourseId = window.parent.M.cfg.courseId;
-          }
-        }
-        // Et on prend l'ID de l'URL parent comme cmid
-        const parentUrlParams = new URLSearchParams(window.parent.location.search);
-        if (parentUrlParams.has('id')) {
-          finalCmid = parentUrlParams.get('id');
-        }
-      } catch (e) {
-        console.warn("Impossible d'accéder à window.parent (Cross-Origin ou non embarqué)");
-      }
-    }
+    const ids = mqResolveMoodleIds();
+    const finalCourseId = ids.courseid || 1;
+    const finalCmid = ids.cmid || 0;
+    const maxScore = (maxScoreFinal != null && maxScoreFinal > 0) ? maxScoreFinal : 0;
+    const percent = maxScore > 0 ? Math.min(100, Math.round((scoreFinal / maxScore) * 100)) : 0;
+    const completed = percent >= 100;
 
     const nomExercice = document.title || "Synthese";
 
@@ -218,8 +234,12 @@
       // (ex. si on est à la racine de Moodle en accès direct non iframe)
       const payload = {
         courseid: parseInt(finalCourseId, 10),
+        cmid: finalCmid,
         pagename: nomExercice,
-        score: parseFloat(scoreFinal)
+        score: parseFloat(scoreFinal),
+        maxscore: maxScore,
+        percent: percent,
+        completed: completed
       };
 
       // Si l'URL actuelle ou du parent contient moodle_V4 (ex. hébergement réel)
@@ -339,7 +359,7 @@
     clearTimeout(scoreTimeout);
     if (mqCanSendMoodleScore()) {
       scoreTimeout = setTimeout(() => {
-        envoyerScoreAMoodle(totalPoints);
+        envoyerScoreAMoodle(totalPoints, maxPoints);
       }, 1500);
     }
   }
@@ -1163,7 +1183,7 @@
     initTextInputs();
     initPanZoom();
     enablePdfIfAdmin();
-    window.__mqAllowMoodleScore = false;
+    window.__mqAllowMoodleScore = mqIsMoodleEmbedContext();
     updateGlobalScore();
 
     // Initialisation Drag & Drop (v3 + legacy data-dnd-good)

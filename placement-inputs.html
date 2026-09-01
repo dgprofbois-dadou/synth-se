@@ -17103,14 +17103,17 @@
 
                     // Chemin relatif pour iframe Moodle (// = même protocole que la page : HTTP ou HTTPS)
                     const genFileName = htmlFileName;
-                    const moodleIframeSrc = `//VOTRE-DOMAINE/chemin/vers/${genFileName}`;
+                    const moodleIframeSrc = `//VOTRE-DOMAINE/chemin/vers/${genFileName}?embed=1&cmid=CMID&courseid=COURSEID`;
 
                     // 2. Début HTML
                     let html = `<!DOCTYPE html>
 <!--
-  INTÉGRATION MOODLE (activité Page) — compatible HTTP et HTTPS
-  Remplacez VOTRE-DOMAINE/chemin par l'URL réelle SANS http: ni https: (ex. //monsite.fr/moodle_V4.5.4/synthese-papier/exercice.html)
-  L'iframe suivra automatiquement le protocole de Moodle (http ou https).
+  OPTION MOODLE (activité Page + iframe) — le fichier reste jouable seul sans Moodle.
+  1. Hébergez ce HTML en HTTPS sur votre serveur.
+  2. Dans une activité Page Moodle, collez l'iframe ci-dessous.
+  3. Remplacez VOTRE-DOMAINE, CMID (id de la Page) et COURSEID (id du cours).
+  URL sans http/https pour suivre le protocole Moodle :
+  <iframe src="${moodleIframeSrc}" width="100%" height="800" style="border:0;" allow="fullscreen"></iframe>
 -->
 <html lang="fr">
 <head>
