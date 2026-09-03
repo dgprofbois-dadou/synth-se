@@ -17220,8 +17220,12 @@
             <div class="progress-track"><div id="progress-fill"></div></div>
             <div class="score-text">Score: <span id="score">0</span> / <span id="total-score">${state.boxes.filter(b => b.kind !== 'iframe').length}</span></div>
         </div>
-        <div class="pdf-buttons" style="display:flex; gap:10px;">
+        <div class="pdf-buttons" style="display:flex; flex-wrap:wrap; gap:10px; align-items:center;">
             <button id="download-pdf-prof" style="background:#607d8b; color:white; border:none; padding:8px 16px; border-radius:4px; cursor:pointer;">📄 Télécharger Synthèse</button>
+            <div id="pdf-student-name-wrap" class="mq-pdf-student" hidden>
+                <label for="pdf-student-name">Prénom Nom</label>
+                <input id="pdf-student-name" class="mq-pdf-name" type="text" autocomplete="name" placeholder="ex. Jean Dupont" maxlength="80">
+            </div>
             <button id="download-pdf" disabled style="opacity:0.5; background:#007bff; color:white; border:none; padding:8px 16px; border-radius:4px; cursor:default;">📄 Télécharger Synthèse (Score)</button>
         </div>
     </div>

@@ -280,6 +280,20 @@
     }
   }
 
+  function isExerciseTextInput(input) {
+    if (!input) return false;
+    if (input.id === 'pdf-student-name' || input.classList.contains('mq-pdf-name')) return false;
+    if (input.closest && input.closest('.mq-pdf-student, .pdf-buttons')) return false;
+    return true;
+  }
+
+  function setPdfStudentNameVisible(visible) {
+    const wrap = document.getElementById('pdf-student-name-wrap');
+    if (!wrap) return;
+    if (visible) wrap.removeAttribute('hidden');
+    else wrap.setAttribute('hidden', '');
+  }
+
   function updateGlobalScore() {
     const scoreDisplay = document.getElementById('score');
     const totalDisplay = document.getElementById('total-score');
@@ -293,7 +307,8 @@
       totalPoints += window.game2Score || 0;
     }
 
-    const allInputs = document.querySelectorAll('input[type="text"], textarea');
+    const allInputs = Array.from(document.querySelectorAll('input[type="text"], textarea'))
+      .filter(isExerciseTextInput);
     allInputs.forEach(input => {
       // On compte comme bon si la classe 'correct' est présente (ajoutée par initTextInputs)
       if (input.classList.contains('correct') || input.classList.contains('input-success-anim')) {
@@ -345,10 +360,12 @@
           btnPdf.style.opacity = '1';
           btnPdf.style.cursor = 'pointer';
           btnPdf.style.backgroundColor = '#007bff';
+          setPdfStudentNameVisible(true);
         } else {
           btnPdf.disabled = true;
           btnPdf.style.opacity = '0.5';
           btnPdf.style.cursor = 'default';
+          setPdfStudentNameVisible(false);
           // Keep original color or set it if needed, but opacity handles the look.
         }
       }
@@ -365,6 +382,7 @@
   }
   function resetInputs() {
     document.querySelectorAll('input[type="text"]').forEach(input => {
+      if (!isExerciseTextInput(input)) return;
       input.value = '';
       input.classList.remove('correct', 'incorrect', 'in-progress');
     });
@@ -1121,6 +1139,7 @@
     btn.style.cursor = 'pointer';
     btn.style.backgroundColor = '#007bff';
     btn.style.color = '#fff';
+    setPdfStudentNameVisible(true);
   }
 
   // -----------------------
@@ -1131,6 +1150,7 @@
     const inputs = document.querySelectorAll('input[type="text"], textarea');
 
     inputs.forEach(input => {
+      if (!isExerciseTextInput(input)) return;
       input.addEventListener('input', () => {
         const answer = (input.getAttribute('data-answer') || '').toLowerCase().trim().replace(/\s+/g, ' ');
         const user = (input.value || '').toLowerCase().trim().replace(/\s+/g, ' ');

@@ -24,6 +24,19 @@ class PDFExporter {
     }
 
     async getUserName() {
+        // Champ visible débloqué avec le bouton PDF élève (prioritaire)
+        const field = document.getElementById('pdf-student-name');
+        if (field) {
+            const typed = (field.value || '').trim();
+            if (typed) {
+                this.userName = typed;
+                return this.userName;
+            }
+            alert('Entrez votre prénom et nom avant de télécharger le PDF.');
+            try { field.focus(); } catch (_) { /* ignore */ }
+            return null;
+        }
+
         if (this.userName) return this.userName;
 
         const selectors = ['.usermenu .usertext', '.usertext', '.login .usertext', '[data-region="usermenu"] .usertext', '.navbar .usertext'];
@@ -203,6 +216,7 @@ class PDFExporter {
 
         if (!anonymous) {
             const fullName = await this.getUserName();
+            if (!fullName) return;
             const names = this.parseName(fullName);
             firstname = names.firstname;
             lastname = names.lastname;

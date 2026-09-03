@@ -639,6 +639,35 @@ button:disabled {
     cursor: pointer;
 }
 
+.mq-pdf-student {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    width: 280px;
+    font-weight: 600;
+    font-size: 12px;
+    color: #1f2937;
+}
+
+.mq-pdf-student label {
+    font-size: 12px;
+}
+
+.mq-pdf-student input.mq-pdf-name {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 8px 10px;
+    border: 2px solid #007bff;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 600;
+    background: #fff;
+}
+
+.mq-pdf-student[hidden] {
+    display: none !important;
+}
+
 #download-pdf {
     background-color: #f8f8f8;
     color: #888;
