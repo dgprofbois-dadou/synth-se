@@ -216,8 +216,34 @@ function rebuild() {
 }
 .dnd-link-tooltip {
   position: absolute;
-  z-index: 30;
+  z-index: 40;
   pointer-events: none;
+  display: none;
+  max-width: 520px;
+  min-width: 240px;
+  padding: 16px 20px;
+  border-radius: 14px;
+  background: linear-gradient(145deg, #1e3a8a 0%, #1d4ed8 100%);
+  color: #fff;
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1.45;
+  box-shadow: 0 10px 28px rgba(30, 58, 138, 0.5);
+  border: 3px solid #f59e0b;
+  white-space: pre-wrap;
+  text-align: center;
+  transform: none;
+}
+.dnd-link-tooltip::before {
+  content: '🔗 Mode Relier — clic droit';
+  display: block;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #fde68a;
+  margin-bottom: 8px;
+  line-height: 1.2;
 }
 .dnd-link-line,
 .dnd-link-drag,

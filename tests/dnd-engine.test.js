@@ -226,10 +226,24 @@ test('export runtime : infobulles DnD par délégation (img enfant + thème jeu)
   assert.ok(js.includes('applyTooltipTheme'));
   assert.ok(js.includes('data-tt-font'));
   assert.ok(js.includes('pointerover'));
+  assert.ok(js.includes("game.classList.contains('dnd-link-mode')"));
   // data-tooltip sur la carte prime sur l’interrupteur global data-tt-enabled=0
   assert.ok(js.includes("closest('[data-tooltip]')"));
   assert.ok(!js.includes("game.getAttribute('data-tt-enabled') === '0'"));
   assert.ok(!js.includes("document.querySelectorAll('.draggable').forEach(d =>"));
+});
+
+test('tooltip Relier : plus grand, clic droit explicite, distinct des cartes DnD', () => {
+  const engineSrc = fs.readFileSync(path.join(__dirname, '..', 'mq-dnd-engine.js'), 'utf8');
+  assert.ok(engineSrc.includes('Clic droit de la souris maintenu'));
+  assert.ok(engineSrc.includes('suppressCardHoverTips'));
+  assert.ok(engineSrc.includes('restoreCardHoverTips'));
+  const css = fs.readFileSync(path.join(__dirname, '..', 'export-runtime', 'style.css'), 'utf8');
+  assert.ok(css.includes('.dnd-link-tooltip::before'));
+  assert.ok(css.includes('Mode Relier'));
+  assert.ok(css.includes('font-size: 28px'));
+  const g = Engine.applyGameDefaults({ gameType: 'linking' });
+  assert.ok(String(g.linkTooltip).includes('Clic droit de la souris'));
 });
 
 test('PAN export : slack de centrage des bords (pas clamp 120 px)', () => {

@@ -1332,19 +1332,34 @@
         }
         .dnd-link-tooltip {
             position: absolute;
-            z-index: 30;
+            z-index: 40;
             pointer-events: none;
-            max-width: 360px;
-            padding: 10px 16px;
-            border-radius: 10px;
-            background: rgba(30, 30, 30, 0.92);
+            display: none;
+            max-width: 520px;
+            min-width: 240px;
+            padding: 16px 20px;
+            border-radius: 14px;
+            background: linear-gradient(145deg, #1e3a8a 0%, #1d4ed8 100%);
             color: #fff;
-            font-size: 20px;
-            font-weight: 600;
-            line-height: 1.35;
-            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+            font-size: 28px;
+            font-weight: 700;
+            line-height: 1.45;
+            box-shadow: 0 10px 28px rgba(30, 58, 138, 0.5);
+            border: 3px solid #f59e0b;
             white-space: pre-wrap;
             text-align: center;
+            transform: none;
+        }
+        .dnd-link-tooltip::before {
+            content: '🔗 Mode Relier — clic droit';
+            display: block;
+            font-size: 15px;
+            font-weight: 800;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            color: #fde68a;
+            margin-bottom: 8px;
+            line-height: 1.2;
         }
         .dnd-link-hit-locked {
             cursor: not-allowed !important;
@@ -15777,11 +15792,13 @@
                     document.body.appendChild(tooltipEl);
                 }
 
-                document.querySelectorAll('.dnd-image[data-tooltip]').forEach(img => {
+                document.querySelectorAll('.dnd-image[data-tooltip], .draggable[data-tooltip], .dnd-placed[data-tooltip]').forEach(img => {
                     let timeout = null;
                     let updatePosition = null;
 
                     img.addEventListener('mouseenter', (e) => {
+                        const game = img.closest('.drag-game');
+                        if (game && game.classList.contains('dnd-link-mode')) return;
                         const text = img.dataset.tooltip;
                         if (!text) return;
                         const gameId = img.dataset.game;
@@ -18639,8 +18656,8 @@
                     + '<button type="button" id="btnLinkZoneFreeGame' + n + '" style="flex:1;font-size:11px;font-weight:bold;">✏️ Zone SVG (crayon)</button>'
                     + '</div>'
                     + '<label style="width:auto;font-size:12px;font-weight:bold;margin-top:4px;">Tooltip Relier</label>'
-                    + '<input id="dndGame' + n + 'LinkTooltip" type="text" placeholder="Clic droit : tracer. Clic gauche sur une flèche : supprimer." style="width:100%;font-size:12px;padding:6px;box-sizing:border-box;">'
-                    + '<p style="margin:0;font-size:10px;color:#64748b;">Sur une étape Relier, le tracé au <strong>clic droit</strong> est actif tout de suite (un tooltip suit la souris). <strong>Clic gauche</strong> sur une flèche pour la supprimer (les flèches vertes restent verrouillées). En admin : glisser le bouton pour le positionner, poignée pour la taille.</p>'
+                    + '<input id="dndGame' + n + 'LinkTooltip" type="text" placeholder="Clic droit maintenu : tracer une flèche…" style="width:100%;font-size:12px;padding:6px;box-sizing:border-box;">'
+                    + '<p style="margin:0;font-size:10px;color:#64748b;">Sur une étape Relier, un <strong>grand tooltip bleu/orange</strong> suit la souris (clic droit). Les infobulles des cartes DnD sont masquées pendant le Relier pour éviter la confusion. <strong>Clic gauche</strong> sur une flèche pour la supprimer (flèches vertes verrouillées).</p>'
                     + '</div>'
                     + '<div class="row" style="gap:12px;flex-wrap:wrap;">'
                     + '<label style="width:auto;"><input type="checkbox" id="dndGame' + n + 'ShowScore" checked> Afficher score</label>'

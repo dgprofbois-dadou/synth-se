@@ -624,7 +624,7 @@
     }
     if (normalizeGameType(g.gameType) === 'linking') g.enableLinking = true;
     if (g.linkTooltip == null || g.linkTooltip === '') {
-      g.linkTooltip = 'Clic droit maintenu : tracer une flèche.\nClic gauche sur une flèche : la supprimer.';
+      g.linkTooltip = 'Clic droit de la souris maintenu :\ntracez une flèche vers une autre image.\n\nClic gauche sur une flèche :\nla supprimer (sauf flèche verte).';
     } else {
       g.linkTooltip = String(g.linkTooltip);
     }
@@ -2060,11 +2060,11 @@
     var completeFired = false;
     /** Centres temporaires pendant un drag HTML5 (id → {x,y} en coords layout). */
     var dragCenterOverrides = Object.create(null);
-    var DEFAULT_LINK_TIP = 'Clic droit maintenu : tracer une flèche.\nClic gauche sur une flèche : la supprimer.';
-    var DELETE_LINK_TIP = 'Clic gauche sur la flèche pour la supprimer.';
-    var LOCKED_LINK_TIP = 'Flèche correcte : elle ne peut pas être supprimée.';
-    var DRAW_LINK_TIP = 'Maintenez le clic droit et glissez jusqu’à l’image d’arrivée.';
-    var BTN_TIP = 'Mode Relier — clic droit maintenu pour tracer une flèche entre deux images';
+    var DEFAULT_LINK_TIP = 'Clic droit de la souris maintenu :\ntracez une flèche vers une autre image.\n\nClic gauche sur une flèche :\nla supprimer (sauf flèche verte).';
+    var DELETE_LINK_TIP = 'Clic gauche sur la flèche\npour la supprimer.';
+    var LOCKED_LINK_TIP = 'Flèche correcte :\nelle ne peut pas être supprimée.';
+    var DRAW_LINK_TIP = 'Maintenez le clic droit de la souris\net glissez jusqu’à l’image d’arrivée.';
+    var BTN_TIP = 'Mode Relier — clic droit maintenu pour tracer une flèche';
 
     gameContainer.classList.add('dnd-linking-ready');
     if (!hybrid) {
@@ -2446,10 +2446,50 @@
       tip = document.createElement('div');
       tip.className = 'dnd-link-tooltip';
       tip.setAttribute('role', 'status');
-      tip.style.cssText = 'position:absolute;z-index:20;pointer-events:none;display:none;max-width:360px;padding:10px 16px;border-radius:10px;background:rgba(30,30,30,0.92);color:#fff;font-size:20px;font-weight:600;line-height:1.35;box-shadow:0 4px 14px rgba(0,0,0,0.25);transform:none;white-space:pre-wrap;text-align:center;';
+      tip.setAttribute('aria-live', 'polite');
       gameContainer.appendChild(tip);
     }
+
+    function hideForeignCardTooltips() {
+      try {
+        var dndTip = document.getElementById('dnd-tooltip');
+        if (dndTip) dndTip.style.display = 'none';
+        var svgTip = document.getElementById('svg-tooltip');
+        if (svgTip) svgTip.style.display = 'none';
+      } catch (errHide) { /* ignore */ }
+    }
+
+    function suppressCardHoverTips() {
+      Array.prototype.forEach.call(gameContainer.querySelectorAll('[data-tooltip], [title]'), function (el) {
+        if (!gameContainer.contains(el) || el === tip) return;
+        if (el.hasAttribute('data-tooltip')) {
+          el.dataset.mqSavedTooltip = el.getAttribute('data-tooltip');
+          el.removeAttribute('data-tooltip');
+        }
+        if (el.title) {
+          el.dataset.mqSavedTitle = el.title;
+          el.removeAttribute('title');
+        }
+      });
+      hideForeignCardTooltips();
+    }
+
+    function restoreCardHoverTips() {
+      Array.prototype.forEach.call(gameContainer.querySelectorAll('[data-mq-saved-tooltip], [data-mq-saved-title]'), function (el) {
+        if (!gameContainer.contains(el)) return;
+        if (el.dataset.mqSavedTooltip != null) {
+          el.setAttribute('data-tooltip', el.dataset.mqSavedTooltip);
+          delete el.dataset.mqSavedTooltip;
+        }
+        if (el.dataset.mqSavedTitle != null) {
+          el.title = el.dataset.mqSavedTitle;
+          delete el.dataset.mqSavedTitle;
+        }
+      });
+    }
+
     function showTip(text, x, y) {
+      hideForeignCardTooltips();
       tip.textContent = text || '';
       if (!text) {
         tip.style.display = 'none';
@@ -2535,10 +2575,12 @@
         }
       });
       if (linkModeActive) {
+        suppressCardHoverTips();
         var cx = (gameContainer.clientWidth || 200) / 2;
         var cy = Math.max(48, (gameContainer.clientHeight || 120) * 0.18);
         showTip(tipText(), cx, cy);
       } else {
+        restoreCardHoverTips();
         hideTip();
         cancelDrag();
       }

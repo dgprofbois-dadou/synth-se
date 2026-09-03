@@ -369,19 +369,35 @@ input::placeholder {
 
 .dnd-link-tooltip {
     position: absolute;
-    z-index: 30;
+    z-index: 40;
     pointer-events: none;
-    max-width: 360px;
-    padding: 10px 16px;
-    border-radius: 10px;
-    background: rgba(30, 30, 30, 0.92);
+    display: none;
+    max-width: 520px;
+    min-width: 240px;
+    padding: 16px 20px;
+    border-radius: 14px;
+    background: linear-gradient(145deg, #1e3a8a 0%, #1d4ed8 100%);
     color: #fff;
-    font-size: 20px;
-    font-weight: 600;
-    line-height: 1.35;
-    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+    font-size: 28px;
+    font-weight: 700;
+    line-height: 1.45;
+    box-shadow: 0 10px 28px rgba(30, 58, 138, 0.5);
+    border: 3px solid #f59e0b;
     white-space: pre-wrap;
     text-align: center;
+    transform: none;
+}
+
+.dnd-link-tooltip::before {
+    content: '🔗 Mode Relier — clic droit';
+    display: block;
+    font-size: 15px;
+    font-weight: 800;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: #fde68a;
+    margin-bottom: 8px;
+    line-height: 1.2;
 }
 
 .dnd-link-line,
