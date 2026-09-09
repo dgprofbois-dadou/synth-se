@@ -15802,8 +15802,9 @@
                     let updatePosition = null;
 
                     img.addEventListener('mouseenter', (e) => {
-                        const game = img.closest('.drag-game');
-                        if (game && game.classList.contains('dnd-link-mode')) return;
+                        const gameEl = img.closest('.drag-game');
+                        if (gameEl && gameEl.classList.contains('dnd-link-mode')) return;
+                        if (document.body && document.body.classList.contains('dnd-relier-active')) return;
                         const text = img.dataset.tooltip;
                         if (!text) return;
                         const gameId = img.dataset.game;
