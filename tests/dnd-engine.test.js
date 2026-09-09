@@ -238,10 +238,15 @@ test('tooltip Relier : plus grand, clic droit explicite, distinct des cartes DnD
   assert.ok(engineSrc.includes('Clic droit de la souris maintenu'));
   assert.ok(engineSrc.includes('suppressCardHoverTips'));
   assert.ok(engineSrc.includes('restoreCardHoverTips'));
+  assert.ok(engineSrc.includes("document.body.appendChild(tip)"));
+  assert.ok(engineSrc.includes('dnd-relier-active'));
   const css = fs.readFileSync(path.join(__dirname, '..', 'export-runtime', 'style.css'), 'utf8');
   assert.ok(css.includes('.dnd-link-tooltip::before'));
   assert.ok(css.includes('Mode Relier'));
-  assert.ok(css.includes('font-size: 28px'));
+  assert.ok(css.includes('font-size: 34px'));
+  assert.ok(css.includes('position: fixed'));
+  assert.ok(css.includes('z-index: 10050'));
+  assert.ok(css.includes('body.dnd-relier-active #svg-tooltip'));
   const g = Engine.applyGameDefaults({ gameType: 'linking' });
   assert.ok(String(g.linkTooltip).includes('Clic droit de la souris'));
 });

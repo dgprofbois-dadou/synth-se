@@ -457,6 +457,7 @@
 
   function findDndTooltipEl(node) {
     if (!node || !node.closest) return null;
+    if (document.body && document.body.classList.contains('dnd-relier-active')) return null;
     const game = node.closest('.drag-game');
     if (!game || game.classList.contains('dnd-link-mode')) return null;
     // data-tt-enabled=0 = interrupteur global éditeur ; si la carte a data-tooltip,
@@ -486,6 +487,7 @@
   let dndTooltipBound = false;
 
   function showTooltipFor(el, x, y) {
+    if (document.body && document.body.classList.contains('dnd-relier-active')) return;
     // --- Durée du tooltip (en ms) --- Peut-être définie via le HTML (data-duration)
     const defaultTooltipDelay = window.tooltipDelay || 3000;
     // Protection anti-doublon : si c'est déjà cet élément, on ne fait rien

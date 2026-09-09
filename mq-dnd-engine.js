@@ -2441,13 +2441,19 @@
       return game.linkTooltip || DEFAULT_LINK_TIP;
     }
 
-    var tip = gameContainer.querySelector('.dnd-link-tooltip');
+    // Sur document.body (position:fixed) : taille lisible malgré le zoom/pan CSS de la page.
+    var tipSafeId = 'dnd-link-tooltip-' + String(gameId).replace(/[^a-zA-Z0-9_-]/g, '_');
+    var tip = document.getElementById(tipSafeId) || gameContainer.querySelector('.dnd-link-tooltip');
     if (!tip) {
       tip = document.createElement('div');
       tip.className = 'dnd-link-tooltip';
       tip.setAttribute('role', 'status');
       tip.setAttribute('aria-live', 'polite');
-      gameContainer.appendChild(tip);
+    }
+    tip.id = tipSafeId;
+    tip.dataset.mqGameId = String(gameId);
+    if (tip.parentNode !== document.body) {
+      document.body.appendChild(tip);
     }
 
     function hideForeignCardTooltips() {
@@ -2488,7 +2494,8 @@
       });
     }
 
-    function showTip(text, x, y) {
+    /** Affiche le tooltip Relier en coords écran (clientX/clientY). */
+    function showTip(text, clientX, clientY) {
       hideForeignCardTooltips();
       tip.textContent = text || '';
       if (!text) {
@@ -2496,16 +2503,16 @@
         return;
       }
       tip.style.display = 'block';
-      var maxW = gameContainer.clientWidth || 400;
-      var maxH = gameContainer.clientHeight || 300;
+      var maxW = window.innerWidth || 800;
+      var maxH = window.innerHeight || 600;
       tip.style.left = '0px';
       tip.style.top = '0px';
-      var tw = tip.offsetWidth || 220;
-      var th = tip.offsetHeight || 40;
-      var left = (typeof x === 'number' ? x : 0) + 16;
-      var top = (typeof y === 'number' ? y : 0) + 20;
-      if (left + tw > maxW - 8) left = x - tw - 12;
-      if (top + th > maxH - 8) top = y - th - 12;
+      var tw = tip.offsetWidth || 320;
+      var th = tip.offsetHeight || 80;
+      var left = (typeof clientX === 'number' ? clientX : 0) + 18;
+      var top = (typeof clientY === 'number' ? clientY : 0) + 22;
+      if (left + tw > maxW - 8) left = clientX - tw - 14;
+      if (top + th > maxH - 8) top = clientY - th - 14;
       left = Math.max(8, Math.min(maxW - tw - 8, left));
       top = Math.max(8, Math.min(maxH - th - 8, top));
       tip.style.left = left + 'px';
@@ -2514,8 +2521,7 @@
     }
     function hideTip() { tip.style.display = 'none'; }
     function followTip(clientX, clientY, text) {
-      var pt = localPoint(clientX, clientY);
-      showTip(text || tipText(), pt.x, pt.y);
+      showTip(text || tipText(), clientX, clientY);
     }
 
     // Bouton Relier retiré : activation auto via syncRelierForStep / setLinkMode
@@ -2574,10 +2580,17 @@
           }
         }
       });
+      try {
+        document.body.classList.toggle(
+          'dnd-relier-active',
+          !!document.querySelector('.drag-game.dnd-link-mode')
+        );
+      } catch (errBody) { /* ignore */ }
       if (linkModeActive) {
         suppressCardHoverTips();
-        var cx = (gameContainer.clientWidth || 200) / 2;
-        var cy = Math.max(48, (gameContainer.clientHeight || 120) * 0.18);
+        var cr0 = gameContainer.getBoundingClientRect();
+        var cx = cr0.left + (cr0.width || 200) / 2;
+        var cy = cr0.top + Math.max(48, (cr0.height || 120) * 0.18);
         showTip(tipText(), cx, cy);
       } else {
         restoreCardHoverTips();
@@ -2859,7 +2872,7 @@
       svg.style.pointerEvents = 'none';
       fromEl.classList.add('dnd-link-from', 'dnd-selected');
       dragState = { fromId: id, fromEl: fromEl, line: line, hoverEl: null };
-      showTip(DRAW_LINK_TIP, pt.x, pt.y);
+      showTip(DRAW_LINK_TIP, clientX, clientY);
     }
 
     function moveDrag(clientX, clientY) {
@@ -2881,7 +2894,7 @@
       }
       var c0 = nodeCenter(dragState.fromEl);
       dragState.line.setAttribute('d', linkPolylineToPath(previewRoutePath(c0.x, c0.y, pt.x, pt.y)));
-      showTip(DRAW_LINK_TIP, pt.x, pt.y);
+      showTip(DRAW_LINK_TIP, clientX, clientY);
     }
 
     function endDrag(clientX, clientY) {
