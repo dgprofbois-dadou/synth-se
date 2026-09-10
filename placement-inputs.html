@@ -1353,14 +1353,8 @@
             text-align: center;
         }
         .dnd-link-tooltip::before {
-            content: 'Relier';
-            display: inline;
-            font-size: 12px;
-            font-weight: 800;
-            letter-spacing: 0.04em;
-            text-transform: uppercase;
-            color: #fde68a;
-            margin-right: 8px;
+            content: none;
+            display: none;
         }
         body.dnd-relier-active #svg-tooltip,
         body.dnd-relier-active #dnd-tooltip {
@@ -12922,7 +12916,14 @@
                         g.instructionsBox = MqDndEngine.normalizeInstructionsBox(g.instructionsBox, g);
                     }
                     if (el('LinkMode')) g.linkMode = val('LinkMode') || 'one-to-one';
-                    if (el('LinkTooltip')) g.linkTooltip = val('LinkTooltip') || '';
+                    if (el('LinkTooltip')) {
+                        let tip = val('LinkTooltip') || '';
+                        if (!/maintenez\s+le\s+clic\s+droit/i.test(tip)) {
+                            tip = 'Maintenez le clic droit pour tracer une flèche · Clic gauche sur une flèche : supprimer';
+                        }
+                        g.linkTooltip = tip;
+                        el('LinkTooltip').value = tip;
+                    }
                     // Avec étapes : paires des étapes (union → allowedLinks pour le runtime)
                     if (g.enableSteps && Array.isArray(g.steps) && g.steps.length) {
                         if (window.MqDndEngine && MqDndEngine.effectiveAllowedLinks) {

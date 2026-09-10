@@ -627,16 +627,8 @@
       g.linkTooltip = 'Maintenez le clic droit pour tracer une flèche · Clic gauche sur une flèche : supprimer';
     } else {
       g.linkTooltip = String(g.linkTooltip);
-      // Remplacer d’anciens libellés trop vagues / trop longs
-      var tipNorm = g.linkTooltip.replace(/\s+/g, ' ').trim().toLowerCase();
-      if (
-        tipNorm.indexOf('maintenez le clic droit') < 0 &&
-        (
-          tipNorm.indexOf('clic droit maintenu') === 0 ||
-          tipNorm.indexOf('clic droit de la souris') === 0 ||
-          tipNorm === 'clic droit : tracer. clic gauche sur une flèche : supprimer.'
-        )
-      ) {
+      // Exiger explicitement « clic droit » (ex. anciennes configs « Maintenez le clic sur… »)
+      if (!/maintenez\s+le\s+clic\s+droit/i.test(g.linkTooltip)) {
         g.linkTooltip = 'Maintenez le clic droit pour tracer une flèche · Clic gauche sur une flèche : supprimer';
       }
     }
@@ -2449,7 +2441,10 @@
     });
 
     function tipText() {
-      return game.linkTooltip || DEFAULT_LINK_TIP;
+      // Toujours « Maintenez le clic droit… » — ignore les anciennes configs sans « droit ».
+      var custom = (game && game.linkTooltip != null) ? String(game.linkTooltip).trim() : '';
+      if (custom && /maintenez\s+le\s+clic\s+droit/i.test(custom)) return custom;
+      return DEFAULT_LINK_TIP;
     }
 
     // Sur document.body (position:fixed) : taille lisible malgré le zoom/pan CSS de la page.

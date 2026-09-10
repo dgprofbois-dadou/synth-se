@@ -237,14 +237,8 @@ function rebuild() {
   text-align: center;
 }
 .dnd-link-tooltip::before {
-  content: 'Relier';
-  display: inline;
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: #fde68a;
-  margin-right: 8px;
+  content: none;
+  display: none;
 }
 body.dnd-relier-active #svg-tooltip,
 body.dnd-relier-active #dnd-tooltip {
