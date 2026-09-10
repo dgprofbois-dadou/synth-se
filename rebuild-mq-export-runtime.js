@@ -237,7 +237,7 @@ function rebuild() {
   text-align: center;
 }
 .dnd-link-tooltip::before {
-  content: 'Relier · clic droit';
+  content: 'Relier';
   display: inline;
   font-size: 12px;
   font-weight: 800;

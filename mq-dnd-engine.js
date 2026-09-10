@@ -624,9 +624,21 @@
     }
     if (normalizeGameType(g.gameType) === 'linking') g.enableLinking = true;
     if (g.linkTooltip == null || g.linkTooltip === '') {
-      g.linkTooltip = 'Clic droit maintenu : tracer une flèche · Clic gauche sur une flèche : supprimer';
+      g.linkTooltip = 'Maintenez le clic droit pour tracer une flèche · Clic gauche sur une flèche : supprimer';
     } else {
       g.linkTooltip = String(g.linkTooltip);
+      // Remplacer d’anciens libellés trop vagues / trop longs
+      var tipNorm = g.linkTooltip.replace(/\s+/g, ' ').trim().toLowerCase();
+      if (
+        tipNorm.indexOf('maintenez le clic droit') < 0 &&
+        (
+          tipNorm.indexOf('clic droit maintenu') === 0 ||
+          tipNorm.indexOf('clic droit de la souris') === 0 ||
+          tipNorm === 'clic droit : tracer. clic gauche sur une flèche : supprimer.'
+        )
+      ) {
+        g.linkTooltip = 'Maintenez le clic droit pour tracer une flèche · Clic gauche sur une flèche : supprimer';
+      }
     }
     g.relierBtn = normalizeRelierBtn(g.relierBtn, g);
     g.linkZones = normalizeLinkZones(g.linkZones);
@@ -2060,10 +2072,10 @@
     var completeFired = false;
     /** Centres temporaires pendant un drag HTML5 (id → {x,y} en coords layout). */
     var dragCenterOverrides = Object.create(null);
-    var DEFAULT_LINK_TIP = 'Clic droit maintenu : tracer une flèche · Clic gauche sur une flèche : supprimer';
+    var DEFAULT_LINK_TIP = 'Maintenez le clic droit pour tracer une flèche · Clic gauche sur une flèche : supprimer';
     var DELETE_LINK_TIP = 'Clic gauche : supprimer cette flèche';
     var LOCKED_LINK_TIP = 'Flèche correcte — non modifiable';
-    var BTN_TIP = 'Mode Relier — clic droit maintenu pour tracer';
+    var BTN_TIP = 'Mode Relier — maintenez le clic droit pour tracer';
 
     gameContainer.classList.add('dnd-linking-ready');
     if (!hybrid) {

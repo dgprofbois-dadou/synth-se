@@ -235,7 +235,7 @@ test('export runtime : infobulles DnD par délégation (img enfant + thème jeu)
 
 test('tooltip Relier : bandeau compact fixe, sans suivi curseur', () => {
   const engineSrc = fs.readFileSync(path.join(__dirname, '..', 'mq-dnd-engine.js'), 'utf8');
-  assert.ok(engineSrc.includes('Clic droit maintenu : tracer une flèche'));
+  assert.ok(engineSrc.includes('Maintenez le clic droit pour tracer une flèche'));
   assert.ok(engineSrc.includes('suppressCardHoverTips'));
   assert.ok(engineSrc.includes('restoreCardHoverTips'));
   assert.ok(engineSrc.includes("document.body.appendChild(tip)"));
@@ -245,13 +245,18 @@ test('tooltip Relier : bandeau compact fixe, sans suivi curseur', () => {
   assert.ok(!engineSrc.includes('followTip('));
   const css = fs.readFileSync(path.join(__dirname, '..', 'export-runtime', 'style.css'), 'utf8');
   assert.ok(css.includes('.dnd-link-tooltip::before'));
-  assert.ok(css.includes('Relier · clic droit'));
+  assert.ok(css.includes("content: 'Relier'"));
   assert.ok(css.includes('font-size: 14px'));
   assert.ok(css.includes('position: fixed'));
   assert.ok(css.includes('z-index: 10050'));
   assert.ok(css.includes('body.dnd-relier-active #svg-tooltip'));
   const g = Engine.applyGameDefaults({ gameType: 'linking' });
-  assert.ok(String(g.linkTooltip).includes('Clic droit maintenu'));
+  assert.ok(String(g.linkTooltip).includes('Maintenez le clic droit'));
+  const gOld = Engine.applyGameDefaults({
+    gameType: 'linking',
+    linkTooltip: 'Clic droit maintenu : tracer une flèche · Clic gauche sur une flèche : supprimer'
+  });
+  assert.ok(String(gOld.linkTooltip).includes('Maintenez le clic droit'));
 });
 
 test('PAN export : slack de centrage des bords (pas clamp 120 px)', () => {
