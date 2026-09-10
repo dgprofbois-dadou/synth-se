@@ -624,7 +624,7 @@
     }
     if (normalizeGameType(g.gameType) === 'linking') g.enableLinking = true;
     if (g.linkTooltip == null || g.linkTooltip === '') {
-      g.linkTooltip = 'Clic droit de la souris maintenu :\ntracez une flèche vers une autre image.\n\nClic gauche sur une flèche :\nla supprimer (sauf flèche verte).';
+      g.linkTooltip = 'Clic droit maintenu : tracer une flèche · Clic gauche sur une flèche : supprimer';
     } else {
       g.linkTooltip = String(g.linkTooltip);
     }
@@ -2060,11 +2060,10 @@
     var completeFired = false;
     /** Centres temporaires pendant un drag HTML5 (id → {x,y} en coords layout). */
     var dragCenterOverrides = Object.create(null);
-    var DEFAULT_LINK_TIP = 'Clic droit de la souris maintenu :\ntracez une flèche vers une autre image.\n\nClic gauche sur une flèche :\nla supprimer (sauf flèche verte).';
-    var DELETE_LINK_TIP = 'Clic gauche sur la flèche\npour la supprimer.';
-    var LOCKED_LINK_TIP = 'Flèche correcte :\nelle ne peut pas être supprimée.';
-    var DRAW_LINK_TIP = 'Maintenez le clic droit de la souris\net glissez jusqu’à l’image d’arrivée.';
-    var BTN_TIP = 'Mode Relier — clic droit maintenu pour tracer une flèche';
+    var DEFAULT_LINK_TIP = 'Clic droit maintenu : tracer une flèche · Clic gauche sur une flèche : supprimer';
+    var DELETE_LINK_TIP = 'Clic gauche : supprimer cette flèche';
+    var LOCKED_LINK_TIP = 'Flèche correcte — non modifiable';
+    var BTN_TIP = 'Mode Relier — clic droit maintenu pour tracer';
 
     gameContainer.classList.add('dnd-linking-ready');
     if (!hybrid) {
@@ -2494,8 +2493,8 @@
       });
     }
 
-    /** Affiche le tooltip Relier en coords écran (clientX/clientY). */
-    function showTip(text, clientX, clientY) {
+    /** Bandeau Relier fixe en haut (ne suit pas le curseur). */
+    function showTip(text) {
       hideForeignCardTooltips();
       tip.textContent = text || '';
       if (!text) {
@@ -2503,25 +2502,19 @@
         return;
       }
       tip.style.display = 'block';
-      var maxW = window.innerWidth || 800;
-      var maxH = window.innerHeight || 600;
-      tip.style.left = '0px';
-      tip.style.top = '0px';
-      var tw = tip.offsetWidth || 320;
-      var th = tip.offsetHeight || 80;
-      var left = (typeof clientX === 'number' ? clientX : 0) + 18;
-      var top = (typeof clientY === 'number' ? clientY : 0) + 22;
-      if (left + tw > maxW - 8) left = clientX - tw - 14;
-      if (top + th > maxH - 8) top = clientY - th - 14;
-      left = Math.max(8, Math.min(maxW - tw - 8, left));
-      top = Math.max(8, Math.min(maxH - th - 8, top));
-      tip.style.left = left + 'px';
-      tip.style.top = top + 'px';
-      tip.style.transform = 'none';
+      tip.style.left = '50%';
+      tip.style.top = '10px';
+      tip.style.right = 'auto';
+      tip.style.bottom = 'auto';
+      tip.style.transform = 'translateX(-50%)';
     }
     function hideTip() { tip.style.display = 'none'; }
-    function followTip(clientX, clientY, text) {
-      showTip(text || tipText(), clientX, clientY);
+    function refreshDockedTip(overrideText) {
+      if (!linkModeActive || dragState) {
+        hideTip();
+        return;
+      }
+      showTip(overrideText || tipText());
     }
 
     // Bouton Relier retiré : activation auto via syncRelierForStep / setLinkMode
@@ -2588,10 +2581,7 @@
       } catch (errBody) { /* ignore */ }
       if (linkModeActive) {
         suppressCardHoverTips();
-        var cr0 = gameContainer.getBoundingClientRect();
-        var cx = cr0.left + (cr0.width || 200) / 2;
-        var cy = cr0.top + Math.max(48, (cr0.height || 120) * 0.18);
-        showTip(tipText(), cx, cy);
+        showTip(tipText());
       } else {
         restoreCardHoverTips();
         hideTip();
@@ -2844,7 +2834,7 @@
       }
       dragState = null;
       if (linkModeActive) {
-        /* le tooltip reprend le suivi souris via pointermove */
+        showTip(tipText());
       } else {
         hideTip();
       }
@@ -2872,7 +2862,7 @@
       svg.style.pointerEvents = 'none';
       fromEl.classList.add('dnd-link-from', 'dnd-selected');
       dragState = { fromId: id, fromEl: fromEl, line: line, hoverEl: null };
-      showTip(DRAW_LINK_TIP, clientX, clientY);
+      hideTip(); // laisser l’écran libre pendant le tracé
     }
 
     function moveDrag(clientX, clientY) {
@@ -2894,7 +2884,6 @@
       }
       var c0 = nodeCenter(dragState.fromEl);
       dragState.line.setAttribute('d', linkPolylineToPath(previewRoutePath(c0.x, c0.y, pt.x, pt.y)));
-      showTip(DRAW_LINK_TIP, clientX, clientY);
     }
 
     function endDrag(clientX, clientY) {
@@ -2944,7 +2933,7 @@
     }
     function onPointerMove(e) {
       if (linkModeActive && !dragState) {
-        followTip(e.clientX, e.clientY, hitTipFromEvent(e) || tipText());
+        refreshDockedTip(hitTipFromEvent(e) || tipText());
         return;
       }
       if (!dragState) return;
