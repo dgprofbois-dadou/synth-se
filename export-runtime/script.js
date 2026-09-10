@@ -175,6 +175,15 @@
     return true;
   }
 
+  /**
+   * Complétion tuile Synthèse (metro lit score_total/100) :
+   *  - 50  = téléchargement immédiat (PDF anonyme)
+   *  - 100 = exercice ≥ 50 % + PDF nommé
+   * Ne jamais envoyer les points bruts d'exercice ici : cela fausse la colorisation.
+   */
+  const MQ_COMPLETION_HALF = 50;
+  const MQ_COMPLETION_FULL = 100;
+
   function envoyerScoreAMoodle(scoreFinal, maxScoreFinal) {
     if (!mqCanSendMoodleScore()) return;
     const ids = mqResolveMoodleIds();
@@ -280,6 +289,20 @@
     }
   }
 
+  /** Enregistre le niveau de complétion tuile (50 ou 100) — best-wins côté plugin. */
+  function envoyerCompletionTuileMoodle(level) {
+    const n = Number(level);
+    if (n !== MQ_COMPLETION_HALF && n !== MQ_COMPLETION_FULL) {
+      console.warn('envoyerCompletionTuileMoodle: niveau invalide', level);
+      return;
+    }
+    envoyerScoreAMoodle(n, 100);
+  }
+
+  window.mqEnvoyerCompletionTuile = envoyerCompletionTuileMoodle;
+  window.MQ_COMPLETION_HALF = MQ_COMPLETION_HALF;
+  window.MQ_COMPLETION_FULL = MQ_COMPLETION_FULL;
+
   function isExerciseTextInput(input) {
     if (!input) return false;
     if (input.id === 'pdf-student-name' || input.classList.contains('mq-pdf-name')) return false;
@@ -371,14 +394,9 @@
       }
     }
 
-    // --- ENVOI MOODLE AVEC DEBOUNCE ANTI-SPAM ---
-    // On attend 1.5 secondes après la dernière modification du score pour envoyer
+    // Complétion BDD / colorisation tuile : uniquement via téléchargement PDF
+    // (50 % anonyme, 100 % nommé) — pas d'envoi live des points d'exercice.
     clearTimeout(scoreTimeout);
-    if (mqCanSendMoodleScore()) {
-      scoreTimeout = setTimeout(() => {
-        envoyerScoreAMoodle(totalPoints, maxPoints);
-      }, 1500);
-    }
   }
   function resetInputs() {
     document.querySelectorAll('input[type="text"]').forEach(input => {

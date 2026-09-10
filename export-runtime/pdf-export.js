@@ -292,6 +292,20 @@ class PDFExporter {
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
         }, 100);
+
+        // Complétion tuile Synthèse → BDD local_suivisynthese (metro : score/100)
+        // Cas 1 : PDF immédiat anonyme → 50 %
+        // Cas 2 : exercice ≥ moitié + PDF nommé → 100 %
+        if (!isAdmin && typeof window.mqEnvoyerCompletionTuile === 'function') {
+            const level = anonymous
+                ? (window.MQ_COMPLETION_HALF || 50)
+                : (window.MQ_COMPLETION_FULL || 100);
+            try {
+                window.mqEnvoyerCompletionTuile(level);
+            } catch (err) {
+                console.warn('Envoi complétion Moodle échoué :', err);
+            }
+        }
     }
 }
 
