@@ -313,7 +313,8 @@
         args: {
           courseid: parseInt(finalCourseId, 10),
           pagename: nomExercice,
-          score: parseFloat(scoreFinal)
+          score: parseFloat(scoreFinal),
+          cmid: parseInt(finalCmid, 10) || 0
         }
       }];
 
