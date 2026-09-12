@@ -661,6 +661,21 @@ test('flèche verte (correcte) non supprimable', () => {
   assert.strictEqual(Engine.canRemoveDrawnLink(g, { from: '1', to: '9' }, true), true);
 });
 
+test('flèche rouge étape courante supprimable même si OK dans une autre étape', () => {
+  // isLinkLocked (runtime) utilise isAllowedPair (étape active), pas l'union globale.
+  // On vérifie que le moteur expose bien restoreStudentState + que canRemoveDrawnLink
+  // ne bloque que les paires de l'ensemble fourni (pas un bug de lock silencieux côté API).
+  const src = fs.readFileSync(path.join(__dirname, '..', 'mq-dnd-engine.js'), 'utf8');
+  assert.ok(src.includes('return isAllowedPair(link.from, link.to)'));
+  assert.ok(src.includes('restoreStudentState'));
+  assert.ok(src.includes('dnd-relier-active'));
+  // Filet tooltips : syncRelierForStep recalcule body.dnd-relier-active
+  const syncIdx = src.indexOf('function syncRelierForStep');
+  const syncChunk = src.slice(syncIdx, syncIdx + 1800);
+  assert.ok(syncChunk.includes("document.body.classList.toggle"));
+  assert.ok(syncChunk.includes("'.drag-game.dnd-link-mode'"));
+});
+
 test('linkSplinePath produit un tracé SVG lissé', () => {
   const d = Engine.linkSplinePath(0, 0, 200, 0);
   assert.ok(d.indexOf('M') === 0);

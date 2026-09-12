@@ -2689,12 +2689,21 @@
     }
 
     function isLinkLocked(link) {
-      return !canRemoveDrawnLink(game, link, showingLinkFeedback());
+      // Aligné sur la couleur affichée : seul le vert (paire OK pour l'étape active) est verrouillé.
+      // Les flèches rouges (fausses pour l'étape courante) restent toujours supprimables,
+      // même si la paire est valide dans une autre étape (union globale).
+      if (!link) return true;
+      if (!showingLinkFeedback()) return false;
+      return isAllowedPair(link.from, link.to);
     }
 
     function removeLinkAt(index) {
       if (index < 0 || index >= links.length) return;
-      if (isLinkLocked(links[index])) return;
+      var link = links[index];
+      if (isLinkLocked(link)) {
+        refreshDockedTip(LOCKED_LINK_TIP);
+        return;
+      }
       links.splice(index, 1);
       if (typeof opts.onChange === 'function') opts.onChange();
       else refreshStandalone();
@@ -3170,7 +3179,13 @@
       getPlacements: function () { return { links: api ? api.getLinks() : [] }; },
       evaluate: function () { return evaluateGame(game, { links: api ? api.getLinks() : [] }); },
       getErrors: function () { return api ? api.getErrors() : 0; },
-      linking: api
+      linking: api,
+      restoreStudentState: function (state) {
+        state = state || {};
+        var links = state.links || (state.placements && state.placements.links) || [];
+        if (api && api.seedLinks) api.seedLinks(links);
+        if (api && api.refresh) api.refresh();
+      }
     };
   }
 
@@ -3516,12 +3531,10 @@
       var btn = gameContainer.querySelector('.dnd-relier-btn');
       if (btn && btn.parentNode) btn.parentNode.removeChild(btn);
       var autoLink = false;
-      var actName = 'dnd';
       if (linkingApi) {
         if (!stepsEnabled) {
           autoLink = !!game.enableLinking;
         } else if (st && st.enabled && !st.allComplete && st.active) {
-          actName = normalizeStep(st.active, 0).activity || 'dnd';
           autoLink = stepAutoLinkMode(st.active);
         }
       }
@@ -3537,14 +3550,23 @@
             // Hors étape Relier auto : toujours couper le mode flèche (sinon DnD bloqué à l’étape suivante)
             linkingApi.setLinkMode(false);
           }
-        } catch (e) {}
+        } catch (e) {
+          try { linkingApi.setLinkMode(false); } catch (e2) { /* ignore */ }
+        }
       }
       gameContainer.classList.toggle('dnd-step-relier-on', !!autoLink);
       gameContainer.classList.toggle('dnd-step-relier-auto', !!autoLink);
-      // Filet de sécurité : hors Relier auto, la classe ne doit pas bloquer le pan / DnD
-      if (!autoLink && actName !== 'linking') {
+      // Filet : ne jamais laisser .dnd-link-mode / body.dnd-relier-active orphelins
+      // (sinon les tooltips du document restent désactivés).
+      if (!autoLink) {
         gameContainer.classList.remove('dnd-link-mode');
       }
+      try {
+        document.body.classList.toggle(
+          'dnd-relier-active',
+          !!document.querySelector('.drag-game.dnd-link-mode')
+        );
+      } catch (errBody) { /* ignore */ }
     }
 
     /**
@@ -4514,7 +4536,38 @@
       clearSelection: clearSelection,
       getSelectedId: function () { return selectedId; },
       getErrors: function () { return nbErreurs; },
-      linking: linkingApi
+      linking: linkingApi,
+      /** Restaure placements + flèches + étape (sauvegarde locale élève). */
+      restoreStudentState: function (state) {
+        state = state || {};
+        var stepIdx = parseInt(state.stepIndex, 10);
+        if (!isFinite(stepIdx) || stepIdx < 0) stepIdx = 0;
+        manualStepDone = {};
+        if (stepsEnabled) {
+          var steps = normalizeSteps(game.steps);
+          if (stepIdx >= steps.length) stepIdx = Math.max(0, steps.length - 1);
+          for (var i = 0; i < stepIdx && i < steps.length; i++) {
+            manualStepDone[String(steps[i].id)] = true;
+          }
+        }
+        lastActiveStepId = null;
+        lastStepIndex = -1;
+        if (syncRelierForStep) syncRelierForStep._stepKey = '';
+        clearAllPlacementsQuiet();
+        if (linkingApi && linkingApi.seedLinks) linkingApi.seedLinks([]);
+        var placements = state.placements || {};
+        Object.keys(placements).forEach(function (zid) {
+          if (zid === 'links') return;
+          var zone = zoneById(zid);
+          if (!zone) return;
+          (placements[zid] || []).forEach(function (cid) {
+            placeInZone(zone, cid, { allowMove: true, autoSeed: true, skipRefresh: true });
+          });
+        });
+        var links = state.links || placements.links || [];
+        if (linkingApi && linkingApi.seedLinks) linkingApi.seedLinks(links);
+        refreshUI();
+      }
     };
   }
 

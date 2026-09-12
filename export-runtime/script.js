@@ -127,12 +127,21 @@
     }
   }
 
-  /** Feuille ouverte en iframe Moodle ou ?embed=1 (pas une ouverture locale autonome). */
+  /** Contexte Moodle : iframe, ?embed=1, ou page Moodle (M.cfg présent). */
   function mqIsMoodleEmbedContext() {
     try {
       const q = new URLSearchParams(window.location.search);
       if (q.get('embed') === '1' || q.has('embed')) return true;
     } catch (_) { /* ignore */ }
+    try {
+      if (window.M && window.M.cfg && window.M.cfg.wwwroot) return true;
+    } catch (_) { /* ignore */ }
+    try {
+      if (window.parent && window.parent !== window && window.parent.M && window.parent.M.cfg) return true;
+    } catch (_) {
+      // Cross-origin iframe : on suppose Moodle parent (postMessage possible).
+      try { return window.self !== window.top; } catch (__ ) { return true; }
+    }
     try {
       return window.self !== window.top;
     } catch (_) {
@@ -140,7 +149,34 @@
     }
   }
 
-  /** courseid = cours ; cmid = activité Page (paramètre id de l'URL parente Moodle). */
+  /** Récupère wwwroot + sesskey (page courante ou parent same-origin). */
+  function mqResolveMoodleConfig() {
+    let wwwroot = '';
+    let sesskey = '';
+    let courseId = 0;
+    try {
+      if (window.M && window.M.cfg) {
+        wwwroot = window.M.cfg.wwwroot || '';
+        sesskey = window.M.cfg.sesskey || '';
+        courseId = parseInt(window.M.cfg.courseId, 10) || 0;
+      }
+    } catch (_) { /* ignore */ }
+    try {
+      if (window.parent && window.parent.M && window.parent.M.cfg) {
+        if (!wwwroot) wwwroot = window.parent.M.cfg.wwwroot || '';
+        if (!sesskey) sesskey = window.parent.M.cfg.sesskey || '';
+        if (!courseId) courseId = parseInt(window.parent.M.cfg.courseId, 10) || 0;
+      }
+    } catch (_) { /* cross-origin */ }
+    try {
+      const q = new URLSearchParams(window.location.search);
+      if (!wwwroot && q.get('wwwroot')) wwwroot = q.get('wwwroot');
+      if (!sesskey && q.get('sesskey')) sesskey = q.get('sesskey');
+    } catch (_) { /* ignore */ }
+    return { wwwroot: wwwroot, sesskey: sesskey, courseId: courseId };
+  }
+
+  /** courseid = cours Moodle réel ; cmid = activité Page. */
   function mqResolveMoodleIds() {
     let courseid = 0;
     let cmid = 0;
@@ -149,10 +185,9 @@
       if (urlParams.has('courseid')) courseid = parseInt(urlParams.get('courseid'), 10) || 0;
       if (urlParams.has('cmid')) cmid = parseInt(urlParams.get('cmid'), 10) || 0;
     } catch (_) { /* ignore */ }
+    const cfg = mqResolveMoodleConfig();
+    if (!courseid && cfg.courseId) courseid = cfg.courseId;
     try {
-      if (!courseid && window.parent && window.parent.M && window.parent.M.cfg && window.parent.M.cfg.courseId) {
-        courseid = parseInt(window.parent.M.cfg.courseId, 10) || 0;
-      }
       if (!cmid && window.parent && window.parent.location) {
         const parentUrlParams = new URLSearchParams(window.parent.location.search);
         if (parentUrlParams.has('id')) cmid = parseInt(parentUrlParams.get('id'), 10) || 0;
@@ -165,7 +200,7 @@
 
   /** Envoie Moodle : HTTP(S) uniquement (pas file:// ni ouverture locale du HTML exporté). */
   function mqCanSendMoodleScore() {
-    if (!window.__mqAllowMoodleScore) return false;
+    if (!window.__mqAllowMoodleScore && !mqIsMoodleEmbedContext()) return false;
     var proto = window.location.protocol;
     if (proto !== 'http:' && proto !== 'https:') return false;
     try {
@@ -176,42 +211,102 @@
   }
 
   /**
-   * Complétion tuile Synthèse (metro lit score_total/100) :
+   * Complétion tuile Synthèse (metro + format_tiles via score_total/100) :
    *  - 50  = téléchargement immédiat (PDF anonyme)
    *  - 100 = exercice ≥ 50 % + PDF nommé
    * Ne jamais envoyer les points bruts d'exercice ici : cela fausse la colorisation.
    */
   const MQ_COMPLETION_HALF = 50;
   const MQ_COMPLETION_FULL = 100;
+  const MQ_SAVE_MSG_TYPE = 'mq-suivisynthese-save';
 
-  function envoyerScoreAMoodle(scoreFinal, maxScoreFinal) {
-    if (!mqCanSendMoodleScore()) return;
-    const ids = mqResolveMoodleIds();
-    const finalCourseId = ids.courseid || 1;
-    const finalCmid = ids.cmid || 0;
-    const maxScore = (maxScoreFinal != null && maxScoreFinal > 0) ? maxScoreFinal : 0;
-    const percent = maxScore > 0 ? Math.min(100, Math.round((scoreFinal / maxScore) * 100)) : 0;
-    const completed = percent >= 100;
-
-    const nomExercice = document.title || "Synthese";
-
-    // Essayer de trouver l'URL racine et la sesskey (clé de session Moodle) de l'application parent
-    let wwwroot = '';
-    let sesskey = '';
-
+  function mqBuildAjaxScoreUrl(wwwroot) {
+    let scriptUrl = '/local/suivisynthese/ajax_score.php';
+    let moodleDir = '';
     try {
-      if (window.parent && window.parent.M && window.parent.M.cfg) {
-        wwwroot = window.parent.M.cfg.wwwroot;
-        sesskey = window.parent.M.cfg.sesskey;
+      const match = window.parent.location.pathname.match(/\/(moodle[^/]+)/i);
+      if (match) moodleDir = '/' + match[1];
+    } catch (e) { /* ignore */ }
+    if (!moodleDir) {
+      try {
+        const match2 = window.location.pathname.match(/\/(moodle[^/]+)/i);
+        if (match2) moodleDir = '/' + match2[1];
+      } catch (_) { /* ignore */ }
+    }
+    scriptUrl = moodleDir + '/local/suivisynthese/ajax_score.php';
+    if (wwwroot) {
+      return String(wwwroot).replace(/\/$/, '') + '/local/suivisynthese/ajax_score.php';
+    }
+    if (/^https?:\/\//i.test(window.location.origin)) {
+      scriptUrl = window.location.origin + scriptUrl;
+    }
+    return scriptUrl;
+  }
+
+  function mqPostMessageSave(payload) {
+    try {
+      if (window.parent && window.parent !== window) {
+        window.parent.postMessage({
+          type: MQ_SAVE_MSG_TYPE,
+          courseid: payload.courseid,
+          cmid: payload.cmid || 0,
+          pagename: payload.pagename,
+          score: payload.score
+        }, '*');
+        console.log('Complétion Synthèse : postMessage vers parent Moodle', payload.score);
+        return true;
       }
     } catch (e) {
-      console.warn("Impossible d'accéder à la config Moodle du parent.");
+      console.warn('postMessage complétion impossible:', e);
+    }
+    return false;
+  }
+
+  function envoyerScoreAMoodle(scoreFinal, maxScoreFinal) {
+    if (!mqCanSendMoodleScore()) {
+      console.warn('Complétion Synthèse non envoyée (hors contexte Moodle / mode admin).');
+      return;
+    }
+    window.__mqAllowMoodleScore = true;
+    const ids = mqResolveMoodleIds();
+    const cfg = mqResolveMoodleConfig();
+    const finalCourseId = ids.courseid || cfg.courseId || 0;
+    const finalCmid = ids.cmid || 0;
+    const maxScore = (maxScoreFinal != null && maxScoreFinal > 0) ? maxScoreFinal : 0;
+    const percent = maxScore > 0 ? Math.min(100, Math.round((scoreFinal / maxScore) * 100)) : Math.min(100, Math.round(scoreFinal));
+    const completed = percent >= 100;
+    const nomExercice = document.title || 'Synthese';
+
+    if (!finalCourseId) {
+      console.error('Complétion Synthèse : courseid introuvable (ajoutez ?courseid=ID à l’URL iframe).');
+      mqPostMessageSave({
+        courseid: 0,
+        cmid: finalCmid,
+        pagename: nomExercice,
+        score: parseFloat(scoreFinal)
+      });
+      return;
     }
 
+    const payloadAjax = {
+      courseid: parseInt(finalCourseId, 10),
+      cmid: finalCmid,
+      pagename: nomExercice,
+      score: parseFloat(scoreFinal),
+      maxscore: maxScore,
+      percent: percent,
+      completed: completed
+    };
+
+    let wwwroot = cfg.wwwroot || '';
+    let sesskey = cfg.sesskey || '';
+    if (wwwroot) wwwroot = mqAlignUrlToMoodleProtocol(wwwroot);
+
+    // Toujours prévenir le parent (relais cross-origin / colorisation tuiles).
+    mqPostMessageSave(payloadAjax);
+
     if (wwwroot && sesskey) {
-      wwwroot = mqAlignUrlToMoodleProtocol(wwwroot);
-      // Option 1 : Moodle External API Web Service
-      const wsUrl = wwwroot + '/lib/ajax/service.php?sesskey=' + sesskey + '&info=local_suivisynthese_save_score';
+      const wsUrl = wwwroot + '/lib/ajax/service.php?sesskey=' + encodeURIComponent(sesskey) + '&info=local_suivisynthese_save_score';
       const payload = [{
         index: 0,
         methodname: 'local_suivisynthese_save_score',
@@ -225,68 +320,45 @@
       fetch(wsUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'include', // <-- IMPORTANT: envoie les cookies de session Moodle
+        credentials: 'include',
         body: JSON.stringify(payload)
       })
         .then(r => r.json())
         .then(data => {
           if (data[0] && !data[0].error) {
-            console.log("Victoire ! Moodle External API a sauvegardé en BDD le score :", scoreFinal);
+            console.log('Victoire ! Moodle a sauvegardé la complétion tuile :', scoreFinal);
           } else {
-            console.error("Erreur de Web Service Moodle. Réponse brute :", data);
+            console.error('Erreur Web Service Moodle — fallback ajax:', data);
+            mqFetchAjaxScore(wwwroot, payloadAjax);
           }
         })
-        .catch(e => console.error("Erreur de connexion WS Moodle :", e));
-
-    } else {
-      // Option 2 (Fallback) : L'ancien script PHP au cas où
-      // (ex. si on est à la racine de Moodle en accès direct non iframe)
-      const payload = {
-        courseid: parseInt(finalCourseId, 10),
-        cmid: finalCmid,
-        pagename: nomExercice,
-        score: parseFloat(scoreFinal),
-        maxscore: maxScore,
-        percent: percent,
-        completed: completed
-      };
-
-      // Si l'URL actuelle ou du parent contient moodle_V4 (ex. hébergement réel)
-      // on tente de s'ajuster, sinon on tape relative
-      let scriptUrl = '/local/suivisynthese/ajax_score.php';
-      let moodleDir = '';
-
-      try {
-        const match = window.parent.location.pathname.match(/\/(moodle[^/]+)/i);
-        if (match) moodleDir = '/' + match[1];
-      } catch (e) { }
-
-      if (!moodleDir) {
-        const match2 = window.location.pathname.match(/\/(moodle[^/]+)/i);
-        if (match2) moodleDir = '/' + match2[1];
-      }
-
-      scriptUrl = moodleDir + '/local/suivisynthese/ajax_score.php';
-      if (/^https?:\/\//i.test(window.location.origin)) {
-        scriptUrl = window.location.origin + scriptUrl;
-      }
-
-      fetch(scriptUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include', // <-- IMPORTANT: envoie les cookies de session Moodle
-        body: JSON.stringify(payload)
-      })
-        .then(r => r.json())
-        .then(data => {
-          if (data.status === 'success') {
-            console.log("Victoire ! L'ancien script PHP a sauvegardé en BDD le score :", scoreFinal);
-          } else {
-            console.error("Moodle signale une erreur depuis l'ancien script :", data.message || data.error || data);
-          }
-        })
-        .catch(e => console.error("Erreur de connexion script Moodle :", e));
+        .catch(e => {
+          console.error('Erreur WS Moodle, fallback ajax:', e);
+          mqFetchAjaxScore(wwwroot, payloadAjax);
+        });
+      return;
     }
+
+    mqFetchAjaxScore(wwwroot, payloadAjax);
+  }
+
+  function mqFetchAjaxScore(wwwroot, payload) {
+    const scriptUrl = mqBuildAjaxScoreUrl(wwwroot);
+    fetch(scriptUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(payload)
+    })
+      .then(r => r.json())
+      .then(data => {
+        if (data.status === 'success') {
+          console.log('Victoire ! ajax_score a sauvegardé la complétion tuile :', payload.score);
+        } else {
+          console.error('Moodle ajax_score erreur :', data.message || data.error || data);
+        }
+      })
+      .catch(e => console.error('Erreur connexion ajax_score (vérifiez hébergement same-origin ou relais postMessage) :', e));
   }
 
   /** Enregistre le niveau de complétion tuile (50 ou 100) — best-wins côté plugin. */
@@ -296,12 +368,14 @@
       console.warn('envoyerCompletionTuileMoodle: niveau invalide', level);
       return;
     }
+    console.log('Envoi complétion tuile Synthèse →', n + '%');
     envoyerScoreAMoodle(n, 100);
   }
 
   window.mqEnvoyerCompletionTuile = envoyerCompletionTuileMoodle;
   window.MQ_COMPLETION_HALF = MQ_COMPLETION_HALF;
   window.MQ_COMPLETION_FULL = MQ_COMPLETION_FULL;
+  window.MQ_SAVE_MSG_TYPE = MQ_SAVE_MSG_TYPE;
 
   function isExerciseTextInput(input) {
     if (!input) return false;
@@ -760,12 +834,13 @@
 
     if (!window.dndScores) window.dndScores = {};
     if (!window.dndMaxScores) window.dndMaxScores = {};
+    if (!window.__mqDndApis) window.__mqDndApis = {};
     window.dndMaxScores[cfg._gameId] = Engine.computeGameMaxScore(cfg);
     // Compat
     if (cfg._gameId === 'game1') window.game1Score = 0;
     if (cfg._gameId === 'game2') window.game2Score = 0;
 
-    Engine.initPlayableDndGame(gameContainer, cfg, {
+    const api = Engine.initPlayableDndGame(gameContainer, cfg, {
       playSound: playSound,
       showFloating: showFloatingFeedback,
       onLinkRejected: function (from, to) {
@@ -787,9 +862,141 @@
         if (info.gameId === 'game1') window.game1Score = pts;
         if (info.gameId === 'game2') window.game2Score = pts;
         updateGlobalScore();
+        mqScheduleSaveProgress();
       }
     });
+    if (api) window.__mqDndApis[cfg._gameId] = api;
   }
+
+  // -----------------------
+  // Persistance locale (rechargement sans perdre l'avancement)
+  // -----------------------
+  let mqProgressSaveTimer = null;
+
+  function mqProgressStorageKey() {
+    let file = '';
+    try {
+      const parts = String(window.location.pathname || '').split('/');
+      file = parts[parts.length - 1] || '';
+    } catch (_) { /* ignore */ }
+    const title = String(document.title || 'synthese').replace(/\s+/g, '_').slice(0, 60);
+    return 'mq_synth_progress_v1:' + (file || 'page') + ':' + title;
+  }
+
+  function mqInputProgressId(input, index) {
+    if (input.dataset.mqProgressId) return input.dataset.mqProgressId;
+    const id = input.id || input.getAttribute('name') || input.getAttribute('data-id') || ('input_' + index);
+    input.dataset.mqProgressId = id;
+    return id;
+  }
+
+  function mqCollectProgress() {
+    const inputs = {};
+    document.querySelectorAll('input[type="text"], textarea').forEach((input, i) => {
+      if (!isExerciseTextInput(input)) return;
+      const id = mqInputProgressId(input, i);
+      inputs[id] = {
+        value: input.value || '',
+        correct: input.classList.contains('correct')
+      };
+    });
+    const games = {};
+    const apis = window.__mqDndApis || {};
+    Object.keys(apis).forEach((gid) => {
+      const api = apis[gid];
+      if (!api) return;
+      let placements = {};
+      try { placements = api.getPlacements ? api.getPlacements() : {}; } catch (_) { /* ignore */ }
+      let links = [];
+      try {
+        if (api.linking && api.linking.getLinks) links = api.linking.getLinks();
+        else if (placements && placements.links) links = placements.links;
+        else if (api.getLinks) links = api.getLinks();
+      } catch (_) { /* ignore */ }
+      let stepIndex = 0;
+      try { if (api.getCurrentStepIndex) stepIndex = api.getCurrentStepIndex(); } catch (_) { /* ignore */ }
+      games[gid] = { placements: placements, links: links, stepIndex: stepIndex };
+    });
+    return { v: 1, savedAt: Date.now(), inputs: inputs, games: games };
+  }
+
+  function mqSaveProgress() {
+    try {
+      const data = mqCollectProgress();
+      localStorage.setItem(mqProgressStorageKey(), JSON.stringify(data));
+    } catch (e) {
+      console.warn('Sauvegarde locale synthèse impossible:', e);
+    }
+  }
+
+  function mqScheduleSaveProgress() {
+    clearTimeout(mqProgressSaveTimer);
+    mqProgressSaveTimer = setTimeout(mqSaveProgress, 400);
+  }
+
+  function mqRestoreProgress() {
+    let raw = null;
+    try { raw = localStorage.getItem(mqProgressStorageKey()); } catch (_) { return false; }
+    if (!raw) return false;
+    let data = null;
+    try { data = JSON.parse(raw); } catch (_) { return false; }
+    if (!data || data.v !== 1) return false;
+
+    const inputs = data.inputs || {};
+    document.querySelectorAll('input[type="text"], textarea').forEach((input, i) => {
+      if (!isExerciseTextInput(input)) return;
+      const id = mqInputProgressId(input, i);
+      const saved = inputs[id];
+      if (!saved) return;
+      input.value = saved.value || '';
+      input.classList.remove('input-success-anim', 'shake', 'correct');
+      input.style.backgroundColor = '';
+      if (saved.correct && saved.value) {
+        input.classList.add('correct');
+        input.readOnly = true;
+        input.style.pointerEvents = 'none';
+      } else if (saved.value) {
+        const answer = (input.getAttribute('data-answer') || '').toLowerCase().trim().replace(/\s+/g, ' ');
+        const user = String(saved.value).toLowerCase().trim().replace(/\s+/g, ' ');
+        if (user === answer) {
+          input.classList.add('correct');
+          input.readOnly = true;
+          input.style.pointerEvents = 'none';
+        } else if (answer.startsWith(user)) {
+          input.style.backgroundColor = '#ffe0b2';
+        } else {
+          input.style.backgroundColor = '#ffcdd2';
+        }
+      }
+    });
+
+    const games = data.games || {};
+    const apis = window.__mqDndApis || {};
+    Object.keys(games).forEach((gid) => {
+      const api = apis[gid];
+      const st = games[gid];
+      if (!api || !st) return;
+      try {
+        if (typeof api.restoreStudentState === 'function') {
+          api.restoreStudentState(st);
+        } else if (api.linking && api.linking.seedLinks) {
+          api.linking.seedLinks(st.links || []);
+          if (api.refresh) api.refresh();
+        }
+      } catch (e) {
+        console.warn('Restauration jeu', gid, e);
+      }
+    });
+
+    updateGlobalScore();
+    return true;
+  }
+
+  window.mqSaveProgress = mqSaveProgress;
+  window.mqRestoreProgress = mqRestoreProgress;
+  window.mqClearProgress = function () {
+    try { localStorage.removeItem(mqProgressStorageKey()); } catch (_) { /* ignore */ }
+  };
 
   // -----------------------
   // PAN/ZOOM (non-blocking) — pinch 2 doigts + barre mobile
@@ -866,9 +1073,9 @@
       if (!t || !t.closest) return false;
       // Alt ou bouton du milieu : toujours pan (pour recentrer le côté gauche)
       if (ev && (ev.altKey || ev.button === 1)) return false;
-      // Mode Relier actif : clic gauche = pan (les flèches se tracent au clic droit)
+      // Mode Relier actif : clic gauche sur flèche = supprimer ; ailleurs = pan
       if (t.closest('.dnd-link-mode')) {
-        return !!(t.closest('.dnd-relier-btn, .dnd-verify-btn, .dnd-next-step-btn, .dnd-step-next-btn, button, input, textarea, select, a, label, .pdf-buttons, .controls, .mobile-zoom-bar, #btnFullscreen'));
+        return !!(t.closest('.dnd-link-hit, .dnd-relier-btn, .dnd-verify-btn, .dnd-next-step-btn, .dnd-step-next-btn, button, input, textarea, select, a, label, .pdf-buttons, .controls, .mobile-zoom-bar, #btnFullscreen'));
       }
       if (ev && pointerOnDndCard(ev)) return true;
       return !!t.closest(INTERACTIVE_SELECTOR);
@@ -1211,6 +1418,7 @@
           }
         }
         updateGlobalScore();
+        mqScheduleSaveProgress();
       });
     });
   }
@@ -1238,6 +1446,22 @@
       if (typeof initDragGame === 'function') {
         initDragGame(gameEl, good, targetCount, scoreContainerId, gameId);
       }
+    });
+
+    // Restaurer l'avancement local après init des jeux (sans perdre les saisies au F5)
+    try {
+      if (mqRestoreProgress()) {
+        console.log('Avancement synthèse restauré depuis le stockage local.');
+      }
+    } catch (e) {
+      console.warn('Restauration avancement:', e);
+    }
+
+    // Sauvegarde périodique de secours + avant quitter
+    setInterval(mqSaveProgress, 15000);
+    window.addEventListener('beforeunload', mqSaveProgress);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') mqSaveProgress();
     });
   });
 
