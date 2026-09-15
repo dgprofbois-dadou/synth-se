@@ -1355,9 +1355,9 @@
       el.style.bottom = 'auto';
       el.style.width = 'auto';
       el.style.height = 'auto';
-      // HUD compact : ne pas reprendre la taille « éditeur » (sinon consigne énorme sur le jeu)
-      el.style.maxWidth = 'min(340px, calc(100% - 24px))';
-      el.style.maxHeight = 'min(110px, 22vh)';
+      // HUD : largeur plafonnée, hauteur libre selon la longueur de la consigne (pas de scrollbar)
+      el.style.maxWidth = 'min(420px, calc(100% - 24px))';
+      el.style.maxHeight = 'none';
       el.style.padding = '8px 12px';
       el.style.lineHeight = '1.3';
       el.style.zIndex = '180';
@@ -1372,7 +1372,9 @@
       el.style.left = ((box.x / gw) * 100) + '%';
       el.style.top = ((box.y / gh) * 100) + '%';
       el.style.width = ((box.width / gw) * 100) + '%';
-      el.style.height = ((box.height / gh) * 100) + '%';
+      // Hauteur auto : le rectangle grandit avec le texte (plus de barre de défilement)
+      el.style.height = 'auto';
+      el.style.minHeight = Math.max(40, box.height) + 'px';
       el.style.right = 'auto';
     }
     el.style.fontFamily = box.font;
@@ -1386,8 +1388,36 @@
     el.style.borderColor = box.borderColor;
     el.style.borderStyle = 'solid';
     el.style.borderWidth = '2px';
-    el.style.overflow = 'auto';
+    el.style.overflow = 'visible';
     el.style.boxSizing = 'border-box';
+    fitInstructionsBoxToContent(el, game);
+  }
+
+  /** Agrandit la hauteur du cadre consigne selon le texte (sans scrollbar). */
+  function fitInstructionsBoxToContent(el, game) {
+    if (!el || typeof el.getBoundingClientRect !== 'function') return;
+    try {
+      el.style.overflow = 'visible';
+      el.style.maxHeight = 'none';
+      var hud = !!(el.classList && el.classList.contains('dnd-instructions-hud'));
+      if (hud) {
+        el.style.height = 'auto';
+        return;
+      }
+      // Mesure naturelle du contenu à largeur fixée
+      var prevHeight = el.style.height;
+      el.style.height = 'auto';
+      var needed = Math.ceil(el.scrollHeight || el.offsetHeight || 0);
+      if (needed < 40) needed = 40;
+      el.style.height = needed + 'px';
+      el.style.minHeight = needed + 'px';
+      if (game && game.instructionsBox) {
+        var box = normalizeInstructionsBox(game.instructionsBox, game);
+        // Conserve au moins la hauteur éditeur, sinon suit le contenu
+        game.instructionsBox.height = Math.max(box.height, needed);
+      }
+      if (!needed && prevHeight) el.style.height = prevHeight;
+    } catch (errFit) { /* ignore */ }
   }
 
   var STEP_ACTIVITIES = ['dnd', 'linking', 'both'];
@@ -2500,8 +2530,27 @@
       });
     }
 
-    /** Bandeau Relier fixe en haut (ne suit pas le curseur). */
-    function showTip(text) {
+    /** Tooltip Relier collé à la souris (léger, ne masque pas le fond). */
+    function followTip(clientX, clientY) {
+      if (!tip || tip.style.display === 'none') return;
+      var pad = 14;
+      var tw = tip.offsetWidth || 200;
+      var th = tip.offsetHeight || 40;
+      var vw = (typeof window !== 'undefined' && window.innerWidth) ? window.innerWidth : 1200;
+      var vh = (typeof window !== 'undefined' && window.innerHeight) ? window.innerHeight : 800;
+      var x = (clientX != null ? clientX : 0) + pad;
+      var y = (clientY != null ? clientY : 0) + pad;
+      // Basculer à gauche / au-dessus si trop près du bord
+      if (x + tw > vw - 8) x = Math.max(8, (clientX != null ? clientX : 0) - tw - pad);
+      if (y + th > vh - 8) y = Math.max(8, (clientY != null ? clientY : 0) - th - pad);
+      tip.style.left = Math.round(x) + 'px';
+      tip.style.top = Math.round(y) + 'px';
+      tip.style.right = 'auto';
+      tip.style.bottom = 'auto';
+      tip.style.transform = 'none';
+    }
+
+    function showTip(text, clientX, clientY) {
       hideForeignCardTooltips();
       tip.textContent = text || '';
       if (!text) {
@@ -2509,19 +2558,16 @@
         return;
       }
       tip.style.display = 'block';
-      tip.style.left = '50%';
-      tip.style.top = '10px';
-      tip.style.right = 'auto';
-      tip.style.bottom = 'auto';
-      tip.style.transform = 'translateX(-50%)';
+      tip.style.transform = 'none';
+      if (clientX != null && clientY != null) followTip(clientX, clientY);
     }
     function hideTip() { tip.style.display = 'none'; }
-    function refreshDockedTip(overrideText) {
+    function refreshDockedTip(overrideText, clientX, clientY) {
       if (!linkModeActive || dragState) {
         hideTip();
         return;
       }
-      showTip(overrideText || tipText());
+      showTip(overrideText || tipText(), clientX, clientY);
     }
 
     // Bouton Relier retiré : activation auto via syncRelierForStep / setLinkMode
@@ -2697,11 +2743,11 @@
       return isAllowedPair(link.from, link.to);
     }
 
-    function removeLinkAt(index) {
+    function removeLinkAt(index, clientX, clientY) {
       if (index < 0 || index >= links.length) return;
       var link = links[index];
       if (isLinkLocked(link)) {
-        refreshDockedTip(LOCKED_LINK_TIP);
+        refreshDockedTip(LOCKED_LINK_TIP, clientX, clientY);
         return;
       }
       links.splice(index, 1);
@@ -2825,8 +2871,11 @@
             if (e.button != null && e.button !== 0) return;
             e.preventDefault();
             e.stopPropagation();
-            if (isLocked) return;
-            removeLinkAt(linkIndex);
+            if (isLocked) {
+              refreshDockedTip(LOCKED_LINK_TIP, e.clientX, e.clientY);
+              return;
+            }
+            removeLinkAt(linkIndex, e.clientX, e.clientY);
           });
         })(idx, locked);
         svg.appendChild(hit);
@@ -2949,7 +2998,7 @@
     }
     function onPointerMove(e) {
       if (linkModeActive && !dragState) {
-        refreshDockedTip(hitTipFromEvent(e) || tipText());
+        refreshDockedTip(hitTipFromEvent(e) || tipText(), e.clientX, e.clientY);
         return;
       }
       if (!dragState) return;
@@ -3159,6 +3208,7 @@
         instructionsEl.textContent = instructionsText;
         instructionsEl.hidden = false;
         instructionsEl.style.display = '';
+        fitInstructionsBoxToContent(instructionsEl, game);
       } else {
         instructionsEl.hidden = true;
         instructionsEl.style.display = 'none';
@@ -3402,6 +3452,7 @@
       el.hidden = false;
       el.style.display = '';
       el.classList.remove('dnd-instructions-done');
+      fitInstructionsBoxToContent(el, game);
       if (meta && meta.pulse) pulseInstructions();
     }
 
@@ -4759,6 +4810,7 @@
     normalizeScoreBox: normalizeScoreBox,
     applyScoreBoxToElements: applyScoreBoxToElements,
     applyInstructionsBoxToElement: applyInstructionsBoxToElement,
+    fitInstructionsBoxToContent: fitInstructionsBoxToContent,
     findInstructionsHudHost: findInstructionsHudHost,
     findInstructionsEl: findInstructionsEl,
     mountInstructionsHud: mountInstructionsHud,

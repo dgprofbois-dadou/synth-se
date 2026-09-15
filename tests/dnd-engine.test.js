@@ -233,7 +233,7 @@ test('export runtime : infobulles DnD par délégation (img enfant + thème jeu)
   assert.ok(!js.includes("document.querySelectorAll('.draggable').forEach(d =>"));
 });
 
-test('tooltip Relier : bandeau compact fixe, sans suivi curseur', () => {
+test('tooltip Relier : suit le curseur, bandeau leger', () => {
   const engineSrc = fs.readFileSync(path.join(__dirname, '..', 'mq-dnd-engine.js'), 'utf8');
   assert.ok(engineSrc.includes('Maintenez le clic droit pour tracer une flèche'));
   assert.ok(engineSrc.includes('suppressCardHoverTips'));
@@ -241,15 +241,18 @@ test('tooltip Relier : bandeau compact fixe, sans suivi curseur', () => {
   assert.ok(engineSrc.includes("document.body.appendChild(tip)"));
   assert.ok(engineSrc.includes('dnd-relier-active'));
   assert.ok(engineSrc.includes('refreshDockedTip'));
-  assert.ok(engineSrc.includes("translateX(-50%)"));
+  assert.ok(engineSrc.includes('followTip('));
   assert.ok(engineSrc.includes('/maintenez\\s+le\\s+clic\\s+droit/i'));
-  assert.ok(!engineSrc.includes('followTip('));
+  assert.ok(!engineSrc.includes("tip.style.left = '50%'"));
   const css = fs.readFileSync(path.join(__dirname, '..', 'export-runtime', 'style.css'), 'utf8');
   assert.ok(css.includes('.dnd-link-tooltip::before'));
-  assert.ok(css.includes('font-size: 14px'));
+  assert.ok(css.includes('font-size: 12px'));
   assert.ok(css.includes('position: fixed'));
   assert.ok(css.includes('z-index: 10050'));
+  assert.ok(css.includes('rgba(30, 58, 138, 0.72)'));
   assert.ok(css.includes('body.dnd-relier-active #svg-tooltip'));
+  assert.ok(css.includes('max-height: none'));
+  assert.ok(css.includes('overflow: visible'));
   const g = Engine.applyGameDefaults({ gameType: 'linking' });
   assert.ok(String(g.linkTooltip).includes('Maintenez le clic droit'));
   const gOld = Engine.applyGameDefaults({
@@ -263,6 +266,16 @@ test('tooltip Relier : bandeau compact fixe, sans suivi curseur', () => {
   });
   assert.ok(String(gVague.linkTooltip).includes('Maintenez le clic droit'));
   assert.ok(!String(gVague.linkTooltip).includes("tirez la flèche"));
+});
+
+test('consigne : pas de scrollbar, hauteur auto', () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'mq-dnd-engine.js'), 'utf8');
+  assert.ok(src.includes('fitInstructionsBoxToContent'));
+  assert.ok(src.includes("el.style.overflow = 'visible'"));
+  assert.ok(src.includes("el.style.maxHeight = 'none'"));
+  const css = fs.readFileSync(path.join(__dirname, '..', 'export-runtime', 'style.css'), 'utf8');
+  assert.ok(css.includes('.dnd-instructions'));
+  assert.ok(!/max-height:\s*min\(110px/.test(css));
 });
 
 test('PAN export : slack de centrage des bords (pas clamp 120 px)', () => {
