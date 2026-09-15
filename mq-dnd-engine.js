@@ -4623,15 +4623,17 @@
   }
 
   /**
-   * Pendant le drag HTML5 d’une carte DnD : si le pointeur approche un bord
-   * du viewport, défile le plan (pan) dans cette direction.
+   * Pendant un drag (carte HTML5 OU tracé Relier clic droit) : si le pointeur
+   * approche un bord du viewport, défile le plan (pan) dans cette direction.
    * opts.getRect() → DOMRect du viewport visible
    * opts.panBy(dx, dy) → applique le décalage écran (px)
+   * opts.afterPan(clientX, clientY) → rappel après un pan (ex. rafraîchir la flèche)
    */
   function attachDragEdgePan(opts) {
     opts = opts || {};
     var getRect = opts.getRect;
     var panBy = opts.panBy;
+    var afterPan = opts.afterPan;
     var isCard = opts.isCardDrag;
     var margin = opts.margin != null ? Number(opts.margin) : 88;
     var maxSpeed = opts.maxSpeed != null ? Number(opts.maxSpeed) : 18;
@@ -4642,6 +4644,7 @@
     if (maxSpeed < 4) maxSpeed = 4;
 
     var active = false;
+    var mode = null; // 'card' | 'relier'
     var px = 0;
     var py = 0;
     var havePos = false;
@@ -4654,6 +4657,13 @@
       return !!t.closest('.drag-game .draggable, .drag-game .dnd-placed, .drag-game .png-wrap, .dnd-game-container .draggable, .dnd-game-container .png-wrap');
     }
 
+    function isRelierDrawing(e) {
+      if (typeof document === 'undefined') return false;
+      if (document.querySelector('.dnd-link-drag')) return true;
+      if (e && (e.buttons & 2) && document.querySelector('.drag-game.dnd-link-mode')) return true;
+      return false;
+    }
+
     function edgeDelta(dist) {
       if (dist >= margin) return 0;
       if (dist < 0) dist = 0;
@@ -4661,9 +4671,36 @@
       return u * u * maxSpeed;
     }
 
+    function refreshRelierPreview() {
+      if (!havePos || typeof document === 'undefined') return;
+      var games = document.querySelectorAll('.drag-game.dnd-link-mode');
+      for (var i = 0; i < games.length; i++) {
+        try {
+          games[i].dispatchEvent(new PointerEvent('pointermove', {
+            bubbles: true,
+            cancelable: true,
+            clientX: px,
+            clientY: py,
+            buttons: 2,
+            pointerId: 1,
+            pointerType: 'mouse',
+            view: typeof window !== 'undefined' ? window : undefined
+          }));
+        } catch (errEv) { /* ignore */ }
+      }
+      if (typeof afterPan === 'function') {
+        try { afterPan(px, py); } catch (errAfter) { /* ignore */ }
+      }
+    }
+
     function tick(ts) {
       raf = 0;
       if (!active) return;
+      if (mode === 'relier' && !isRelierDrawing({ buttons: 2 })) {
+        // Tracé terminé pendant le RAF
+        stop();
+        return;
+      }
       if (!lastTs) lastTs = ts;
       var dt = Math.min(32, ts - lastTs) / 16.67;
       lastTs = ts;
@@ -4680,18 +4717,23 @@
           else if (right < margin) dx = -edgeDelta(right);
           if (top < margin) dy = edgeDelta(top);
           else if (bottom < margin) dy = -edgeDelta(bottom);
-          if (dx || dy) panBy(dx * dt, dy * dt);
+          if (dx || dy) {
+            panBy(dx * dt, dy * dt);
+            if (mode === 'relier') refreshRelierPreview();
+            else if (typeof afterPan === 'function') {
+              try { afterPan(px, py); } catch (errAfter2) { /* ignore */ }
+            }
+          }
         }
       }
       raf = requestAnimationFrame(tick);
     }
 
-    function start(e) {
-      var ok = typeof isCard === 'function' ? isCard(e) : defaultIsCard(e);
-      if (!ok) return;
+    function begin(modeName, e) {
       active = true;
+      mode = modeName;
       lastTs = 0;
-      havePos = e.clientX != null && (e.clientX !== 0 || e.clientY !== 0);
+      havePos = e && e.clientX != null && (e.clientX !== 0 || e.clientY !== 0);
       if (havePos) {
         px = e.clientX;
         py = e.clientY;
@@ -4699,8 +4741,26 @@
       if (!raf) raf = requestAnimationFrame(tick);
     }
 
+    function startCard(e) {
+      var ok = typeof isCard === 'function' ? isCard(e) : defaultIsCard(e);
+      if (!ok) return;
+      begin('card', e);
+    }
+
+    function startRelier(e) {
+      if (!e) return;
+      // Clic droit uniquement (tracé de flèche)
+      if (e.button != null && e.button !== 2 && !(e.buttons & 2)) return;
+      if (!document.querySelector('.drag-game.dnd-link-mode')) return;
+      begin('relier', e);
+    }
+
     function onMove(e) {
-      if (!active) return;
+      if (!active) {
+        // Démarrage tardif : la flèche Relier a commencé après le pointerdown
+        if (isRelierDrawing(e)) begin('relier', e);
+        else return;
+      }
       if (e.clientX === 0 && e.clientY === 0) return;
       px = e.clientX;
       py = e.clientY;
@@ -4709,6 +4769,7 @@
 
     function stop() {
       active = false;
+      mode = null;
       havePos = false;
       lastTs = 0;
       if (raf) {
@@ -4717,20 +4778,41 @@
       }
     }
 
-    document.addEventListener('dragstart', start, true);
+    function stopRelier(e) {
+      if (mode !== 'relier' && mode !== null) return;
+      // Relâchement clic droit, ou plus de flèche en cours
+      if (e && e.type === 'pointerup' && e.button != null && e.button !== 2) return;
+      if (e && e.type === 'pointerup' && e.button === 2) {
+        stop();
+        return;
+      }
+      if (!isRelierDrawing(e || { buttons: 0 })) stop();
+    }
+
+    document.addEventListener('dragstart', startCard, true);
     document.addEventListener('dragover', onMove, true);
     document.addEventListener('drag', onMove, true);
     document.addEventListener('dragend', stop, true);
     document.addEventListener('drop', stop, true);
 
+    // Relier : tracé au clic droit (pointer), pas du HTML5 drag
+    document.addEventListener('pointerdown', startRelier, true);
+    document.addEventListener('pointermove', onMove, true);
+    document.addEventListener('pointerup', stopRelier, true);
+    document.addEventListener('pointercancel', stop, true);
+
     return {
       detach: function () {
         stop();
-        document.removeEventListener('dragstart', start, true);
+        document.removeEventListener('dragstart', startCard, true);
         document.removeEventListener('dragover', onMove, true);
         document.removeEventListener('drag', onMove, true);
         document.removeEventListener('dragend', stop, true);
         document.removeEventListener('drop', stop, true);
+        document.removeEventListener('pointerdown', startRelier, true);
+        document.removeEventListener('pointermove', onMove, true);
+        document.removeEventListener('pointerup', stopRelier, true);
+        document.removeEventListener('pointercancel', stop, true);
       }
     };
   }

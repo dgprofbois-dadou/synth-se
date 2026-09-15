@@ -311,6 +311,11 @@ test('enrichStepsFromDropzones remplit zoneMap depuis dropzones', () => {
 console.log('\n=== Test 9 — tactile (API sélection) ===');
 test('attachDragEdgePan est exposé', () => {
   assert.strictEqual(typeof Engine.attachDragEdgePan, 'function');
+  const src = fs.readFileSync(path.join(__dirname, '..', 'mq-dnd-engine.js'), 'utf8');
+  const chunk = src.slice(src.indexOf('function attachDragEdgePan'), src.indexOf('function attachDragEdgePan') + 4500);
+  assert.ok(chunk.includes('pointerdown'));
+  assert.ok(chunk.includes('dnd-link-drag') || chunk.includes('isRelierDrawing'));
+  assert.ok(chunk.includes('refreshRelierPreview') || chunk.includes('afterPan'));
 });
 test('initPlayableDndGame expose selectCard / place', () => {
   assert.strictEqual(typeof Engine.initPlayableDndGame, 'function');
