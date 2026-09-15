@@ -242,11 +242,6 @@ function rebuild() {
   content: none;
   display: none;
 }
-body.dnd-relier-active #svg-tooltip,
-body.dnd-relier-active #dnd-tooltip {
-  display: none !important;
-  visibility: hidden !important;
-}
 .dnd-link-line,
 .dnd-link-drag,
 .dnd-link-hit {

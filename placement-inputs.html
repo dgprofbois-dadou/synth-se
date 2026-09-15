@@ -1358,11 +1358,7 @@
             content: none;
             display: none;
         }
-        body.dnd-relier-active #svg-tooltip,
-        body.dnd-relier-active #dnd-tooltip {
-            display: none !important;
-            visibility: hidden !important;
-        }
+        /* Relier : ne bloque plus les tooltips inputs/hotspots du reste de la page */
         .dnd-link-hit-locked {
             cursor: not-allowed !important;
         }
@@ -15807,8 +15803,8 @@
 
                     img.addEventListener('mouseenter', (e) => {
                         const gameEl = img.closest('.drag-game');
+                        // Uniquement bloquer les tooltips du jeu Relier actif
                         if (gameEl && gameEl.classList.contains('dnd-link-mode')) return;
-                        if (document.body && document.body.classList.contains('dnd-relier-active')) return;
                         const text = img.dataset.tooltip;
                         if (!text) return;
                         const gameId = img.dataset.game;

@@ -250,9 +250,14 @@ test('tooltip Relier : suit le curseur, bandeau leger', () => {
   assert.ok(css.includes('position: fixed'));
   assert.ok(css.includes('z-index: 10050'));
   assert.ok(css.includes('rgba(30, 58, 138, 0.72)'));
-  assert.ok(css.includes('body.dnd-relier-active #svg-tooltip'));
+  // Plus de masquage global des tooltips page pendant Relier
+  assert.ok(!css.includes('body.dnd-relier-active #svg-tooltip'));
   assert.ok(css.includes('max-height: none'));
   assert.ok(css.includes('overflow: visible'));
+  const runtimeJs = fs.readFileSync(path.join(__dirname, '..', 'export-runtime', 'script.js'), 'utf8');
+  assert.ok(runtimeJs.includes("el.closest('.drag-game.dnd-link-mode')"));
+  assert.ok(!/dnd-relier-active'\)\) return null/.test(runtimeJs));
+  assert.ok(!/dnd-relier-active'\)\) return;/.test(runtimeJs) || runtimeJs.includes('dnd-link-mode'));
   const g = Engine.applyGameDefaults({ gameType: 'linking' });
   assert.ok(String(g.linkTooltip).includes('Maintenez le clic droit'));
   const gOld = Engine.applyGameDefaults({

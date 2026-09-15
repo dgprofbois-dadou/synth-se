@@ -397,11 +397,8 @@ input::placeholder {
     display: none;
 }
 
-body.dnd-relier-active #svg-tooltip,
-body.dnd-relier-active #dnd-tooltip {
-    display: none !important;
-    visibility: hidden !important;
-}
+/* Ne plus masquer #svg-tooltip / #dnd-tooltip globalement pendant Relier :
+   seuls les tooltips des cartes du jeu .dnd-link-mode sont bloqués en JS. */
 
 .dnd-link-line,
 .dnd-link-drag,

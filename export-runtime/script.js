@@ -550,8 +550,8 @@
 
   function findDndTooltipEl(node) {
     if (!node || !node.closest) return null;
-    if (document.body && document.body.classList.contains('dnd-relier-active')) return null;
     const game = node.closest('.drag-game');
+    // Uniquement bloquer les tooltips DU jeu Relier actif — pas le reste de la page
     if (!game || game.classList.contains('dnd-link-mode')) return null;
     // data-tt-enabled=0 = interrupteur global éditeur ; si la carte a data-tooltip,
     // l’export l’a déjà filtrée → afficher quand même (sinon étape 3 sans infobulles).
@@ -580,7 +580,8 @@
   let dndTooltipBound = false;
 
   function showTooltipFor(el, x, y) {
-    if (document.body && document.body.classList.contains('dnd-relier-active')) return;
+    // Ne pas masquer les tooltips inputs/hotspots pendant Relier : uniquement les cartes du jeu en mode flèche
+    if (el && el.closest && el.closest('.drag-game.dnd-link-mode')) return;
     // --- Durée du tooltip (en ms) --- Peut-être définie via le HTML (data-duration)
     const defaultTooltipDelay = window.tooltipDelay || 3000;
     // Protection anti-doublon : si c'est déjà cet élément, on ne fait rien
