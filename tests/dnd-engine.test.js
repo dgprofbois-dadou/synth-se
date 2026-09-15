@@ -1271,6 +1271,9 @@ test('scoreBox absolu normalisé (taille lisible, pas height*0.07)', () => {
   assert.ok(sb.fontSize >= 22);
   assert.ok(sb.width < 1400);
   assert.ok(sb.y > 900);
+  // Toujours calé en bas (même si un ancien y trop haut est fourni)
+  const stale = Engine.normalizeScoreBox({ y: 200, width: 320, height: 48 }, { width: 1400, height: 1100 });
+  assert.ok(stale.y > 1000, 'score doit rester en bas malgré y=200: ' + stale.y);
   const g = Engine.applyGameDefaults({ width: 1000, height: 800 });
   assert.ok(g.scoreBox);
   assert.strictEqual(g.scoreBox.fontSize, 22);
@@ -1279,13 +1282,17 @@ test('scoreBox absolu normalisé (taille lisible, pas height*0.07)', () => {
   assert.ok(big.fontSize >= 80, 'fontSize trop petit sur grand jeu: ' + big.fontSize);
   assert.ok(big.width >= big.fontSize * 12, 'largeur insuffisante: ' + big.width);
   assert.ok(big.height >= big.fontSize * 1.8, 'hauteur insuffisante: ' + big.height);
+  assert.ok(big.y >= 3564 * 0.9, 'score gros plan pas assez bas: ' + big.y);
   // Ancienne boîte trop petite doit être agrandie
   const tiny = Engine.normalizeScoreBox({ fontSize: 8, width: 80, height: 20 }, { width: 2000, height: 1500 });
   assert.ok(tiny.fontSize >= 22);
   assert.ok(typeof Engine.applyScoreBoxToElements === 'function');
+  const applySrc = Engine.applyScoreBoxToElements.toString();
+  assert.ok(applySrc.includes('bottom'));
   const html = fs.readFileSync(path.join(__dirname, '..', 'placement-inputs.html'), 'utf8');
   assert.ok(html.includes('normalizeScoreBox'));
   assert.ok(html.includes('applyScoreBoxToElements'));
+  assert.ok(html.includes('top:auto; bottom:'));
   assert.ok(!html.includes("(g.height || 400) * 0.07"));
 });
 

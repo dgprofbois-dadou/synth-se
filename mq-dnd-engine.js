@@ -948,7 +948,7 @@
     };
   }
 
-  /** Boîte score / malus (absolu). Taille proportionnelle au jeu pour rester lisible après zoom/fit. */
+  /** Boîte score / malus : toujours calée en bas du cadre jeu (centré horizontalement par défaut). */
   function normalizeScoreBox(raw, game) {
     var src = raw && typeof raw === 'object' ? raw : {};
     var gw = Math.max(200, parseInt(game && game.width, 10) || 800);
@@ -964,7 +964,9 @@
     width = Math.max(160, Math.min(gw - 16, width));
     height = Math.max(36, Math.min(gh - 16, height));
     var x = typeof src.x === 'number' ? Math.round(src.x) : Math.round((gw - width) / 2);
-    var y = typeof src.y === 'number' ? Math.round(src.y) : Math.max(0, gh - height - Math.round(gh * 0.02));
+    // Toujours collé au bas du jeu (ignore un ancien y trop haut qui laissait un trou blanc)
+    var bottomPad = Math.max(8, Math.round(gh * 0.015));
+    var y = Math.max(0, gh - height - bottomPad);
     if (x < 0) x = 0;
     if (y < 0) y = 0;
     if (x + width > gw) x = Math.max(0, gw - width);
@@ -974,6 +976,7 @@
       y: y,
       width: width,
       height: height,
+      bottomPad: bottomPad,
       font: src.font != null && String(src.font).trim() ? String(src.font) : 'Verdana, sans-serif',
       fontSize: fontSize,
       bold: src.bold === false ? false : true,
@@ -983,21 +986,22 @@
     };
   }
 
-  /** Applique scoreBox au conteneur score + aligne le message résultat juste au-dessus. */
+  /** Applique scoreBox au conteneur score + message résultat, calés en bas du jeu. */
   function applyScoreBoxToElements(scoreEl, resultEl, game) {
     if (!game) return;
     var box = normalizeScoreBox(game.scoreBox, game);
     game.scoreBox = box;
     var gw = Math.max(1, parseInt(game.width, 10) || 800);
     var gh = Math.max(1, parseInt(game.height, 10) || 400);
+    var bottomPad = box.bottomPad != null ? box.bottomPad : Math.max(8, Math.round(gh * 0.015));
     if (scoreEl) {
       scoreEl.style.position = 'absolute';
       scoreEl.style.left = ((box.x / gw) * 100) + '%';
-      scoreEl.style.top = ((box.y / gh) * 100) + '%';
+      scoreEl.style.top = 'auto';
+      scoreEl.style.bottom = ((bottomPad / gh) * 100) + '%';
       scoreEl.style.width = ((box.width / gw) * 100) + '%';
       scoreEl.style.height = ((box.height / gh) * 100) + '%';
       scoreEl.style.right = 'auto';
-      scoreEl.style.bottom = 'auto';
       scoreEl.style.display = 'flex';
       scoreEl.style.flexDirection = 'row';
       scoreEl.style.flexWrap = 'nowrap';
@@ -1021,13 +1025,14 @@
     }
     if (resultEl) {
       var resH = Math.max(box.fontSize * 1.5, 36);
-      var resY = Math.max(0, box.y - resH - 8);
+      var resBottom = bottomPad + box.height + 8;
       resultEl.style.position = 'absolute';
       resultEl.style.left = ((box.x / gw) * 100) + '%';
-      resultEl.style.top = ((resY / gh) * 100) + '%';
+      resultEl.style.top = 'auto';
+      resultEl.style.bottom = ((resBottom / gh) * 100) + '%';
       resultEl.style.width = ((box.width / gw) * 100) + '%';
       resultEl.style.right = 'auto';
-      resultEl.style.bottom = 'auto';
+      resultEl.style.minHeight = resH + 'px';
       resultEl.style.textAlign = 'center';
       resultEl.style.fontWeight = 'bold';
       resultEl.style.fontSize = Math.max(16, Math.round(box.fontSize * 0.85)) + 'px';
