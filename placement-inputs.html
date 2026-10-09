@@ -549,22 +549,12 @@
             text-overflow: ellipsis;
             white-space: nowrap;
         }
-        #bgImagesList .bg-img-btns {
-            display: flex;
-            gap: 2px;
-        }
+        #bgImagesList .bg-img-btns { display: flex; gap: 2px; }
         #bgImagesList .bg-img-btns button {
-            width: 26px;
-            height: 26px;
-            padding: 0;
-            font-size: 12px;
-            line-height: 1;
+            width: 26px; height: 26px; padding: 0; font-size: 12px; line-height: 1;
         }
-        #bgImagesCount {
-            font-size: 11px;
-            color: #666;
-            margin-top: 6px;
-        }
+        #bgImagesCount { font-size: 11px; color: #666; margin-top: 6px; }
+        #stage img.bg { flex-shrink: 0; }
 
         .bg {
             display: block;
@@ -3679,10 +3669,9 @@
                 <div class="mini" style="margin-bottom:8px;font-weight:600;color:#333;">Sous-cul (1 à 20 images)</div>
                 <div class="bg-img-actions">
                     <button type="button" id="btnImportBgImages" title="Importer une ou plusieurs images">📁 Importer…</button>
-                    <button type="button" id="btnAddBgSlot" title="Ajouter une page vide">＋ Page</button>
+                    <button type="button" id="btnAddBgSlot" title="Ajouter une page">＋ Page</button>
                 </div>
                 <input id="impBgMulti" type="file" accept="image/*" multiple hidden>
-                <!-- Compat anciennes API / topbar -->
                 <input id="impBg1" type="file" accept="image/*" hidden>
                 <input id="impBg2" type="file" accept="image/*" hidden>
                 <button id="btnImportBg1" type="button" hidden>bg1</button>
@@ -3692,7 +3681,7 @@
                 <div id="bgImagesList"></div>
                 <div id="bgImagesCount">0 / 20 images</div>
                 <div class="mini" style="color:#666;margin-top:6px;">
-                    Importez vos sous-cul (toute résolution, max 20). Ils s'affichent aussitôt et sont intégrés au HTML généré.
+                    Importez vos sous-cul (toute résolution, max 20). Affichage immédiat dans l’éditeur ; intégrés au HTML généré.
                 </div>
             </div>
             <div class="mini" id="mqStageSizeInfo" style="color:#555; margin:4px 0 6px; font-family:ui-monospace,monospace; font-size:10px;"></div>
@@ -4590,7 +4579,7 @@
             const state = {
                 mode: 'admin', // admin | student
                 layout: 'row', // row | column
-                bgImages: null, // filled after MQ_DEFAULT_BG / getBgImagePaths
+                bgImages: null,
                 scale: 1, tx: 0, ty: 0,
                 boxes: [],
                 selectedId: null,
@@ -5329,7 +5318,7 @@
                     const r = new FileReader();
                     r.onload = () => {
                         const list = getBgImagePaths();
-                        while (list.length <= index) list.push(MQ_DEFAULT_BG[list.length] || MQ_DEFAULT_BG[0]);
+                        while (list.length <= index) list.push(MQ_DEFAULT_BG[Math.min(list.length, MQ_DEFAULT_BG.length - 1)] || MQ_DEFAULT_BG[0]);
                         list[index] = r.result;
                         state.bgImages = normalizeBgImagesList(list);
                         if (labelEl) labelEl.textContent = '✔ ' + file.name;
@@ -5341,15 +5330,12 @@
                     };
                     r.readAsDataURL(file);
                 }
-
-                // Compat boutons cachés page1/page2
                 function wireLegacy(btnId, fileId, index, nameId) {
                     const btn = $(btnId), file = $(fileId);
                     if (!btn || !file) return;
                     btn.addEventListener('click', () => file.click());
                     file.addEventListener('change', () => {
-                        const f = file.files && file.files[0];
-                        applyBgFileToIndex(f, index, $(nameId));
+                        applyBgFileToIndex(file.files && file.files[0], index, $(nameId));
                         file.value = '';
                     });
                 }
@@ -5367,13 +5353,11 @@
                         const current = getBgImagePaths();
                         const room = MAX_BG_IMAGES - current.length;
                         if (room <= 0) {
-                            alert('Maximum ' + MAX_BG_IMAGES + ' images atteint. Retirez une page avant d’importer.');
+                            alert('Maximum ' + MAX_BG_IMAGES + ' images atteint.');
                             return;
                         }
                         const take = files.slice(0, room);
-                        if (files.length > room) {
-                            alert(files.length + ' fichiers — seuls ' + room + ' ajoutés (max ' + MAX_BG_IMAGES + ').');
-                        }
+                        if (files.length > room) alert(files.length + ' fichiers — seuls ' + room + ' ajoutés.');
                         const urls = await Promise.all(take.map(f => new Promise((resolve, reject) => {
                             const r = new FileReader();
                             r.onload = () => resolve(r.result);
@@ -5388,7 +5372,6 @@
                         });
                     });
                 }
-
                 const btnAdd = $('btnAddBgSlot');
                 if (btnAdd) {
                     btnAdd.addEventListener('click', () => {
@@ -5399,13 +5382,9 @@
                         }
                         current.push(MQ_DEFAULT_BG[Math.min(current.length, MQ_DEFAULT_BG.length - 1)] || 'page.jpg');
                         state.bgImages = normalizeBgImagesList(current);
-                        refreshStageLayout(() => {
-                            render();
-                            saveLocal();
-                        });
+                        refreshStageLayout(() => { render(); saveLocal(); });
                     });
                 }
-
                 const btnRescale = $('btnRescaleToStage');
                 if (btnRescale) {
                     btnRescale.addEventListener('click', () => {
@@ -5414,8 +5393,6 @@
                         }
                     });
                 }
-            })();
-
             })();
 
             zoomSlider.addEventListener('input', (e) => {
@@ -5486,7 +5463,6 @@
                 if (!arr.length) arr = MQ_DEFAULT_BG.slice();
                 if (arr.length > MAX_BG_IMAGES) arr = arr.slice(0, MAX_BG_IMAGES);
                 return arr.map((p, i) => {
-                    // data-URL / blob / http : garder tel quel
                     if (/^(data:|blob:|https?:|file:)/i.test(p)) return p;
                     return mqNormalizeBgPath(p, i) || p;
                 });
@@ -5512,7 +5488,7 @@
                 state.bgImages = list;
                 if ($('confImg1')) $('confImg1').value = list[0] || MQ_DEFAULT_BG[0];
                 if ($('confImg2')) $('confImg2').value = list[1] || '';
-                renderBgImagesPanel();
+                if (typeof renderBgImagesPanel === 'function') renderBgImagesPanel();
             }
 
             function renderBgImagesPanel() {
@@ -5531,10 +5507,8 @@
                     meta.className = 'bg-img-meta';
                     if (String(src).indexOf('data:image/') === 0) {
                         meta.textContent = '✔ Image intégrée (page ' + (i + 1) + ')';
-                        meta.title = 'data-URL';
                     } else {
-                        const short = String(src).split(/[/\\]/).pop() || src;
-                        meta.textContent = short;
+                        meta.textContent = String(src).split(/[/\\]/).pop() || src;
                         meta.title = src;
                     }
                     const btns = document.createElement('div');
@@ -5573,11 +5547,7 @@
                                 const next = getBgImagePaths();
                                 next[i] = r.result;
                                 state.bgImages = normalizeBgImagesList(next);
-                                refreshStageLayout(() => {
-                                    render();
-                                    fitToScreen();
-                                    saveLocal();
-                                });
+                                refreshStageLayout(() => { render(); fitToScreen(); saveLocal(); });
                             };
                             r.readAsDataURL(f);
                         };
@@ -5591,11 +5561,7 @@
                         }
                         next.splice(i, 1);
                         state.bgImages = next;
-                        refreshStageLayout(() => {
-                            render();
-                            fitToScreen();
-                            saveLocal();
-                        });
+                        refreshStageLayout(() => { render(); fitToScreen(); saveLocal(); });
                     }));
                     row.appendChild(num);
                     row.appendChild(meta);
@@ -5616,7 +5582,6 @@
                 if (!stageEl) return Promise.resolve([]);
                 const anchor = $('dndGamesPreview') || $('hotspots') || null;
                 let imgs = Array.from(stageEl.querySelectorAll('img.bg'));
-
                 while (imgs.length < paths.length) {
                     const img = document.createElement('img');
                     img.className = 'bg';
@@ -5631,10 +5596,8 @@
                     if (last && last.parentNode) last.parentNode.removeChild(last);
                 }
                 imgs = Array.from(stageEl.querySelectorAll('img.bg'));
-
                 imgs.forEach((img, i) => {
                     const next = paths[i];
-                    // Ne jamais mettre un marqueur IndexedDB (idb:…) dans src
                     if (!next || String(next).indexOf('idb:') === 0) return;
                     img.alt = 'Page ' + (i + 1);
                     const cur = img.getAttribute('src') || '';
@@ -13415,30 +13378,27 @@
                     {
                         let restored = null;
                         if (Array.isArray(obj.bgImages) && obj.bgImages.length) restored = obj.bgImages;
-                        else if (obj.exportConfig && Array.isArray(obj.exportConfig.images) && obj.exportConfig.images.length) {
-                            restored = obj.exportConfig.images;
-                        } else if (obj.exportConfig) {
-                            restored = [obj.exportConfig.img1, obj.exportConfig.img2].filter(Boolean);
-                        }
+                        else if (Array.isArray(obj.exportConfig.images) && obj.exportConfig.images.length) restored = obj.exportConfig.images;
+                        else restored = [obj.exportConfig.img1, obj.exportConfig.img2].filter(Boolean);
                         if (restored && restored.length) {
                             state.bgImages = restored.map((v) => (typeof v === 'string' ? v : '')).filter(Boolean).slice(0, MAX_BG_IMAGES);
                             state.bgImages.forEach((v, i) => {
-                                const confId = i === 0 ? 'confImg1' : (i === 1 ? 'confImg2' : null);
-                                if (confId) bgReady.push(resolveBgInto(confId, v, i));
+                                if (i === 0) bgReady.push(resolveBgInto('confImg1', v, 0));
+                                else if (i === 1) bgReady.push(resolveBgInto('confImg2', v, 1));
                                 else if (typeof v === 'string' && v.indexOf('idb:') === 0) {
                                     const key = v.slice(4);
                                     bgReady.push(idbGet(key).then((dataUrl) => {
-                                        if (dataUrl) {
-                                            const list = getBgImagePaths();
-                                            while (list.length <= i) list.push(MQ_DEFAULT_BG[0]);
-                                            list[i] = dataUrl;
-                                            state.bgImages = normalizeBgImagesList(list);
-                                        }
+                                        if (!dataUrl) return null;
+                                        const list = getBgImagePaths();
+                                        while (list.length <= i) list.push(MQ_DEFAULT_BG[0]);
+                                        list[i] = dataUrl;
+                                        state.bgImages = normalizeBgImagesList(list);
+                                        return dataUrl;
                                     }).catch(() => null));
                                 } else if (v) {
                                     const list = Array.isArray(state.bgImages) ? state.bgImages.slice() : [];
                                     list[i] = v;
-                                    state.bgImages = list;
+                                    state.bgImages = normalizeBgImagesList(list);
                                 }
                             });
                         } else {
@@ -17314,7 +17274,7 @@
                         input.type = 'file';
                         input.accept = 'image/jpeg,image/png,image/webp,.jpg,.jpeg,.png';
                         input.multiple = true;
-                        input.setAttribute('aria-label', 'Choisir ' + needed + ' image(s) de fond');
+                        input.setAttribute('aria-label', 'Choisir page 1 et page 2');
                         input.style.cssText = 'position:fixed;left:-9999px;width:1px;height:1px;opacity:0;';
                         document.body.appendChild(input);
                         input.addEventListener('change', () => {
@@ -17327,7 +17287,11 @@
                                 .then((arr) => finish(() => resolve(arr)))
                                 .catch((err) => finish(() => reject(err)));
                         }, { once: true });
-                        try { input.click(); } catch (e) { finish(() => reject(e)); }
+                        try {
+                            input.click();
+                        } catch (e) {
+                            finish(() => reject(e));
+                        }
                     });
 
                     const mqPickNImageFilesModern = async (needed) => {
@@ -17348,24 +17312,25 @@
 
                     btnGen.textContent = '⏳ GÉNÉRATION...';
 
-                    const bgPaths = getBgImagePaths();
-                    const bgCount = Math.max(1, Math.min(MAX_BG_IMAGES, bgPaths.length));
-                    const prefix = $('confPrefix') ? $('confPrefix').value : 'exercice';
-                    const bgImgs = Array.from(document.querySelectorAll('#stage img.bg'));
-
+                    const bgPathsForExport = getBgImagePaths();
+                    const bgCountExport = Math.max(1, Math.min(MAX_BG_IMAGES, bgPathsForExport.length));
                     let preloadedPages = null;
+                    let preloadedImg1 = null;
+                    let preloadedImg2 = null;
                     if (location.protocol === 'file:') {
                         const prePick = confirm(
-                            'Mode local (fichier sur disque).\\n\\n' +
-                            'Pour un HTML autonome et un PDF qui fonctionne, sélectionnez maintenant les ' + bgCount + ' image(s) de fond (dans l’ordre).\\n\\n' +
-                            'OK = ouvrir l’explorateur\\n' +
+                            'Mode local (fichier sur disque).\n\n' +
+                            'Pour un HTML autonome et un PDF qui fonctionne, sélectionnez maintenant les ' + bgCountExport + ' image(s) de fond (ordre des pages).\n\n' +
+                            'OK = ouvrir l’explorateur\n' +
                             'Annuler = tenter la conversion automatique'
                         );
                         if (prePick) {
                             try {
-                                let arr = await mqPickNImageFilesModern(bgCount);
-                                if (!arr) arr = await mqPickNImageFiles(bgCount);
+                                let arr = await mqPickNImageFilesModern(bgCountExport);
+                                if (!arr) arr = await mqPickNImageFiles(bgCountExport);
                                 preloadedPages = arr;
+                                preloadedImg1 = arr[0];
+                                preloadedImg2 = arr[1] || arr[0];
                             } catch (e) {
                                 alert('Sélection des images annulée : ' + (e.message || e));
                                 btnGen.textContent = '⚡ GÉNÉRER';
@@ -17374,18 +17339,34 @@
                         }
                     }
 
-                    let pageDataUrls = preloadedPages ? preloadedPages.slice() : new Array(bgCount).fill(null);
+                    const pathImg1 = mqNormalizeBgPath($('confImg1') ? $('confImg1').value : '', 0);
+                    const pathImg2 = mqNormalizeBgPath($('confImg2') ? $('confImg2').value : '', 1);
+                    const prefix = getProjectName();
+                    const htmlFileName = getHtmlExportFileName();
+                    mqEnsureAllVoiceKeys();
+                    const rawVoiceBase = ($('confVoiceBase') ? $('confVoiceBase').value : '');
+                    const voiceBaseExport = mqNormalizeVoiceBaseUrl(rawVoiceBase);
+                    if (voiceBaseExport && String(rawVoiceBase || '').trim().replace(/\/+$/, '') !== voiceBaseExport) {
+                        if ($('confVoiceBase')) $('confVoiceBase').value = voiceBaseExport;
+                        mqSyncVoiceBaseFields('base');
+                    }
+
+                    const bgImgs = Array.from(document.querySelectorAll('#stage img.bg'));
+                    const live1 = bgImgs[0] && (bgImgs[0].currentSrc || bgImgs[0].src);
+                    const live2 = bgImgs[1] && (bgImgs[1].currentSrc || bgImgs[1].src);
+                    const source1 = live1 || pathImg1;
+                    const source2 = live2 || pathImg2;
+
+                    let img1 = preloadedImg1;
+                    let img2 = preloadedImg2;
                     try {
-                        for (let i = 0; i < bgCount; i++) {
-                            if (pageDataUrls[i]) continue;
-                            const live = bgImgs[i] && (bgImgs[i].currentSrc || bgImgs[i].src);
-                            const source = live || bgPaths[i];
-                            pageDataUrls[i] = await mqResolveBgDataUrl(bgImgs[i], source);
-                        }
+                        if (!img1) img1 = await mqResolveBgDataUrl(bgImgs[0], source1);
+                        if (!img2) img2 = await mqResolveBgDataUrl(bgImgs[1], source2);
                     } catch (convErr) {
                         const manual = confirm(
-                            'Conversion automatique impossible.\\n\\n' +
-                            'Cliquez OK pour choisir ' + bgCount + ' image(s) de fond.\\n\\n' +
+                            'Conversion automatique impossible.\n\n' +
+                            'Cliquez OK : une fenêtre va s’ouvrir pour choisir 2 images (page 1 et page 2).\n' +
+                            'Maintenez Ctrl enfoncé pour sélectionner les 2 fichiers d’un coup.\n\n' +
                             'Détail : ' + (convErr.message || convErr)
                         );
                         if (!manual) {
@@ -17393,23 +17374,22 @@
                             return;
                         }
                         try {
-                            let arr = await mqPickNImageFilesModern(bgCount);
-                            if (!arr) arr = await mqPickNImageFiles(bgCount);
-                            pageDataUrls = arr;
+                            let arr = await mqPickNImageFilesModern(bgCountExport);
+                            if (!arr) arr = await mqPickNImageFiles(bgCountExport);
+                            preloadedPages = arr;
+                            img1 = arr[0];
+                            img2 = arr[1] || arr[0];
                         } catch (pickErr) {
                             alert('Sélection annulée ou échouée : ' + (pickErr.message || pickErr));
                             btnGen.textContent = '⚡ GÉNÉRER';
                             return;
                         }
                     }
-                    if (!pageDataUrls.every((u) => typeof u === 'string' && u.startsWith('data:image/'))) {
-                        alert('Les images de fond doivent être intégrées en base64. Affichez les pages dans l’éditeur puis regénérez.');
+                    if (!img1?.startsWith('data:image/') || !img2?.startsWith('data:image/')) {
+                        alert('Les images de fond doivent être intégrées en base64. Affichez les 2 pages dans l’éditeur puis regénérez.');
                         btnGen.textContent = '⚡ GÉNÉRER';
                         return;
                     }
-                    const img1 = pageDataUrls[0];
-                    const img2 = pageDataUrls[1] || pageDataUrls[0];
-
 
                     // === Embarquer le contenu de chaque iframe (hors-ligne) ===
                     const mqIframeInline = {};
@@ -17695,92 +17675,198 @@
 
                     html += `</div>`; // Fin Page 1 Container
 
-                    // --- PAGES 2…N ---
-                    for (let pi = 1; pi < bgCount; pi++) {
-                        const expPage = expLayouts[pi] || expLayouts[expLayouts.length - 1] || expPage1;
-                        const pageBaseW = expPage.stageW || containerBaseW;
-                        const pageBaseH = expPage.stageH || containerBaseH;
-                        html += `<div class="page-container" id="page-${pi + 1}-container" style="position:relative; margin-top:20px;">
-                <img src="${pageDataUrls[pi]}" class="page-image" alt="Page ${pi + 1}" draggable="false">
+                    // --- PAGE 2 ---
+                    html += `<div class="page-container" id="page-2-container" style="position:relative; margin-top:20px;">
+                <img src="${img2}" class="page-image" alt="Page 2" draggable="false">
                 <div style="display:block; position:absolute; top:0; left:0; width:100%; height:100%; z-index:6; mix-blend-mode:multiply; pointer-events:none;"></div>
 `;
-                        state.boxes.filter(b => mqFindPageForPoint(b.x + (b.w || 0) / 2, b.y + (b.h || 0) / 2).index === pi).forEach(b => {
-                            const localX = b.x - expPage.stageX;
-                            const localY = b.y - expPage.stageY;
-                            if (b.kind === 'iframe') {
-                                const ileft = (localX / pageBaseW) * 100;
-                                const itop = (localY / pageBaseH) * 100;
-                                const iw = (b.w / pageBaseW) * 100;
-                                const ih = (b.h / pageBaseH) * 100;
-                                const safeSrc = (b.iframeSrc || '').replace(/"/g, '&quot;');
-                                html += `
-                <div class="input-wrapper mq-iframe-wrap" style="top:${itop}%; left:${ileft}%; width:${iw}%; height:${ih}%;" data-kind="iframe">
-                    <iframe src="${safeSrc}" style="width:100%;height:100%;border:0;" loading="lazy"></iframe>
-                </div>`;
-                                return;
-                            }
-                            const tag = b.multiline ? 'textarea class="multiline"' : 'input type="text"';
-                            const closeTag = b.multiline ? '</textarea>' : '>';
-                            const safeHint = (b.hint || '').replace(/"/g, '&quot;');
-                            const safeAns = (b.answer || '').replace(/"/g, '&quot;');
-                            const group = (b.group || '').replace(/"/g, '&quot;');
-                            let finalFont = (b.hintFont && b.hintFont !== 'inherit') ? b.hintFont : (b.font || 'inherit');
-                            const leftPct = (localX / pageBaseW) * 100;
-                            const topPct = (localY / pageBaseH) * 100;
-                            const wPct = (b.w / pageBaseW) * 100;
-                            const hPct = (b.h / pageBaseH) * 100;
-                            const fsVw = (b.fontSize || 16) * (288 / pageBaseW);
-                            const padVw = (b.pad || 0) * (288 / pageBaseW);
-                            const styles = `width:100%; height:100%; font-family:${b.font}; font-size:${fsVw}vw; font-weight:${b.weight}; padding:${padVw}vw;`;
-                            const voiceAttr = (b.voiceFile) ? ` data-voice="${String(b.voiceFile).replace(/"/g, '&quot;')}"` : '';
+                    // --- INPUTS PAGE 2 ---
+                    const pxToVwP2 = 288 / page2BaseW;
+                    state.boxes.filter(b => mqFindPageForPoint(b.x + (b.w || 0) / 2, b.y + (b.h || 0) / 2).index === 1).forEach(b => {
+                        const localX = b.x - expPage2.stageX;
+                        const localY = b.y - expPage2.stageY;
+                        if (b.kind === 'iframe') {
+                            const ileft = (localX / page2BaseW) * 100;
+                            const itop = (localY / page2BaseH) * 100;
+                            const iw = (b.w / page2BaseW) * 100;
+                            const ih = (b.h / page2BaseH) * 100;
+                            let iabs = b.src || '';
+                            try { iabs = new URL(b.src || '', document.baseURI).href; } catch (e) { }
+                            const isrc = iabs.replace(/"/g, '&quot;');
                             html += `
-                <div class="input-wrapper" style="top:${topPct}%; left:${leftPct}%; width:${wPct}%; height:${hPct}%;"${voiceAttr}
-                     data-tooltip="${safeHint}" data-hint-font="${finalFont}" data-duration="${b.hintMs || 3000}" data-group="${group}">
-                    <${tag} data-answer="${safeAns}" placeholder="${(b.placeholder || '').replace(/"/g, '&quot;')}" style="${styles}">${closeTag}
+                <div class="iframe-wrapper" style="position:absolute; top:${itop}%; left:${ileft}%; width:${iw}%; height:${ih}%; z-index:8;">
+                    ${mqIframeInline[b.id] ? `<iframe srcdoc="${mqIframeInline[b.id].replace(/&/g, '&amp;').replace(/"/g, '&quot;')}"` : `<iframe src="${isrc}"`} style="width:100%; height:100%; border:0; display:block;" scrolling="${b.iframeScroll ? 'yes' : 'no'}" allowfullscreen></iframe>
                 </div>`;
-                        });
+                            return;
+                        }
+                        const tag = b.multiline ? 'textarea class="multiline"' : 'input type="text"';
+                        const closeTag = b.multiline ? '</textarea>' : '>';
+                        const safeHint = (() => {
+                            let t = (b.hint || '').trim();
+                            if (!t) {
+                                const g = (b.group || '').trim();
+                                if (g) {
+                                    const hs = state.hotspots.find(h => (h.group || '').trim() === g && (h.tip || '').trim());
+                                    if (hs) t = (hs.tip || '').trim();
+                                }
+                            }
+                            return t.replace(/"/g, '&quot;');
+                        })();
+                        const safeAns = (b.answer || '').replace(/"/g, '&quot;');
+                        const group = (b.group || '').replace(/"/g, '&quot;');
+                        let finalFont = (b.hintFont && b.hintFont !== 'inherit') ? b.hintFont : (b.font || 'inherit');
 
-                        html += `<svg xmlns="http://www.w3.org/2000/svg" width="${pageBaseW}" height="${pageBaseH}" viewBox="0 0 ${pageBaseW} ${pageBaseH}" style="position:absolute; top:0; left:0; width:100%; height:100%; z-index:7; pointer-events:none; overflow:visible; mix-blend-mode:multiply;">`;
-                        state.hotspots
-                            .filter(h => mqFindPageForPoint(mqHotspotCentroid(h).x, mqHotspotCentroid(h).y).index === pi)
-                            .map((h, idx) => ({ h, idx }))
-                            .sort((a, b) => {
-                                const za = Number.isFinite(Number(a.h.z)) ? Number(a.h.z) : a.idx;
-                                const zb = Number.isFinite(Number(b.h.z)) ? Number(b.h.z) : b.idx;
-                                return (za - zb) || (a.idx - b.idx);
-                            })
-                            .map(x => x.h)
-                            .forEach(h => {
-                                const pts = h.points.map(p => `${p[0] - expPage.stageX},${p[1] - expPage.stageY}`).join(' ');
-                                const safeTip = (h.tip || '').replace(/"/g, '&quot;');
-                                const group = (h.group || '').replace(/"/g, '&quot;');
-                                let filter = (h.shadowX || h.shadowBlur) ? `filter:drop-shadow(${h.shadowX}px ${h.shadowY}px ${h.shadowBlur}px ${h.shadowColor});` : '';
-                                const alphaIdle = (h.alphaIdle !== undefined) ? h.alphaIdle : 0.5;
-                                const alphaActive = (h.alphaActive !== undefined) ? h.alphaActive : 0.35;
-                                html += `<g class="hotspot-group" data-tooltip="${safeTip}" data-alpha-active="${alphaActive}" data-group="${group}" style="pointer-events:auto; mix-blend-mode:${h.blendMode || 'multiply'}">
+                        // Calculs en % (coords locales page 2)
+                        const leftPct = (localX / page2BaseW) * 100;
+                        const topPct = (localY / page2BaseH) * 100;
+                        const wPct = (b.w / page2BaseW) * 100;
+                        const hPct = (b.h / page2BaseH) * 100;
+                        const fsVw = (b.fontSize || 16) * pxToVwP2;
+                        const padVw = (b.pad || 0) * pxToVwP2;
+                        const phFit = mqComputePlaceholderFit(b);
+                        const phFs = phFit.fs;
+                        const phFont = (b.phFont && b.phFont !== 'inherit') ? b.phFont : (b.font || 'inherit');
+                        const phWeight = (b.phWeight && b.phWeight !== 'inherit') ? String(b.phWeight) : String(b.weight ?? 400);
+                        const phDisplay = phFit.text.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/\n/g, '&#10;');
+
+                        const styles = `width:100%; height:100%; font-family:${b.font}; font-size:${b.fontSize || 16}px; font-weight:${b.weight}; padding:${b.pad ?? 4}px; border:2px solid #666; border-radius:8px; box-sizing:border-box; --ph-size:${phFs}px; --ph-font:${phFont}; --ph-weight:${phWeight}; --ph-color:${b.phColor ?? '#b5b5b5'}; --ph-opacity:${b.phOpacity ?? 1};`;
+                        const voiceFile = mqVoiceFileName(b).replace(/"/g, '&quot;');
+
+                        html += `
+                <div class="input-wrapper" style="top:${topPct}%; left:${leftPct}%; width:${wPct}%; height:${hPct}%;" 
+                     data-tooltip="${safeHint}" data-hint-font="${finalFont}" data-duration="${b.hintMs || 3000}" data-group="${group}" data-voice="${voiceFile}">
+                    <${tag} data-answer="${safeAns}" placeholder="${phDisplay}" style="${styles}">${closeTag}
+                </div>`;
+                    });
+
+                    // --- HOTSPOTS PAGE 2 ---
+                    html += `<svg xmlns="http://www.w3.org/2000/svg" width="${page2BaseW}" height="${page2BaseH}" viewBox="0 0 ${page2BaseW} ${page2BaseH}" style="position:absolute; top:0; left:0; width:100%; height:100%; z-index:7; pointer-events:none; overflow:visible; mix-blend-mode:multiply;">`;
+                    state.hotspots
+                        .filter(h => mqFindPageForPoint(mqHotspotCentroid(h).x, mqHotspotCentroid(h).y).index === 1)
+                        .map((h, idx) => ({ h, idx }))
+                        .sort((a, b) => {
+                            const za = Number.isFinite(Number(a.h.z)) ? Number(a.h.z) : a.idx;
+                            const zb = Number.isFinite(Number(b.h.z)) ? Number(b.h.z) : b.idx;
+                            return (za - zb) || (a.idx - b.idx);
+                        })
+                        .map(x => x.h)
+                        .forEach(h => {
+                            const pts = h.points.map(p => `${p[0] - expPage2.stageX},${p[1] - expPage2.stageY}`).join(' ');
+                            const safeTip = (() => {
+                                let t = (h.tip && h.tip.trim()) ? h.tip.trim() : '';
+                                if (!t) {
+                                    const g = (h.group || '').trim();
+                                    if (g) {
+                                        const box = state.boxes.find(b => (b.group || '').trim() === g && b.kind !== 'iframe');
+                                        if (box) t = (box.hint || '').trim() || (box.answer || '').trim();
+                                    }
+                                }
+                                if (!t) t = h.label || '';
+                                return t.replace(/"/g, '&quot;');
+                            })();
+                            const group = (h.group || '').replace(/"/g, '&quot;');
+                            let filter = (h.shadowX || h.shadowBlur) ? `filter:drop-shadow(${h.shadowX}px ${h.shadowY}px ${h.shadowBlur}px ${h.shadowColor});` : '';
+                            const alphaIdle = (h.alphaIdle !== undefined) ? h.alphaIdle : 0.5;
+                            const alphaActive = (h.alphaActive !== undefined) ? h.alphaActive : 0.35;
+                            html += `<g class="hotspot-group" data-tooltip="${safeTip}" data-alpha-active="${alphaActive}" data-group="${group}" style="pointer-events:auto; mix-blend-mode:${h.blendMode || 'multiply'}; --alpha-active:${alphaActive};">
+                            <rect data-alpha-idle="0" data-alpha-active="${alphaActive}" width="0" height="0" style="display:none; pointer-events:none;"></rect>
                             <polygon class="hs-fill" points="${pts}" style="fill:${h.fill}; stroke:none; fill-opacity:${alphaIdle};"></polygon>
                             <polygon class="hs-stroke" points="${pts}" style="fill:none; stroke:${h.stroke}; stroke-width:${h.strokeW}; stroke-opacity:0; mix-blend-mode:normal; ${filter}"></polygon>
                         </g>`;
-                            });
-                        html += `</svg>`;
-
-                        mqGameIds().forEach((gameId) => {
-                            const g = state.dndGames && state.dndGames[gameId];
-                            if (!g || !g.enabled) return;
-                            if (mqFindPageForPoint((g.x || 0) + (g.width || 0) / 2, (g.y || 0) + (g.height || 0) / 2).index !== pi) return;
-                            html += mqBuildExportDndGameHtml(g, gameId, {
-                                stageX: expPage.stageX,
-                                stageY: expPage.stageY,
-                                baseW: pageBaseW,
-                                baseH: pageBaseH
-                            });
                         });
+                    html += `</svg>`;
 
-                        html += `</div>`;
+                    // === JEUX DnD PAGE 2 ===
+                    mqGameIds().forEach((gameId) => {
+                        const g = state.dndGames && state.dndGames[gameId];
+                        if (!g || !g.enabled) return;
+                        if (mqFindPageForPoint((g.x || 0) + (g.width || 0) / 2, (g.y || 0) + (g.height || 0) / 2).index !== 1) return;
+                        html += mqBuildExportDndGameHtml(g, gameId, {
+                            stageX: expPage2.stageX,
+                            stageY: expPage2.stageY,
+                            baseW: page2BaseW,
+                            baseH: page2BaseH
+                        });
+                    });
+
+                    // Pages 3…N (si plus de 2 sous-cul)
+                    if (typeof bgCountExport === 'number' && bgCountExport > 2) {
+                        const allLayouts = window._mqStageLayouts || [];
+                        for (let pi = 2; pi < bgCountExport; pi++) {
+                            let dataUrl = null;
+                            if (preloadedPages && preloadedPages[pi]) dataUrl = preloadedPages[pi];
+                            else {
+                                try {
+                                    const imgs = Array.from(document.querySelectorAll('#stage img.bg'));
+                                    dataUrl = await mqResolveBgDataUrl(imgs[pi], bgPathsForExport[pi]);
+                                } catch (e) {
+                                    console.warn('Page ' + (pi + 1) + ' non intégrée', e);
+                                    continue;
+                                }
+                            }
+                            if (!dataUrl || !String(dataUrl).startsWith('data:image/')) continue;
+                            const expPage = allLayouts[pi] || allLayouts[allLayouts.length - 1] || expPage2;
+                            const pageBaseW = expPage.stageW || page2BaseW;
+                            const pageBaseH = expPage.stageH || page2BaseH;
+                            html += `<div class="page-container" id="page-${pi + 1}-container" style="position:relative; margin-top:20px;">
+                <img src="${dataUrl}" class="page-image" alt="Page ${pi + 1}" draggable="false">
+                <div style="display:block; position:absolute; top:0; left:0; width:100%; height:100%; z-index:6; mix-blend-mode:multiply; pointer-events:none;"></div>
+`;
+                            const pxToVwPN = 288 / pageBaseW;
+                            state.boxes.filter(b => mqFindPageForPoint(b.x + (b.w || 0) / 2, b.y + (b.h || 0) / 2).index === pi).forEach(b => {
+                                const localX = b.x - expPage.stageX;
+                                const localY = b.y - expPage.stageY;
+                                if (b.kind === 'iframe') return;
+                                const tag = b.multiline ? 'textarea class="multiline"' : 'input type="text"';
+                                const closeTag = b.multiline ? '</textarea>' : '>';
+                                const safeHint = (b.hint || '').replace(/"/g, '&quot;');
+                                const safeAns = (b.answer || '').replace(/"/g, '&quot;');
+                                const group = (b.group || '').replace(/"/g, '&quot;');
+                                let finalFont = (b.hintFont && b.hintFont !== 'inherit') ? b.hintFont : (b.font || 'inherit');
+                                const leftPct = (localX / pageBaseW) * 100;
+                                const topPct = (localY / pageBaseH) * 100;
+                                const wPct = (b.w / pageBaseW) * 100;
+                                const hPct = (b.h / pageBaseH) * 100;
+                                const styles = `width:100%; height:100%; font-family:${b.font}; font-size:${b.fontSize || 16}px; font-weight:${b.weight}; padding:${b.pad ?? 4}px; box-sizing:border-box;`;
+                                const voiceFile = (typeof mqVoiceFileName === 'function' ? mqVoiceFileName(b) : '').replace(/"/g, '&quot;');
+                                html += `
+                <div class="input-wrapper" style="top:${topPct}%; left:${leftPct}%; width:${wPct}%; height:${hPct}%;"
+                     data-tooltip="${safeHint}" data-hint-font="${finalFont}" data-duration="${b.hintMs || 3000}" data-group="${group}" data-voice="${voiceFile}">
+                    <${tag} data-answer="${safeAns}" placeholder="${(b.placeholder || '').replace(/"/g, '&quot;')}" style="${styles}">${closeTag}
+                </div>`;
+                            });
+                            html += `<svg xmlns="http://www.w3.org/2000/svg" width="${pageBaseW}" height="${pageBaseH}" viewBox="0 0 ${pageBaseW} ${pageBaseH}" style="position:absolute; top:0; left:0; width:100%; height:100%; z-index:7; pointer-events:none; overflow:visible; mix-blend-mode:multiply;">`;
+                            state.hotspots
+                                .filter(h => mqFindPageForPoint(mqHotspotCentroid(h).x, mqHotspotCentroid(h).y).index === pi)
+                                .forEach(h => {
+                                    const pts = h.points.map(p => `${p[0] - expPage.stageX},${p[1] - expPage.stageY}`).join(' ');
+                                    const safeTip = (h.tip || '').replace(/"/g, '&quot;');
+                                    const group = (h.group || '').replace(/"/g, '&quot;');
+                                    let filter = (h.shadowX || h.shadowBlur) ? `filter:drop-shadow(${h.shadowX}px ${h.shadowY}px ${h.shadowBlur}px ${h.shadowColor});` : '';
+                                    const alphaIdle = (h.alphaIdle !== undefined) ? h.alphaIdle : 0.5;
+                                    const alphaActive = (h.alphaActive !== undefined) ? h.alphaActive : 0.35;
+                                    html += `<g class="hotspot-group" data-tooltip="${safeTip}" data-alpha-active="${alphaActive}" data-group="${group}" style="pointer-events:auto; mix-blend-mode:${h.blendMode || 'multiply'}">
+                            <polygon class="hs-fill" points="${pts}" style="fill:${h.fill}; stroke:none; fill-opacity:${alphaIdle};"></polygon>
+                            <polygon class="hs-stroke" points="${pts}" style="fill:none; stroke:${h.stroke}; stroke-width:${h.strokeW}; stroke-opacity:0; mix-blend-mode:normal; ${filter}"></polygon>
+                        </g>`;
+                                });
+                            html += `</svg>`;
+                            mqGameIds().forEach((gameId) => {
+                                const g = state.dndGames && state.dndGames[gameId];
+                                if (!g || !g.enabled) return;
+                                if (mqFindPageForPoint((g.x || 0) + (g.width || 0) / 2, (g.y || 0) + (g.height || 0) / 2).index !== pi) return;
+                                html += mqBuildExportDndGameHtml(g, gameId, {
+                                    stageX: expPage.stageX,
+                                    stageY: expPage.stageY,
+                                    baseW: pageBaseW,
+                                    baseH: pageBaseH
+                                });
+                            });
+                            html += `</div>`;
+                        }
                     }
 
-                    html += `</div></div>`; // Fin Wrapper page-wrapper + canvas-container
-
+                    html += `</div></div></div>`; // Fin Wrapper
 
                     
 
